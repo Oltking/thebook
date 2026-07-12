@@ -190,6 +190,66 @@ async fn market_sell_fills_buy_order() {
     assert_eq!(port.1, 99_999);
 }
 
+// Regression: a resting limit-buy escrows USD at placement, so when it is later
+// filled by an incoming sell the buyer must NOT be charged again. Alice buys 2 BTC
+// @ 50 (escrows 100), Bob market-sells 1 into it: Alice gains 1 BTC and her USD must
+// stay at 99_900 (100_000 - 100 escrow), not drop a further 50.
+#[tokio::test]
+async fn resting_buy_not_double_charged_on_market_sell() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+
+    let _: u64 = orderbook_svc(&program)
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    join_bob(&bob).await;
+    let _: String = orderbook_svc(&bob)
+        .pending_call::<ob_io::MarketSell>((Asset::BTC, 1))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.0, 99_900, "resting buyer USD double-charged");
+    assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
+}
+
+// Regression: same invariant for the incoming-limit-sell match path (place_limit,
+// Side::Sell) rather than the market_sell path.
+#[tokio::test]
+async fn resting_buy_not_double_charged_on_limit_sell() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+
+    let _: u64 = orderbook_svc(&program)
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    join_bob(&bob).await;
+    let _: u64 = orderbook_svc(&bob)
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 1))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.0, 99_900, "resting buyer USD double-charged");
+    assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
+}
+
 // ── AMM tests ──
 
 #[tokio::test]

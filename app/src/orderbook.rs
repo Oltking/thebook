@@ -178,8 +178,10 @@ impl<'a> OrderbookService<'a> {
                     ag.usd += (price - price_match) * fill;
                 }
             } else {
+                // The resting buyer already escrowed `o.price` per unit when they
+                // placed the limit buy, so only credit the asset here — deducting
+                // USD again would double-charge them.
                 if let Some(ag) = st.agents.get_mut(&buyer) {
-                    ag.usd -= price_match * fill;
                     add_asset(ag, asset, fill);
                 }
                 if let Some(ag) = st.agents.get_mut(&seller) {
@@ -438,9 +440,10 @@ impl<'a> OrderbookService<'a> {
             }
             rev += p * fill;
 
+            // The resting buyer escrowed their bid when placing the limit order, so
+            // only credit the asset here — deducting USD again would double-charge.
             let buyer = o.trader;
             if let Some(bag) = st.agents.get_mut(&buyer) {
-                bag.usd -= p * fill;
                 add_asset(bag, asset, fill);
             }
             let tid = st.next_tid;
