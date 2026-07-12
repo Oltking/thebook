@@ -645,7 +645,7 @@ impl<'a> OrderbookService<'a> {
     #[export]
     pub fn challenge(&mut self, opponent: ActorId, amount: u64) -> Result<u32, ContractError> {
         let caller = msg::source();
-        let mut st = self.state.borrow_mut();
+        let st = self.state.borrow();
         let ag = st
             .agents
             .get(&caller)
