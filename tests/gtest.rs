@@ -406,6 +406,42 @@ async fn amm_swap_executes() {
     assert!(port.2 > 1_000_000);
 }
 
+// Regression: the swap fee must stay in the pool (credited to LPs via a growing k),
+// not be destroyed. Bob swaps 1000 BTC in (fee = 1000*3/1000 = 3). The BTC reserve
+// must grow by the FULL 1000, not by 997.
+#[tokio::test]
+async fn swap_fee_accrues_to_pool_reserves() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+
+    let pool_id: u64 = amm_svc(&program)
+        .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
+        .await
+        .unwrap()
+        .unwrap();
+    let _: u64 = amm_svc(&program)
+        .pending_call::<amm_io::AddLiquidity>((pool_id, 10_000, 100_000))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    join_bob(&bob).await;
+    let amount_out: u64 = amm_svc(&bob)
+        .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1000, 1))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let pool: Pool = amm_svc(&program)
+        .pending_call::<amm_io::GetPool>((pool_id,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pool.reserve_a, 11_000, "swap fee not retained in pool");
+    assert_eq!(pool.reserve_b, 100_000 - amount_out);
+}
+
 #[tokio::test]
 async fn amm_remove_liquidity_works() {
     let (_, program) = deploy().await;

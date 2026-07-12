@@ -335,12 +335,16 @@ impl<'a> AmmService<'a> {
         mod_agent_asset(ag, asset_in, amount_in, false);
         mod_agent_asset(ag, asset_out, amount_out, true);
 
+        // The trader pays the full `amount_in`; `amount_out` is priced off the
+        // post-fee input, but the WHOLE input stays in the reserve. That leaves the
+        // fee in the pool (raising k), which is how LPs actually earn it on withdrawal.
+        // Adding only `amount_in_after_fee` here would destroy the fee instead.
         let pool = st.pools.get_mut(&pool_id).unwrap();
         if asset_in == pool.asset_a {
-            pool.reserve_a += amount_in_after_fee;
+            pool.reserve_a += amount_in;
             pool.reserve_b -= amount_out;
         } else {
-            pool.reserve_b += amount_in_after_fee;
+            pool.reserve_b += amount_in;
             pool.reserve_a -= amount_out;
         }
 
