@@ -1,6 +1,11 @@
 #![no_std]
+// Query methods return tuples of primitives (bids/asks levels, order rows) that map
+// cleanly onto the Sails IDL. `#[export]` regenerates each fn, so a per-fn allow is
+// dropped — suppress the tuple-shape lint crate-wide instead.
+#![allow(clippy::type_complexity)]
 
 use sails_rs::cell::RefCell;
+use sails_rs::gstd::msg;
 use sails_rs::prelude::*;
 
 pub mod amm;
@@ -18,9 +23,16 @@ pub struct Program {
 
 #[sails_rs::program]
 impl Program {
+    // Sails constructor (route "New"); a `Default` impl would be meaningless here.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
+        // The deployer becomes admin for oracle/autopilot management.
+        let state = DexState {
+            admin: msg::source(),
+            ..DexState::default()
+        };
         Self {
-            state: RefCell::new(DexState::default()),
+            state: RefCell::new(state),
         }
     }
 

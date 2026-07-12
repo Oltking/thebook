@@ -1,11 +1,11 @@
+use sails_rs::ActorId;
 use sails_rs::client::*;
 use sails_rs::gtest::*;
-use sails_rs::ActorId;
 
 use thebook::WASM_BINARY;
-use thebook_client::*;
-use thebook_client::orderbook::io as ob_io;
 use thebook_client::amm::io as amm_io;
+use thebook_client::orderbook::io as ob_io;
+use thebook_client::*;
 
 const ALICE: u64 = 1;
 const BOB: u64 = 2;
@@ -24,7 +24,9 @@ async fn deploy() -> (GtestEnv, Actor<ThebookClientProgram, GtestEnv>) {
     (env, program)
 }
 
-fn orderbook_svc(program: &Actor<ThebookClientProgram, GtestEnv>) -> Service<orderbook::OrderbookImpl, GtestEnv> {
+fn orderbook_svc(
+    program: &Actor<ThebookClientProgram, GtestEnv>,
+) -> Service<orderbook::OrderbookImpl, GtestEnv> {
     program.orderbook()
 }
 
@@ -34,12 +36,16 @@ fn amm_svc(program: &Actor<ThebookClientProgram, GtestEnv>) -> Service<amm::AmmI
 
 async fn join_alice(program: &Actor<ThebookClientProgram, GtestEnv>) {
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
-        .pending_call::<ob_io::Join>(()).await.unwrap();
+        .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
+        .await
+        .unwrap();
 }
 
 async fn join_bob(program: &Actor<ThebookClientProgram, GtestEnv>) {
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
-        .pending_call::<ob_io::Join>(()).await.unwrap();
+        .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
+        .await
+        .unwrap();
 }
 
 // ── Orderbook tests ──
@@ -50,8 +56,33 @@ async fn join_creates_agent() {
     join_alice(&program).await;
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
-    assert_eq!(port, (100_000, 100_000, 1_000_000, 10_000_000_00));
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port, (100_000, 100_000, 1_000_000, 1_000_000_000));
+}
+
+#[tokio::test]
+async fn join_sets_identity() {
+    let (_, program) = deploy().await;
+    join_alice(&program).await;
+
+    let id: Option<(String, AgentStrategy)> = orderbook_svc(&program)
+        .pending_call::<ob_io::GetIdentity>(())
+        .await
+        .unwrap();
+    assert_eq!(
+        id,
+        Some(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
+    );
+
+    let board: Vec<LeaderEntry> = orderbook_svc(&program)
+        .pending_call::<ob_io::GetLeaderboard>((10u32,))
+        .await
+        .unwrap();
+    assert_eq!(board.len(), 1);
+    assert_eq!(board[0].name, "Alice");
+    assert_eq!(board[0].strategy, AgentStrategy::ArbitrageHunter);
 }
 
 #[tokio::test]
@@ -61,15 +92,21 @@ async fn place_limit_buy_then_cancel() {
 
     let oid: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(oid, 0); // first order has ID 0
 
     let _: () = orderbook_svc(&program)
         .pending_call::<ob_io::CancelOrder>((oid,))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.0, 100_000);
 }
 
@@ -80,14 +117,20 @@ async fn place_limit_sell_then_cancel() {
 
     let oid: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 60, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let _: () = orderbook_svc(&program)
         .pending_call::<ob_io::CancelOrder>((oid,))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_000);
 }
 
@@ -98,7 +141,9 @@ async fn market_buy_fills_sell_order() {
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 2))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
@@ -106,10 +151,14 @@ async fn market_buy_fills_sell_order() {
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketBuy>((Asset::BTC, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_001);
 }
 
@@ -120,7 +169,9 @@ async fn market_sell_fills_buy_order() {
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
@@ -128,10 +179,14 @@ async fn market_sell_fills_buy_order() {
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketSell>((Asset::BTC, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 99_999);
 }
 
@@ -144,11 +199,15 @@ async fn amm_create_pool_works() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(pool_id, 0); // first pool has ID 0
 
     let pool: Option<Pool> = amm_svc(&program)
-        .pending_call::<amm_io::GetPool>((pool_id,)).await.unwrap();
+        .pending_call::<amm_io::GetPool>((pool_id,))
+        .await
+        .unwrap();
     assert!(pool.is_some());
     let pool = pool.unwrap();
     assert_eq!(pool.id, 0);
@@ -177,21 +236,29 @@ async fn amm_add_liquidity_works() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let lp: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 5, 50))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert!(lp > 0);
 
     let pool: Pool = amm_svc(&program)
         .pending_call::<amm_io::GetPool>((pool_id,))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(pool.reserve_a, 5);
     assert_eq!(pool.reserve_b, 50);
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_000 - 5);
     assert_eq!(port.2, 1_000_000 - 50);
 }
@@ -203,11 +270,15 @@ async fn amm_swap_executes() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 10, 100))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
@@ -215,11 +286,15 @@ async fn amm_swap_executes() {
 
     let amount_out: u64 = amm_svc(&bob)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert!(amount_out > 0);
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_000 - 1);
     assert!(port.2 > 1_000_000);
 }
@@ -231,20 +306,28 @@ async fn amm_remove_liquidity_works() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let lp: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 5, 50))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let (a_out, b_out): (u64, u64) = amm_svc(&program)
         .pending_call::<amm_io::RemoveLiquidity>((pool_id, lp))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert!(a_out > 0);
     assert!(b_out > 0);
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_000);
     assert_eq!(port.2, 1_000_000);
 }
@@ -256,10 +339,14 @@ async fn list_pools_after_creation() {
 
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let pools: Vec<Pool> = amm_svc(&program)
-        .pending_call::<amm_io::ListPools>(()).await.unwrap();
+        .pending_call::<amm_io::ListPools>(())
+        .await
+        .unwrap();
     assert_eq!(pools.len(), 1);
     assert_eq!(pools[0].asset_a, Asset::BTC);
 }
@@ -271,11 +358,15 @@ async fn swap_insufficient_balance_fails() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 10, 100))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
@@ -297,11 +388,15 @@ async fn swap_slippage_protection() {
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 10, 100))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let result: Result<Result<u64, ContractError>, GtestError> = amm_svc(&program)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1, 100))
@@ -321,15 +416,21 @@ async fn full_dex_scenario() {
     // ALICE: sell 1 BTC at $50 on orderbook
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     // ALICE: create AMM pool BTC/ETH and add liquidity
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::AddLiquidity>((pool_id, 10, 100))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     // BOB: market buy 1 BTC from orderbook, then swap 1 BTC for ETH via AMM
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
@@ -337,21 +438,126 @@ async fn full_dex_scenario() {
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketBuy>((Asset::BTC, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_001);
 
     let eth_out: u64 = amm_svc(&bob)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1, 1))
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
     assert!(eth_out > 0);
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetPortfolio>(()).await.unwrap();
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
     assert_eq!(port.1, 100_000);
     assert!(port.2 > 1_000_000);
+}
+
+// ── Regression tests for launch-hardening fixes ──
+
+/// A market buy the caller cannot afford must leave BOTH sides untouched.
+/// Previously the matching loop credited sellers and filled orders before the
+/// USD check, so an `InsufficientUsd` error still committed those mutations.
+#[tokio::test]
+async fn market_buy_insufficient_usd_does_not_mutate_state() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+
+    // Alice offers 1 BTC at a price Bob cannot cover (Bob starts with 100_000 USD).
+    let _: u64 = orderbook_svc(&program)
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 200_000, 1))
+        .await
+        .unwrap()
+        .unwrap();
+    let alice_before: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+
+    let pid = program.id();
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
+    join_bob(&bob).await;
+    let bob_before: (u64, u64, u64, u64) = orderbook_svc(&bob)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+
+    let result: Result<Result<String, ContractError>, GtestError> = orderbook_svc(&bob)
+        .pending_call::<ob_io::MarketBuy>((Asset::BTC, 1))
+        .await;
+    match result {
+        Ok(Err(ContractError::InsufficientUsd)) => {}
+        other => panic!("expected InsufficientUsd, got {other:?}"),
+    }
+
+    let alice_after: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    let bob_after: (u64, u64, u64, u64) = orderbook_svc(&bob)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(
+        alice_before, alice_after,
+        "seller was credited despite failed buy"
+    );
+    assert_eq!(
+        bob_before, bob_after,
+        "buyer state changed despite failed buy"
+    );
+}
+
+/// Adding liquidity twice must merge into one position so the full LP can be
+/// removed in a single call. Previously the second add pushed a duplicate entry
+/// and remove only saw the first, stranding the rest.
+#[tokio::test]
+async fn double_add_liquidity_then_remove_all() {
+    let (_, program) = deploy().await;
+    join_alice(&program).await;
+
+    let pool_id: u64 = amm_svc(&program)
+        .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let lp1: u64 = amm_svc(&program)
+        .pending_call::<amm_io::AddLiquidity>((pool_id, 10, 100))
+        .await
+        .unwrap()
+        .unwrap();
+    let lp2: u64 = amm_svc(&program)
+        .pending_call::<amm_io::AddLiquidity>((pool_id, 5, 50))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Removing the combined LP must succeed and return all deposited assets.
+    let (a_out, b_out): (u64, u64) = amm_svc(&program)
+        .pending_call::<amm_io::RemoveLiquidity>((pool_id, lp1 + lp2))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(a_out, 15);
+    assert_eq!(b_out, 150);
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.1, 100_000, "BTC not fully restored");
+    assert_eq!(port.2, 1_000_000, "ETH not fully restored");
 }
 
 #[tokio::test]

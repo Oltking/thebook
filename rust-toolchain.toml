@@ -1,3 +1,10 @@
 [toolchain]
-channel = "stable"
-targets = ["wasm32-unknown-unknown"]
+# Pinned: Rust 1.96 removed the implicit `--allow-undefined` wasm-ld flag AND emits
+# a binary the gear-core runtime in sails-rs 0.10.4 rejects at execution time
+# (`Execution(Unsupported)` — every on-chain message reverts). 1.95 is the last
+# stable that builds a runnable Gear program. Bump only alongside a sails-rs upgrade.
+channel = "1.95.0"
+# rustfmt: required by sails-client-gen (formats generated client code) at build time.
+# clippy:  CI lint gate. wasm32v1-none: the Gear program's actual compile target.
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown", "wasm32v1-none"]

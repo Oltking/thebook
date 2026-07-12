@@ -28,22 +28,44 @@ impl<'a> AmmService<'a> {
     }
 }
 
-fn sqrt(x: u64) -> u64 {
-    if x == 0 {
-        return 0;
+/// Integer square root via Newton's method, computed in u128 and overflow-safe
+/// (never forms `r * r`, which would trap for large inputs under overflow-checks).
+fn sqrt(n: u128) -> u128 {
+    if n < 2 {
+        return n;
     }
-    let mut r = x;
-    while r * r > x {
-        r = (r + x / r) / 2;
+    let mut x = n;
+    let mut y = x.div_ceil(2);
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
     }
-    r
+    x
 }
 
 fn mod_agent_asset(ag: &mut Agent, asset: Asset, qty: u64, add: bool) {
     match asset {
-        Asset::BTC => if add { ag.btc += qty } else { ag.btc -= qty },
-        Asset::ETH => if add { ag.eth += qty } else { ag.eth -= qty },
-        Asset::VARA => if add { ag.vara += qty } else { ag.vara -= qty },
+        Asset::BTC => {
+            if add {
+                ag.btc += qty
+            } else {
+                ag.btc -= qty
+            }
+        }
+        Asset::ETH => {
+            if add {
+                ag.eth += qty
+            } else {
+                ag.eth -= qty
+            }
+        }
+        Asset::VARA => {
+            if add {
+                ag.vara += qty
+            } else {
+                ag.vara -= qty
+            }
+        }
     }
 }
 
@@ -113,8 +135,16 @@ impl<'a> AmmService<'a> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
 
-        let pool = st.pools.get(&pool_id).cloned().ok_or(ContractError::PoolNotFound)?;
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let pool = st
+            .pools
+            .get(&pool_id)
+            .cloned()
+            .ok_or(ContractError::PoolNotFound)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
 
         if agent_asset_bal(&ag, pool.asset_a) < amount_a
             || agent_asset_bal(&ag, pool.asset_b) < amount_b
@@ -122,12 +152,13 @@ impl<'a> AmmService<'a> {
             return Err(ContractError::InsufficientAsset);
         }
 
-        let lp_minted = if pool.total_lp == 0 {
-            sqrt(amount_a * amount_b)
+        // Compute LP to mint in u128 to avoid overflow on amount * total_lp.
+        let lp_minted: u64 = if pool.total_lp == 0 {
+            sqrt(amount_a as u128 * amount_b as u128) as u64
         } else {
-            let share_a = amount_a * pool.total_lp / pool.reserve_a;
-            let share_b = amount_b * pool.total_lp / pool.reserve_b;
-            share_a.min(share_b)
+            let share_a = amount_a as u128 * pool.total_lp as u128 / pool.reserve_a as u128;
+            let share_b = amount_b as u128 * pool.total_lp as u128 / pool.reserve_b as u128;
+            share_a.min(share_b) as u64
         };
 
         if lp_minted == 0 {
@@ -144,13 +175,25 @@ impl<'a> AmmService<'a> {
         pool.reserve_b += amount_b;
         pool.total_lp += lp_minted;
 
-        st.lp_positions.push(LpPosition {
-            pool_id,
-            provider: caller,
-            amount: lp_minted,
-            share_a: amount_a,
-            share_b: amount_b,
-        });
+        // Merge into the provider's existing position for this pool instead of
+        // pushing a duplicate (remove_liquidity only matches the first entry).
+        if let Some(existing) = st
+            .lp_positions
+            .iter_mut()
+            .find(|p| p.pool_id == pool_id && p.provider == caller)
+        {
+            existing.amount += lp_minted;
+            existing.share_a += amount_a;
+            existing.share_b += amount_b;
+        } else {
+            st.lp_positions.push(LpPosition {
+                pool_id,
+                provider: caller,
+                amount: lp_minted,
+                share_a: amount_a,
+                share_b: amount_b,
+            });
+        }
 
         self.emit_event(AmmEvent::LiquidityAdded(LiquidityAddedEvent {
             pool_id,
@@ -176,7 +219,11 @@ impl<'a> AmmService<'a> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
 
-        let pool = st.pools.get(&pool_id).cloned().ok_or(ContractError::PoolNotFound)?;
+        let pool = st
+            .pools
+            .get(&pool_id)
+            .cloned()
+            .ok_or(ContractError::PoolNotFound)?;
 
         let pos_idx = st
             .lp_positions
@@ -205,7 +252,17 @@ impl<'a> AmmService<'a> {
         pool.reserve_b -= amount_b;
         pool.total_lp -= lp_amount;
 
-        st.lp_positions[pos_idx].amount -= lp_amount;
+        // Reduce the recorded position proportionally; drop it once fully withdrawn.
+        let pos = &mut st.lp_positions[pos_idx];
+        let prev_amount = pos.amount;
+        pos.share_a =
+            (pos.share_a as u128 * (prev_amount - lp_amount) as u128 / prev_amount as u128) as u64;
+        pos.share_b =
+            (pos.share_b as u128 * (prev_amount - lp_amount) as u128 / prev_amount as u128) as u64;
+        pos.amount -= lp_amount;
+        if pos.amount == 0 {
+            st.lp_positions.remove(pos_idx);
+        }
 
         self.emit_event(AmmEvent::LiquidityRemoved(LiquidityRemovedEvent {
             pool_id,
@@ -233,7 +290,11 @@ impl<'a> AmmService<'a> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
 
-        let pool = st.pools.get(&pool_id).cloned().ok_or(ContractError::PoolNotFound)?;
+        let pool = st
+            .pools
+            .get(&pool_id)
+            .cloned()
+            .ok_or(ContractError::PoolNotFound)?;
 
         let (reserve_in, reserve_out, asset_out) = if asset_in == pool.asset_a {
             (pool.reserve_a, pool.reserve_b, pool.asset_b)
@@ -247,7 +308,11 @@ impl<'a> AmmService<'a> {
             return Err(ContractError::InsufficientLiquidity);
         }
 
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
         if agent_asset_bal(&ag, asset_in) < amount_in {
             return Err(ContractError::InsufficientAsset);
         }

@@ -21,7 +21,9 @@ impl Encode for RawPayload {
 pub struct SailsReply<T: Decode>(pub T);
 
 impl<T: Decode> Decode for SailsReply<T> {
-    fn decode<I: sails_rs::scale_codec::Input>(input: &mut I) -> Result<Self, sails_rs::scale_codec::Error> {
+    fn decode<I: sails_rs::scale_codec::Input>(
+        input: &mut I,
+    ) -> Result<Self, sails_rs::scale_codec::Error> {
         let _ = String::decode(input)?;
         let _ = String::decode(input)?;
         let inner = T::decode(input)?;
@@ -54,6 +56,18 @@ impl Asset {
 pub enum Side {
     Buy,
     Sell,
+}
+
+/// The trading persona a user picks when creating their agent. Display/behaviour
+/// hint today; drives autopilot strategy selection in a later phase.
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum AgentStrategy {
+    #[default]
+    ArbitrageHunter,
+    MarketMaker,
+    Momentum,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,6 +138,8 @@ pub struct LpPosition {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct Agent {
     pub id: ActorId,
+    pub name: String,
+    pub strategy: AgentStrategy,
     pub usd: u64,
     pub btc: u64,
     pub eth: u64,
@@ -135,6 +151,8 @@ pub struct Agent {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct LeaderEntry {
     pub id: ActorId,
+    pub name: String,
+    pub strategy: AgentStrategy,
     pub usd: u64,
     pub net_worth: u64,
 }
@@ -261,16 +279,16 @@ pub struct PriceFeed {
 }
 
 pub const VARABRIDGE_PID: [u8; 32] = [
-    0xfb, 0x7e, 0xd5, 0xa7, 0x9d, 0xc2, 0xff, 0x15,
-    0x28, 0x3a, 0x52, 0x4a, 0x44, 0x89, 0x32, 0x1b,
-    0x5e, 0x1f, 0x63, 0x41, 0xdb, 0x2b, 0x98, 0x92,
-    0xbe, 0x83, 0xb9, 0x56, 0x8c, 0xc1, 0xfc, 0xb4,
+    0xfb, 0x7e, 0xd5, 0xa7, 0x9d, 0xc2, 0xff, 0x15, 0x28, 0x3a, 0x52, 0x4a, 0x44, 0x89, 0x32, 0x1b,
+    0x5e, 0x1f, 0x63, 0x41, 0xdb, 0x2b, 0x98, 0x92, 0xbe, 0x83, 0xb9, 0x56, 0x8c, 0xc1, 0xfc, 0xb4,
 ];
 
-pub const INITIAL_USD: u64 = 1_000_00;
+pub const INITIAL_USD: u64 = 100_000;
 pub const INITIAL_BTC: u64 = 100_000;
 pub const INITIAL_ETH: u64 = 1_000_000;
-pub const INITIAL_VARA: u64 = 10_000_000_00;
+pub const INITIAL_VARA: u64 = 1_000_000_000;
 pub const SWAP_FEE_NUM: u64 = 3;
 pub const SWAP_FEE_DEN: u64 = 1_000;
 pub const MAX_PAGE: u32 = 50;
+/// Max agent name length (bytes). Names are truncated to bound on-chain state.
+pub const MAX_NAME_LEN: usize = 24;

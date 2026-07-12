@@ -54,17 +54,31 @@ impl<'a> OrderbookService<'a> {
 
 #[sails_rs::service(events = OrderbookEvent)]
 impl<'a> OrderbookService<'a> {
+    /// Create the caller's agent with a chosen name + strategy, funding it with
+    /// starting balances. Idempotent: re-joining returns the existing balances and
+    /// keeps the original identity (name is immutable in this phase).
     #[export]
-    pub fn join(&mut self) -> (u64, u64, u64, u64) {
+    pub fn join(&mut self, name: String, strategy: AgentStrategy) -> (u64, u64, u64, u64) {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
         if let Some(ag) = st.agents.get(&caller) {
             return (ag.usd, ag.btc, ag.eth, ag.vara);
         }
+        let mut name = name;
+        if name.len() > MAX_NAME_LEN {
+            // Step back to a char boundary so truncation never panics on multibyte input.
+            let mut end = MAX_NAME_LEN;
+            while end > 0 && !name.is_char_boundary(end) {
+                end -= 1;
+            }
+            name.truncate(end);
+        }
         st.agents.insert(
             caller,
             Agent {
                 id: caller,
+                name,
+                strategy,
                 usd: INITIAL_USD,
                 btc: INITIAL_BTC,
                 eth: INITIAL_ETH,
@@ -72,6 +86,17 @@ impl<'a> OrderbookService<'a> {
             },
         );
         (INITIAL_USD, INITIAL_BTC, INITIAL_ETH, INITIAL_VARA)
+    }
+
+    /// Caller's agent identity, or None if they haven't joined. Used by the UI to
+    /// decide whether to show the "Create your Agent" onboarding.
+    #[export]
+    pub fn get_identity(&self) -> Option<(String, AgentStrategy)> {
+        let caller = msg::source();
+        let st = self.state.borrow();
+        st.agents
+            .get(&caller)
+            .map(|ag| (ag.name.clone(), ag.strategy))
     }
 
     #[export]
@@ -87,7 +112,11 @@ impl<'a> OrderbookService<'a> {
         }
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
 
         if side == Side::Buy {
             let cost = price * qty;
@@ -190,7 +219,8 @@ impl<'a> OrderbookService<'a> {
             rem -= fill;
         }
 
-        st.orders.retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+        st.orders
+            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
 
         if rem > 0 {
             st.orders.push(Order {
@@ -222,7 +252,10 @@ impl<'a> OrderbookService<'a> {
     pub fn cancel_order(&mut self, oid: u64) -> Result<(), ContractError> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        st.agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
 
         let pos = st
             .orders
@@ -265,9 +298,13 @@ impl<'a> OrderbookService<'a> {
         }
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
 
-        let mut sells: Vec<(usize, u64, u64)> = st
+        let mut sells: Vec<(usize, u64, u64, ActorId)> = st
             .orders
             .iter()
             .enumerate()
@@ -278,27 +315,45 @@ impl<'a> OrderbookService<'a> {
                     && o.status != OrderStatus::Cancelled
                     && o.filled < o.qty
             })
-            .map(|(i, o)| (i, o.price, o.qty - o.filled))
+            .map(|(i, o)| (i, o.price, o.qty - o.filled, o.trader))
             .collect();
-        sells.sort_by(|a, b| a.1.cmp(&b.1));
+        sells.sort_by_key(|t| t.1);
 
+        // Planning pass — compute fills and total cost WITHOUT mutating state, so
+        // we can reject the whole order before any balance/order changes are applied.
         let mut rem = qty;
         let mut cost = 0u64;
-        for &(mi, p, avail) in &sells {
+        let mut plan: Vec<(usize, u64, u64, ActorId)> = Vec::new();
+        for &(mi, p, avail, seller) in &sells {
             if rem == 0 {
                 break;
             }
             let fill = rem.min(avail);
+            cost = cost
+                .checked_add(p.checked_mul(fill).ok_or(ContractError::BadParams)?)
+                .ok_or(ContractError::BadParams)?;
+            plan.push((mi, p, fill, seller));
+            rem -= fill;
+        }
+
+        let filled = qty - rem;
+        if filled == 0 {
+            return Err(ContractError::NoLiquidity);
+        }
+        if ag.usd < cost {
+            return Err(ContractError::InsufficientUsd);
+        }
+
+        // Commit pass — all validation passed, now apply mutations.
+        for (mi, p, fill, seller) in plan {
             let o = &mut st.orders[mi];
             o.filled += fill;
-            if o.filled >= o.qty {
-                o.status = OrderStatus::Filled;
+            o.status = if o.filled >= o.qty {
+                OrderStatus::Filled
             } else {
-                o.status = OrderStatus::Partial;
-            }
-            cost += p * fill;
+                OrderStatus::Partial
+            };
 
-            let seller = o.trader;
             if let Some(sag) = st.agents.get_mut(&seller) {
                 sag.usd += p * fill;
             }
@@ -323,21 +378,13 @@ impl<'a> OrderbookService<'a> {
                 seller,
             }))
             .expect("emit Trade failed");
-
-            rem -= fill;
         }
 
-        if rem == qty {
-            return Err(ContractError::NoLiquidity);
-        }
-        let filled = qty - rem;
-        if ag.usd < cost {
-            return Err(ContractError::InsufficientUsd);
-        }
         st.agents.get_mut(&caller).unwrap().usd -= cost;
         add_asset(st.agents.get_mut(&caller).unwrap(), asset, filled);
 
-        st.orders.retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+        st.orders
+            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
 
         Ok(format!("Bought {} {} for {}", filled, asset.name(), cost))
     }
@@ -349,7 +396,11 @@ impl<'a> OrderbookService<'a> {
         }
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
 
         if balance_of(&ag, asset) < qty {
             return Err(ContractError::InsufficientAsset);
@@ -369,7 +420,7 @@ impl<'a> OrderbookService<'a> {
             })
             .map(|(i, o)| (i, o.price, o.qty - o.filled))
             .collect();
-        buys.sort_by(|a, b| b.1.cmp(&a.1));
+        buys.sort_by_key(|t| core::cmp::Reverse(t.1));
 
         let mut rem = qty;
         let mut rev = 0u64;
@@ -427,7 +478,8 @@ impl<'a> OrderbookService<'a> {
         }
         st.agents.get_mut(&caller).unwrap().usd += rev;
 
-        st.orders.retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+        st.orders
+            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
 
         Ok(format!("Sold {} {} for {}", filled, asset.name(), rev))
     }
@@ -443,6 +495,7 @@ impl<'a> OrderbookService<'a> {
         }
     }
 
+    // Returns (bids, asks) as (price, qty) levels.
     #[export]
     pub fn get_orderbook(&self, asset: Asset) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
         let st = self.state.borrow();
@@ -457,15 +510,19 @@ impl<'a> OrderbookService<'a> {
                 continue;
             }
             let rem = o.qty - o.filled;
-            let tgt = if o.side == Side::Buy { &mut buys } else { &mut sells };
+            let tgt = if o.side == Side::Buy {
+                &mut buys
+            } else {
+                &mut sells
+            };
             if let Some(ex) = tgt.iter_mut().find(|(p, _)| *p == o.price) {
                 ex.1 += rem;
             } else {
                 tgt.push((o.price, rem));
             }
         }
-        buys.sort_by(|a, b| b.0.cmp(&a.0));
-        sells.sort_by(|a, b| a.0.cmp(&b.0));
+        buys.sort_by_key(|t| core::cmp::Reverse(t.0));
+        sells.sort_by_key(|t| t.0);
         (
             buys.into_iter().take(10).collect(),
             sells.into_iter().take(10).collect(),
@@ -511,12 +568,14 @@ impl<'a> OrderbookService<'a> {
                 let nw = ag.usd + ag.btc / 1000 + ag.eth / 100 + ag.vara / 100000;
                 LeaderEntry {
                     id: ag.id,
+                    name: ag.name.clone(),
+                    strategy: ag.strategy,
                     usd: ag.usd,
                     net_worth: nw,
                 }
             })
             .collect();
-        v.sort_by(|a, b| b.net_worth.cmp(&a.net_worth));
+        v.sort_by_key(|e| core::cmp::Reverse(e.net_worth));
         v.truncate(limit);
         v
     }
@@ -537,6 +596,9 @@ impl<'a> OrderbookService<'a> {
     #[export]
     pub fn subscribe_oracle(&mut self, oracle: ActorId, label: String) {
         let mut st = self.state.borrow_mut();
+        if msg::source() != st.admin {
+            return;
+        }
         if let Some(o) = st.oracles.iter_mut().find(|x| x.oracle == oracle) {
             o.label = label;
         } else {
@@ -551,6 +613,9 @@ impl<'a> OrderbookService<'a> {
     #[export]
     pub fn push_oracle_data(&mut self, oracle: ActorId, data: u64) {
         let mut st = self.state.borrow_mut();
+        if msg::source() != st.admin {
+            return;
+        }
         if let Some(o) = st.oracles.iter_mut().find(|x| x.oracle == oracle) {
             o.data = data;
         }
@@ -566,6 +631,9 @@ impl<'a> OrderbookService<'a> {
     #[export]
     pub fn start_autopilot(&mut self) {
         let mut st = self.state.borrow_mut();
+        if msg::source() != st.admin {
+            return;
+        }
         if !st.running {
             st.running = true;
         }
@@ -575,7 +643,11 @@ impl<'a> OrderbookService<'a> {
     pub fn challenge(&mut self, opponent: ActorId, amount: u64) -> Result<u32, ContractError> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        let ag = st.agents.get(&caller).cloned().ok_or(ContractError::JoinFirst)?;
+        let ag = st
+            .agents
+            .get(&caller)
+            .cloned()
+            .ok_or(ContractError::JoinFirst)?;
         if ag.usd < amount {
             return Err(ContractError::InsufficientUsd);
         }
@@ -589,18 +661,15 @@ impl<'a> OrderbookService<'a> {
     #[export]
     pub fn signal_collab(&mut self, partner: ActorId, _note: String) {
         let mut st = self.state.borrow_mut();
-        if !st.agents.contains_key(&partner) {
-            st.agents.insert(
-                partner,
-                Agent {
-                    id: partner,
-                    usd: 0,
-                    btc: 0,
-                    eth: 0,
-                    vara: 0,
-                },
-            );
-        }
+        st.agents.entry(partner).or_insert_with(|| Agent {
+            id: partner,
+            name: String::new(),
+            strategy: AgentStrategy::default(),
+            usd: 0,
+            btc: 0,
+            eth: 0,
+            vara: 0,
+        });
     }
 
     #[export]
@@ -616,18 +685,15 @@ impl<'a> OrderbookService<'a> {
             gas_limit as u128,
             0,
         )
-            .map_err(|_| ContractError::AgentCallFailed)?
-            .await
-            .map_err(|_| ContractError::AgentCallFailed)?
-            .0;
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .await
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .0;
         Ok(reply)
     }
 
     #[export]
-    pub async fn get_live_price(
-        &mut self,
-        symbol: String,
-    ) -> Result<PriceFeed, ContractError> {
+    pub async fn get_live_price(&mut self, symbol: String) -> Result<PriceFeed, ContractError> {
         let varabridge = ActorId::from(VARABRIDGE_PID);
 
         let mut payload = "VaraBridge".encode();
@@ -640,10 +706,10 @@ impl<'a> OrderbookService<'a> {
             5_000_000_000u128,
             0,
         )
-            .map_err(|_| ContractError::AgentCallFailed)?
-            .await
-            .map_err(|_| ContractError::AgentCallFailed)?
-            .0;
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .await
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .0;
 
         match reply {
             Some(price_feed) => Ok(price_feed),
