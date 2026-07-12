@@ -27,6 +27,14 @@ type PriceFeed = struct {
   updated_at_block: u32,
 };
 
+/// The trading persona a user picks when creating their agent. Display/behaviour
+/// hint today; drives autopilot strategy selection in a later phase.
+type AgentStrategy = enum {
+  ArbitrageHunter,
+  MarketMaker,
+  Momentum,
+};
+
 type Asset = enum {
   BTC,
   ETH,
@@ -40,6 +48,8 @@ type Side = enum {
 
 type LeaderEntry = struct {
   id: actor_id,
+  name: str,
+  strategy: AgentStrategy,
   usd: u64,
   net_worth: u64,
 };
@@ -134,7 +144,10 @@ service Orderbook {
   CancelOrder : (oid: u64) -> result (null, ContractError);
   Challenge : (opponent: actor_id, amount: u64) -> result (u32, ContractError);
   GetLivePrice : (symbol: str) -> result (PriceFeed, ContractError);
-  Join : () -> struct { u64, u64, u64, u64 };
+  /// Create the caller's agent with a chosen name + strategy, funding it with
+  /// starting balances. Idempotent: re-joining returns the existing balances and
+  /// keeps the original identity (name is immutable in this phase).
+  Join : (name: str, strategy: AgentStrategy) -> struct { u64, u64, u64, u64 };
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
   PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
@@ -143,6 +156,9 @@ service Orderbook {
   StartAutopilot : () -> null;
   SubscribeOracle : (oracle: actor_id, label: str) -> null;
   Tick : () -> result (str, ContractError);
+  /// Caller's agent identity, or None if they haven't joined. Used by the UI to
+  /// decide whether to show the "Create your Agent" onboarding.
+  query GetIdentity : () -> opt struct { str, AgentStrategy };
   query GetLeaderboard : (limit: u32) -> vec LeaderEntry;
   query GetMyOrders : () -> vec struct { u64, Side, Asset, u64, u64, u64, OrderStatus };
   query GetOrderbook : (asset: Asset) -> struct { vec struct { u64, u64 }, vec struct { u64, u64 } };

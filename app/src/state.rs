@@ -7,6 +7,8 @@ use alloc::vec::Vec;
 
 #[derive(Default)]
 pub struct DexState {
+    /// Program deployer; the only account allowed to manage oracle feeds and autopilot.
+    pub admin: ActorId,
     pub agents: BTreeMap<ActorId, Agent>,
     pub orders: Vec<Order>,
     pub trades: Vec<TradeInfo>,

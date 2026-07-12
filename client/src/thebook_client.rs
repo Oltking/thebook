@@ -43,6 +43,12 @@ pub mod orderbook {
     use super::*;
     pub trait Orderbook {
         type Env: sails_rs::client::GearEnv;
+        fn call_agent_service(
+            &mut self,
+            target: ActorId,
+            payload: Vec<u8>,
+            gas_limit: u64,
+        ) -> sails_rs::client::PendingCall<io::CallAgentService, Self::Env>;
         fn cancel_order(
             &mut self,
             oid: u64,
@@ -52,7 +58,18 @@ pub mod orderbook {
             opponent: ActorId,
             amount: u64,
         ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env>;
-        fn join(&mut self) -> sails_rs::client::PendingCall<io::Join, Self::Env>;
+        fn get_live_price(
+            &mut self,
+            symbol: String,
+        ) -> sails_rs::client::PendingCall<io::GetLivePrice, Self::Env>;
+        /// Create the caller's agent with a chosen name + strategy, funding it with
+        /// starting balances. Idempotent: re-joining returns the existing balances and
+        /// keeps the original identity (name is immutable in this phase).
+        fn join(
+            &mut self,
+            name: String,
+            strategy: AgentStrategy,
+        ) -> sails_rs::client::PendingCall<io::Join, Self::Env>;
         fn market_buy(
             &mut self,
             asset: Asset,
@@ -77,7 +94,7 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::PushOracleData, Self::Env>;
         fn signal_collab(
             &mut self,
-            partner: ActorId,
+            _partner: ActorId,
             _note: String,
         ) -> sails_rs::client::PendingCall<io::SignalCollab, Self::Env>;
         fn start_autopilot(
@@ -89,6 +106,9 @@ pub mod orderbook {
             label: String,
         ) -> sails_rs::client::PendingCall<io::SubscribeOracle, Self::Env>;
         fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env>;
+        /// Caller's agent identity, or None if they haven't joined. Used by the UI to
+        /// decide whether to show the "Create your Agent" onboarding.
+        fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env>;
         fn get_leaderboard(
             &self,
             limit: u32,
@@ -109,6 +129,14 @@ pub mod orderbook {
     pub struct OrderbookImpl;
     impl<E: sails_rs::client::GearEnv> Orderbook for sails_rs::client::Service<OrderbookImpl, E> {
         type Env = E;
+        fn call_agent_service(
+            &mut self,
+            target: ActorId,
+            payload: Vec<u8>,
+            gas_limit: u64,
+        ) -> sails_rs::client::PendingCall<io::CallAgentService, Self::Env> {
+            self.pending_call((target, payload, gas_limit))
+        }
         fn cancel_order(
             &mut self,
             oid: u64,
@@ -122,8 +150,18 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env> {
             self.pending_call((opponent, amount))
         }
-        fn join(&mut self) -> sails_rs::client::PendingCall<io::Join, Self::Env> {
-            self.pending_call(())
+        fn get_live_price(
+            &mut self,
+            symbol: String,
+        ) -> sails_rs::client::PendingCall<io::GetLivePrice, Self::Env> {
+            self.pending_call((symbol,))
+        }
+        fn join(
+            &mut self,
+            name: String,
+            strategy: AgentStrategy,
+        ) -> sails_rs::client::PendingCall<io::Join, Self::Env> {
+            self.pending_call((name, strategy))
         }
         fn market_buy(
             &mut self,
@@ -157,10 +195,10 @@ pub mod orderbook {
         }
         fn signal_collab(
             &mut self,
-            partner: ActorId,
+            _partner: ActorId,
             _note: String,
         ) -> sails_rs::client::PendingCall<io::SignalCollab, Self::Env> {
-            self.pending_call((partner, _note))
+            self.pending_call((_partner, _note))
         }
         fn start_autopilot(
             &mut self,
@@ -175,6 +213,9 @@ pub mod orderbook {
             self.pending_call((oracle, label))
         }
         fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env> {
             self.pending_call(())
         }
         fn get_leaderboard(
@@ -209,17 +250,20 @@ pub mod orderbook {
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(CallAgentService (target: ActorId, payload: Vec<u8>, gas_limit: u64) -> Result<Vec<u8>, super::ContractError>);
         sails_rs::io_struct_impl!(CancelOrder (oid: u64) -> Result<(), super::ContractError>);
         sails_rs::io_struct_impl!(Challenge (opponent: ActorId, amount: u64) -> Result<u32, super::ContractError>);
-        sails_rs::io_struct_impl!(Join () -> (u64,u64,u64,u64,));
+        sails_rs::io_struct_impl!(GetLivePrice (symbol: String) -> Result<super::PriceFeed, super::ContractError>);
+        sails_rs::io_struct_impl!(Join (name: String, strategy: super::AgentStrategy) -> (u64,u64,u64,u64,));
         sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(PlaceLimit (side: super::Side, asset: super::Asset, price: u64, qty: u64) -> Result<u64, super::ContractError>);
         sails_rs::io_struct_impl!(PushOracleData (oracle: ActorId, data: u64) -> ());
-        sails_rs::io_struct_impl!(SignalCollab (partner: ActorId, _note: String) -> ());
+        sails_rs::io_struct_impl!(SignalCollab (_partner: ActorId, _note: String) -> ());
         sails_rs::io_struct_impl!(StartAutopilot () -> ());
         sails_rs::io_struct_impl!(SubscribeOracle (oracle: ActorId, label: String) -> ());
         sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);
+        sails_rs::io_struct_impl!(GetIdentity () -> Option<(String,super::AgentStrategy,)>);
         sails_rs::io_struct_impl!(GetLeaderboard (limit: u32) -> Vec<super::LeaderEntry>);
         sails_rs::io_struct_impl!(GetMyOrders () -> Vec<(u64,super::Side,super::Asset,u64,u64,u64,super::OrderStatus,)>);
         sails_rs::io_struct_impl!(GetOrderbook (asset: super::Asset) -> (Vec<(u64,u64,)>,Vec<(u64,u64,)>,));
@@ -386,6 +430,28 @@ pub enum ContractError {
     InsufficientLiquidity,
     SlippageExceeded,
     ZeroAmount,
+    AgentCallFailed,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct PriceFeed {
+    pub symbol: String,
+    pub price_usd_micro: u64,
+    pub change_24h_bps: i32,
+    pub market_cap_usd: u64,
+    pub volume_24h_usd: u64,
+    pub updated_at_block: u32,
+}
+/// The trading persona a user picks when creating their agent. Display/behaviour
+/// hint today; drives autopilot strategy selection in a later phase.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum AgentStrategy {
+    ArbitrageHunter,
+    MarketMaker,
+    Momentum,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -407,6 +473,8 @@ pub enum Side {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct LeaderEntry {
     pub id: ActorId,
+    pub name: String,
+    pub strategy: AgentStrategy,
     pub usd: u64,
     pub net_worth: u64,
 }
