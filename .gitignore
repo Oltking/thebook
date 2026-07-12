@@ -20,5 +20,11 @@ thebook-v5.idl
 thebook-v5.wasm
 .binpath
 node_modules/
-scripts/
+
+# Local agent skill packs (vara-skills router/bodies) — tooling, not project source
+.agents/
 .github/workflows/
+
+# Build artifacts the deploy script copies next to itself
+scripts/thebook.opt.wasm
+scripts/thebook.idl

@@ -478,6 +478,103 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "awesome-sails"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16ea24e2fa9cb4ebfec9f64358675bf850f3a8863a4af41484d2c216095ed855"
+dependencies = [
+ "awesome-sails-access-control",
+ "awesome-sails-storage",
+ "awesome-sails-vft",
+ "awesome-sails-vft-admin",
+ "awesome-sails-vft-metadata",
+ "awesome-sails-vft-utils",
+]
+
+[[package]]
+name = "awesome-sails-access-control"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c20789bbe104492c19a4928e49074175f43d9000fbebc318c431f76a285dff2"
+dependencies = [
+ "awesome-sails-storage",
+ "awesome-sails-utils",
+ "sails-rs",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "awesome-sails-storage"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a78f1c1cf5793fc98e249ad9efaa30191aa54be4fbea87e5d1ef79067e0f4fa"
+
+[[package]]
+name = "awesome-sails-utils"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c594d963625d439e00925f3d8cc29862877b8feadf14d0d4d596090c632ea4e"
+dependencies = [
+ "awesome-sails-storage",
+ "bnum",
+ "derive_more 2.1.1",
+ "gprimitives",
+ "hashbrown 0.14.5",
+ "parity-scale-codec",
+ "primitive-types 0.12.2",
+ "scale-info",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "awesome-sails-vft"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ae15504ded89987dcc047c2149ced785b2e10adf1dabb38bbd1ba8a6c10f34c"
+dependencies = [
+ "awesome-sails-storage",
+ "awesome-sails-utils",
+ "awesome-sails-vft-utils",
+ "sails-rs",
+]
+
+[[package]]
+name = "awesome-sails-vft-admin"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e79eeb24392841d8627da6fbc286956fdf919a1b240cc2430c1a31e0e54e8bb4"
+dependencies = [
+ "awesome-sails-access-control",
+ "awesome-sails-storage",
+ "awesome-sails-utils",
+ "awesome-sails-vft",
+ "keccak-const",
+ "sails-rs",
+]
+
+[[package]]
+name = "awesome-sails-vft-metadata"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8532d15037da4e9f565fcdf8d41f969921fd8a2373827ffdb6e8b2c4b3b156a5"
+dependencies = [
+ "awesome-sails-storage",
+ "awesome-sails-utils",
+ "sails-rs",
+]
+
+[[package]]
+name = "awesome-sails-vft-utils"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76f9f337c52a1fd3b581bee3cf82c21fbec0e56190e17f96870facb288c4655d"
+dependencies = [
+ "awesome-sails-utils",
+ "sails-rs",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -540,7 +637,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -691,6 +788,12 @@ dependencies = [
  "futures-lite",
  "piper",
 ]
+
+[[package]]
+name = "bnum"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "119771309b95163ec7aaf79810da82f7cd0599c19722d48b9c03894dca833966"
 
 [[package]]
 name = "bounded-collections"
@@ -866,7 +969,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2003,7 +2106,7 @@ dependencies = [
  "scale-info",
  "scale-type-resolver",
  "sp-crypto-hashing",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2321,7 +2424,7 @@ dependencies = [
  "hex",
  "parity-scale-codec",
  "sp-core",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "url",
 ]
 
@@ -2337,7 +2440,7 @@ dependencies = [
  "gprimitives",
  "gsys",
  "paste",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2438,7 +2541,7 @@ dependencies = [
  "scale-encode",
  "scale-info",
  "serde",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2562,7 +2665,7 @@ dependencies = [
  "region",
  "sp-wasm-interface-common",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "wasmer",
  "wasmer-types",
  "wasmi 0.38.0",
@@ -2631,7 +2734,7 @@ dependencies = [
  "log",
  "pathdiff",
  "regex",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "toml",
 ]
 
@@ -2869,7 +2972,7 @@ dependencies = [
  "scale-encode",
  "scale-info",
  "serde",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2905,7 +3008,7 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "subxt",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "url",
 ]
 
@@ -2938,7 +3041,7 @@ dependencies = [
  "hex",
  "parity-scale-codec",
  "scale-info",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "waker-fn",
 ]
 
@@ -2988,7 +3091,7 @@ dependencies = [
  "path-clean",
  "rand",
  "scale-info",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tracing-subscriber 0.3.23",
 ]
 
@@ -3763,6 +3866,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "keccak-const"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57d8d8ce877200136358e0bbff3a77965875db3af755a11e1fa6b1b3e2df13ea"
+
+[[package]]
 name = "keccak-hash"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4042,7 +4151,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb4bdc8b0ce69932332cf76d24af69c3a155242af95c226b2ab6c2e371ed1149"
 dependencies = [
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "zerocopy",
  "zerocopy-derive",
 ]
@@ -4346,7 +4455,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5482,7 +5591,7 @@ checksum = "f8251318e033c7e46ad536a74e9543df747375557f237deb8b4ce424179c90e7"
 dependencies = [
  "flate2",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "wasm-encoder 0.230.0",
  "wasmparser 0.230.0",
 ]
@@ -5500,7 +5609,7 @@ dependencies = [
  "scale-info",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5521,7 +5630,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "logos",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5577,7 +5686,7 @@ dependencies = [
  "sails-macros",
  "scale-info",
  "spin",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio-stream",
 ]
 
@@ -5614,7 +5723,7 @@ dependencies = [
  "scale-decode-derive",
  "scale-type-resolver",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5641,7 +5750,7 @@ dependencies = [
  "scale-encode-derive",
  "scale-type-resolver",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5703,7 +5812,7 @@ dependencies = [
  "quote",
  "scale-info",
  "syn 2.0.117",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5721,7 +5830,7 @@ dependencies = [
  "scale-encode",
  "scale-type-resolver",
  "serde",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "yap",
 ]
 
@@ -6880,7 +6989,7 @@ dependencies = [
  "subxt-macro",
  "subxt-metadata",
  "subxt-rpcs",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -6903,7 +7012,7 @@ dependencies = [
  "scale-typegen",
  "subxt-metadata",
  "syn 2.0.117",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -6932,7 +7041,7 @@ dependencies = [
  "serde_json",
  "sp-crypto-hashing",
  "subxt-metadata",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tracing",
 ]
 
@@ -6947,7 +7056,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smoldot-light",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -6982,7 +7091,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-crypto-hashing",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -7003,7 +7112,7 @@ dependencies = [
  "serde_json",
  "subxt-core",
  "subxt-lightclient",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio-util",
  "tracing",
  "url",
@@ -7017,7 +7126,7 @@ checksum = "4664a0b726f11b1d6da990872f9528be090d3570c2275c9b89ba5bbc8e764592"
 dependencies = [
  "hex",
  "parity-scale-codec",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -7138,6 +7247,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "thebook-token"
+version = "0.1.0"
+dependencies = [
+ "awesome-sails",
+ "awesome-sails-storage",
+ "awesome-sails-utils",
+ "sails-rs",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7148,11 +7267,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.18"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.18",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -7168,9 +7287,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.18"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",

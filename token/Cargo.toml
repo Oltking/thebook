@@ -1,0 +1,21 @@
+[package]
+name = "thebook-token"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Mintable VFT test token (wUSDC/wBTC/wETH/wVARA) for thebookdex testnet"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+sails-rs.workspace = true
+# vft: transfer/approve/balance · vft-admin: role-gated mint/burn · vft-metadata: name/symbol/decimals.
+awesome-sails = { workspace = true, features = ["vft", "vft-admin", "vft-metadata"] }
+awesome-sails-utils.workspace = true
+awesome-sails-storage.workspace = true
+
+[build-dependencies]
+sails-rs = { workspace = true, features = ["build"] }
