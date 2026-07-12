@@ -250,6 +250,53 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
     assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
 }
 
+// Regression: signal_collab must NOT create a zero-balance agent for the partner,
+// which would make their later join() return early and never fund them.
+#[tokio::test]
+async fn signal_collab_does_not_lock_out_join() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+
+    let bob_id: ActorId = BOB.into();
+    let _: () = orderbook_svc(&program)
+        .pending_call::<ob_io::SignalCollab>((bob_id, "gm".to_string()))
+        .await
+        .unwrap();
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    let bal: (u64, u64, u64, u64) = orderbook_svc(&bob)
+        .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
+        .await
+        .unwrap();
+    assert_eq!(
+        bal,
+        (100_000, 100_000, 1_000_000, 1_000_000_000),
+        "signal_collab locked Bob out of funded join"
+    );
+}
+
+// Regression: challenge must not silently destroy the caller's USD.
+#[tokio::test]
+async fn challenge_does_not_burn_funds() {
+    let (env, program) = deploy().await;
+    join_alice(&program).await;
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    join_bob(&bob).await;
+
+    let bob_id: ActorId = BOB.into();
+    let _: u32 = orderbook_svc(&program)
+        .pending_call::<ob_io::Challenge>((bob_id, 500u64))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.0, 100_000, "challenge burned caller USD");
+}
+
 // ── AMM tests ──
 
 #[tokio::test]

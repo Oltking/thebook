@@ -657,22 +657,17 @@ impl<'a> OrderbookService<'a> {
         if !st.agents.contains_key(&opponent) {
             return Err(ContractError::JoinFirst);
         }
-        st.agents.get_mut(&caller).unwrap().usd -= amount;
+        // Placeholder A2A primitive: validates the challenge is well-formed but does
+        // not stake/escrow funds yet. Deducting here would destroy the caller's USD
+        // with no settlement path, so leave balances untouched until stakes ship.
         Ok(0)
     }
 
     #[export]
-    pub fn signal_collab(&mut self, partner: ActorId, _note: String) {
-        let mut st = self.state.borrow_mut();
-        st.agents.entry(partner).or_insert_with(|| Agent {
-            id: partner,
-            name: String::new(),
-            strategy: AgentStrategy::default(),
-            usd: 0,
-            btc: 0,
-            eth: 0,
-            vara: 0,
-        });
+    pub fn signal_collab(&mut self, _partner: ActorId, _note: String) {
+        // Placeholder A2A primitive. It intentionally does not create an agent for
+        // `partner`: doing so would insert a zero-balance record that makes `join`
+        // return early forever, permanently locking that address out of funding.
     }
 
     #[export]
