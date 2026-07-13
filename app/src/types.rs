@@ -157,15 +157,6 @@ pub struct LeaderEntry {
     pub net_worth: u64,
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct OracleFeed {
-    pub oracle: ActorId,
-    pub label: String,
-    pub data: u64,
-}
-
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -265,23 +256,6 @@ pub struct TradeEvent {
     pub buyer: ActorId,
     pub seller: ActorId,
 }
-
-#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct PriceFeed {
-    pub symbol: String,
-    pub price_usd_micro: u64,
-    pub change_24h_bps: i32,
-    pub market_cap_usd: u64,
-    pub volume_24h_usd: u64,
-    pub updated_at_block: u32,
-}
-
-pub const VARABRIDGE_PID: [u8; 32] = [
-    0xfb, 0x7e, 0xd5, 0xa7, 0x9d, 0xc2, 0xff, 0x15, 0x28, 0x3a, 0x52, 0x4a, 0x44, 0x89, 0x32, 0x1b,
-    0x5e, 0x1f, 0x63, 0x41, 0xdb, 0x2b, 0x98, 0x92, 0xbe, 0x83, 0xb9, 0x56, 0x8c, 0xc1, 0xfc, 0xb4,
-];
 
 pub const INITIAL_USD: u64 = 100_000;
 pub const INITIAL_BTC: u64 = 100_000;

@@ -15,7 +15,6 @@ Central limit orderbook for BTC, ETH, VARA pairs denominated in USD.
 | `MarketBuy` | `Orderbook/MarketBuy(asset, qty)` | Market buy asset using USD |
 | `MarketSell` | `Orderbook/MarketSell(asset, qty)` | Market sell asset for USD |
 | `CancelOrder` | `Orderbook/CancelOrder(oid)` | Cancel your open order |
-| `GetLivePrice` | `Orderbook/GetLivePrice(symbol)` | Fetch real-time price from varabridge oracle (ETH, BTC) |
 | `GetOrderbook(asset)` | Query (no gas) | Get current bid/ask depth |
 | `GetPortfolio` | Query (no gas) | Check balances |
 | `GetTrades(asset, limit)` | Query (no gas) | Recent trade history |
@@ -55,7 +54,8 @@ For non-Rust callers, encode the payload as:
 
 ## Program ID
 
-`0x7fa1988c57ba1134e2461c5fb36bc13d66c1dfbf47d36c5e9960b9ca2dc0e4c4`
+Set per deployment. On Vara testnet (`wss://testnet.vara.network`), use the ID
+returned by the deploy step — see [DEPLOY.md](./DEPLOY.md).
 
 ## Website
 

@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 #[derive(Default)]
 pub struct DexState {
-    /// Program deployer; the only account allowed to manage oracle feeds and autopilot.
+    /// Program deployer; the only account allowed to manage autopilot.
     pub admin: ActorId,
     pub agents: BTreeMap<ActorId, Agent>,
     pub orders: Vec<Order>,
@@ -15,7 +15,6 @@ pub struct DexState {
     pub next_oid: u64,
     pub next_tid: u64,
     pub total_trades: u64,
-    pub oracles: Vec<OracleFeed>,
     pub running: bool,
     pub cycle: u32,
     pub pools: BTreeMap<PoolId, Pool>,

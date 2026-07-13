@@ -584,7 +584,7 @@ impl<'a> OrderbookService<'a> {
     }
 
     #[export]
-    pub fn get_status(&self) -> (u32, u64, u32, bool, u32, u32) {
+    pub fn get_status(&self) -> (u32, u64, u32, bool, u32) {
         let st = self.state.borrow();
         (
             st.agents.len() as u32,
@@ -592,36 +592,7 @@ impl<'a> OrderbookService<'a> {
             st.orders.len() as u32,
             st.running,
             st.cycle,
-            st.oracles.len() as u32,
         )
-    }
-
-    #[export]
-    pub fn subscribe_oracle(&mut self, oracle: ActorId, label: String) {
-        let mut st = self.state.borrow_mut();
-        if msg::source() != st.admin {
-            return;
-        }
-        if let Some(o) = st.oracles.iter_mut().find(|x| x.oracle == oracle) {
-            o.label = label;
-        } else {
-            st.oracles.push(OracleFeed {
-                oracle,
-                label,
-                data: 0,
-            });
-        }
-    }
-
-    #[export]
-    pub fn push_oracle_data(&mut self, oracle: ActorId, data: u64) {
-        let mut st = self.state.borrow_mut();
-        if msg::source() != st.admin {
-            return;
-        }
-        if let Some(o) = st.oracles.iter_mut().find(|x| x.oracle == oracle) {
-            o.data = data;
-        }
     }
 
     #[export]
@@ -688,30 +659,5 @@ impl<'a> OrderbookService<'a> {
         .map_err(|_| ContractError::AgentCallFailed)?
         .0;
         Ok(reply)
-    }
-
-    #[export]
-    pub async fn get_live_price(&mut self, symbol: String) -> Result<PriceFeed, ContractError> {
-        let varabridge = ActorId::from(VARABRIDGE_PID);
-
-        let mut payload = "VaraBridge".encode();
-        payload.extend("GetPrice".encode());
-        payload.extend(symbol.encode());
-
-        let reply = msg::send_for_reply_as::<RawPayload, SailsReply<Option<PriceFeed>>>(
-            varabridge,
-            RawPayload(payload),
-            5_000_000_000u128,
-            0,
-        )
-        .map_err(|_| ContractError::AgentCallFailed)?
-        .await
-        .map_err(|_| ContractError::AgentCallFailed)?
-        .0;
-
-        match reply {
-            Some(price_feed) => Ok(price_feed),
-            None => Err(ContractError::BadParams),
-        }
     }
 }

@@ -704,20 +704,6 @@ async fn double_add_liquidity_then_remove_all() {
 }
 
 #[tokio::test]
-async fn get_live_price_nonexistent_fails() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
-
-    let result: Result<Result<PriceFeed, ContractError>, GtestError> = orderbook_svc(&program)
-        .pending_call::<ob_io::GetLivePrice>(("BTC".into(),))
-        .await;
-    match result {
-        Ok(Err(ContractError::AgentCallFailed)) => {}
-        other => panic!("expected AgentCallFailed, got {other:?}"),
-    }
-}
-
-#[tokio::test]
 async fn call_agent_service_to_nonexistent_fails() {
     let (_, program) = deploy().await;
     join_alice(&program).await;

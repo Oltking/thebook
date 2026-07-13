@@ -26,7 +26,7 @@ impl Program {
     // Sails constructor (route "New"); a `Default` impl would be meaningless here.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        // The deployer becomes admin for oracle/autopilot management.
+        // The deployer becomes admin for autopilot management.
         let state = DexState {
             admin: msg::source(),
             ..DexState::default()
