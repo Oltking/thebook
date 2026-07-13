@@ -1,7 +1,7 @@
 import { ActorId } from 'sails-js';
 
 declare global {
-  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "InsufficientOracleCredit";
+  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed";
 
   export interface PriceFeed {
     symbol: string;
@@ -16,8 +16,12 @@ declare global {
 
   export type Side = "Buy" | "Sell";
 
+  export type AgentStrategy = "ArbitrageHunter" | "MarketMaker" | "Momentum";
+
   export interface LeaderEntry {
     id: ActorId;
+    name: string;
+    strategy: AgentStrategy;
     usd: number | string | bigint;
     net_worth: number | string | bigint;
   }

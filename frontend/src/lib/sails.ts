@@ -17,7 +17,8 @@ export class SailsProgram {
       PriceFeed: {"symbol":"String","price_usd_micro":"u64","change_24h_bps":"i32","market_cap_usd":"u64","volume_24h_usd":"u64","updated_at_block":"u32"},
       Asset: {"_enum":["BTC","ETH","VARA"]},
       Side: {"_enum":["Buy","Sell"]},
-      LeaderEntry: {"id":"[u8;32]","usd":"u64","net_worth":"u64"},
+      AgentStrategy: {"_enum":["ArbitrageHunter","MarketMaker","Momentum"]},
+      LeaderEntry: {"id":"[u8;32]","name":"String","strategy":"AgentStrategy","usd":"u64","net_worth":"u64"},
       OrderStatus: {"_enum":["Open","Partial","Filled","Cancelled"]},
       OrderPlacedEvent: {"trader":"[u8;32]","side":"Side","asset":"Asset","price":"u64","qty":"u64","order_id":"u64"},
       OrderCancelledEvent: {"trader":"[u8;32]","order_id":"u64"},
@@ -131,22 +132,7 @@ export class Orderbook {
     );
   }
 
-  public getLivePrice($symbol: string): TransactionBuilder<{ ok: PriceFeed } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: PriceFeed } | { err: ContractError }>(
-      this._program.api,
-      this._program.registry,
-      'send_message',
-      'Orderbook',
-      'GetLivePrice',
-      $symbol,
-      'String',
-      'Result<PriceFeed, ContractError>',
-      this._program.programId,
-    );
-  }
-
-  public join(): TransactionBuilder<[number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint]> {
+  public join(name: string, strategy: AgentStrategy): TransactionBuilder<[number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint]> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<[number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint]>(
       this._program.api,
@@ -154,10 +140,23 @@ export class Orderbook {
       'send_message',
       'Orderbook',
       'Join',
-      null,
-      null,
+      [name, strategy],
+      '(String, AgentStrategy)',
       '(u64, u64, u64, u64)',
       this._program.programId,
+    );
+  }
+
+  public getIdentity(): QueryBuilder<[string, AgentStrategy] | null> {
+    return new QueryBuilder<[string, AgentStrategy] | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetIdentity',
+      null,
+      null,
+      'Option<(String, AgentStrategy)>',
     );
   }
 

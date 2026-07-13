@@ -337,64 +337,23 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     return next;
   }, []);
 
-  /* ── fetchPrice: sign ONE tx for ONE asset ── */
-  const fetchPrice = useCallback(async (asset: Asset) => {
-    if (!program || !account || fetchingRef.current) return;
-    fetchingRef.current = true;
-    setPricesLoading(true);
-    try {
-      const { signer } = await web3FromSource(account.meta.source);
-      const transaction = program.orderbook.getLivePrice(asset);
-      await transaction.withAccount(account.address, { signer }).withValue(0n).calculateGas();
-      const { response } = await transaction.signAndSend();
-      const result = await response();
-      if (result && typeof result === 'object' && 'ok' in result) {
-        const ts = Date.now();
-        const merged: MarketPrices = { ...pricesRef.current, [asset]: result.ok as PriceFeed };
-        setPrices(merged);
-        setLastFetched(ts);
-        setLastFetchedPerAsset(prev => ({ ...prev, [asset]: ts }));
-        const nextHistory = appendHistory(merged);
-        saveSharedPrices(merged, ts, nextHistory);
-      }
-    } catch (e) {
-      console.error(`fetchPrice(${asset}) failed:`, e);
-    } finally {
-      fetchingRef.current = false;
-      setPricesLoading(false);
-    }
-  }, [program, account, appendHistory]);
-
-  /* ── fetchPrices: sign 3 txs for all assets (global refresh) ── */
+  /* ── fetchPrices: refresh all assets from the off-chain market feed ──
+     Prices come from Binance/CoinGecko directly, not from any on-chain oracle. */
   const fetchPrices = useCallback(async () => {
-    if (!program || !account || fetchingRef.current) return;
+    if (fetchingRef.current) return;
     fetchingRef.current = true;
     setPricesLoading(true);
     try {
-      const { signer } = await web3FromSource(account.meta.source);
-      const newPrices: MarketPrices = { BTC: null, ETH: null, VARA: null };
+      const direct = await fetchBinanceDirect();
+      const updatedTs: Partial<Record<Asset, number>> = {};
+      const merged: MarketPrices = { ...pricesRef.current };
+      const ts = Date.now();
       let changed = false;
       for (const asset of ASSETS) {
-        try {
-          const transaction = program.orderbook.getLivePrice(asset);
-          await transaction.withAccount(account.address, { signer }).withValue(0n).calculateGas();
-          const { response } = await transaction.signAndSend();
-          const result = await response();
-          if (result && typeof result === 'object' && 'ok' in result) {
-            newPrices[asset] = result.ok as PriceFeed;
-            changed = true;
-          }
-        } catch (e) {
-          console.error(`fetchPrices: ${asset} failed:`, e);
-        }
+        const feed = direct[asset];
+        if (feed) { merged[asset] = feed; updatedTs[asset] = ts; changed = true; }
       }
       if (changed) {
-        const ts = Date.now();
-        const merged: MarketPrices = { ...pricesRef.current };
-        const updatedTs: Partial<Record<Asset, number>> = {};
-        for (const asset of ASSETS) {
-          if (newPrices[asset] !== null) { merged[asset] = newPrices[asset]; updatedTs[asset] = ts; }
-        }
         setPrices(merged);
         setLastFetched(ts);
         setLastFetchedPerAsset(prev => ({ ...prev, ...updatedTs }));
@@ -405,7 +364,12 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       fetchingRef.current = false;
       setPricesLoading(false);
     }
-  }, [program, account, appendHistory]);
+  }, [appendHistory]);
+
+  /* Per-asset refresh shares the same off-chain source (feed returns all assets). */
+  const fetchPrice = useCallback(async (_asset: Asset) => {
+    await fetchPrices();
+  }, [fetchPrices]);
 
   /* ── tickMarket: call Tick() to seed market maker activity ── */
   const tickMarket = useCallback(async () => {
@@ -414,7 +378,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     try {
       const { signer } = await web3FromSource(account.meta.source);
       const tx = program.orderbook.tick();
-      await tx.withAccount(account.address, { signer }).calculateGas();
+      await tx.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response } = await tx.signAndSend();
       await response();
       /* Refresh everything after tick */
