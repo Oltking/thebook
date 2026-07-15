@@ -150,7 +150,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     try {
       const { signer } = await web3FromSource(account.meta.source);
       const tx = program.orderbook.cancelOrder(oid);
-      await tx.withAccount(account.address, { signer }).calculateGas();
+      await tx.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response } = await tx.signAndSend();
       const result = await response();
       if (result && typeof result === 'object' && 'err' in result) {
@@ -261,13 +261,13 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       const p = BigInt(Math.max(1, Math.round(markPrice / 1000)));
 
       const st = program.orderbook.placeLimit('Sell', asset, p, q);
-      await st.withAccount(account.address, { signer }).calculateGas();
+      await st.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response: sr } = await st.signAndSend();
       const sResult = await sr();
       if (sResult && typeof sResult === 'object' && 'err' in sResult) throw new Error(JSON.stringify((sResult as any).err));
 
       const bt = program.orderbook.placeLimit('Buy', asset, p, q);
-      await bt.withAccount(account.address, { signer }).calculateGas();
+      await bt.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response: br } = await bt.signAndSend();
       const bResult = await br();
       if (bResult && typeof bResult === 'object' && 'err' in bResult) throw new Error(JSON.stringify((bResult as any).err));
@@ -774,6 +774,16 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   return (
     <div className={styles.grid}>
+      {isFutures && (
+        <div style={{
+          gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', marginBottom: 'var(--space-sm)', borderRadius: 8,
+          fontSize: 12, fontWeight: 600,
+          background: 'rgba(243,167,46,0.12)', border: '1px solid rgba(243,167,46,0.4)', color: '#f3a72e',
+        }}>
+          ⚠ Simulated — leverage &amp; positions are illustrative only. Orders execute as real spot trades on-chain; there are no on-chain perpetuals.
+        </div>
+      )}
       <div className={styles.chartArea}>{chartPanel}</div>
       <div className={styles.orderbookArea}>{depthPanel}</div>
       <div className={styles.entryArea}>

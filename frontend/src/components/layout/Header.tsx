@@ -4,7 +4,7 @@ import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, RefreshCw, LogOut } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import styles from './Header.module.css';
 import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from '../ui/Toast';
@@ -19,12 +19,11 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { account, login, logout } = useAccount();
-  const { portfolio, join, loading } = usePortfolio();
+  const { portfolio, loading } = usePortfolio();
   const { error } = useToast();
   const { isMobile } = useViewport();
   const { prices, lastFetched, pricesStalePer, pricesLoading, fetchPrices, fetchPrice } = useMarketData();
   const [showAccountSelector, setShowAccountSelector] = useState(false);
-  const joinedRef = useRef(false);
 
   const handleConnect = useCallback(async () => {
     const exts = await web3Enable('thebookdex');
@@ -60,10 +59,11 @@ export function Header({ onMenuClick }: HeaderProps) {
     setShowAccountSelector(false);
   }, [login]);
 
-  const handleJoin = useCallback(async () => {
-    joinedRef.current = true;
-    await join();
-  }, [join]);
+  const handleJoin = useCallback(() => {
+    // Agent creation requires a name + strategy, so open the wizard rather than
+    // joining blind. The wizard calls join(name, strategy) on submit.
+    window.dispatchEvent(new Event('thebookdex:open-wizard'));
+  }, []);
 
   const handleRefreshPrices = useCallback(() => {
     if (!account) {
@@ -148,7 +148,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               {!portfolio && (
                 <button onClick={handleJoin} className={styles.joinButton} disabled={loading}>
                   <UserPlus size={16} />
-                  {loading ? '...' : 'Join'}
+                  {loading ? '...' : 'Create Agent'}
                 </button>
               )}
               {!isMobile && (

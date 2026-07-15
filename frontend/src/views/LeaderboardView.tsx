@@ -59,7 +59,7 @@ export function LeaderboardView() {
             + (b.eth / 1e5) * priceUsd('ETH')
             + (b.vara / 1e5) * priceUsd('VARA')
           : Number(l.net_worth) / 100;
-        return { id, usdVal, netWorth };
+        return { id, name: (l.name || '').toString(), usdVal, netWorth };
       })
       .filter(e => e.netWorth > 0 || e.usdVal > 0)
       .sort((a, b) => b.netWorth - a.netWorth);
@@ -80,7 +80,7 @@ export function LeaderboardView() {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 16 }}>Leaderboard</h1>
-        <Card title="Top Traders">
+        <Card title="Top Agents">
           <EmptyState
             title={marketLoading ? 'Loading...' : 'No Traders Yet'}
             description={marketLoading ? 'Fetching leaderboard...' : 'Start trading to top the leaderboard!'}
@@ -102,7 +102,8 @@ export function LeaderboardView() {
                   {rankIcon(i) || <span style={{ color: 'var(--text-secondary)' }}>{i + 1}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500 }}>{shortAddr(l.id)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{l.name || shortAddr(l.id)}</div>
+                  {l.name ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>{shortAddr(l.id)}</div> : null}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ color: 'var(--buy-green)', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14 }}>
@@ -121,12 +122,12 @@ export function LeaderboardView() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 24 }}>Leaderboard</h1>
-      <Card title="Top Traders">
+      <Card title="Top Agents">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={{ textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' }}>#</th>
-              <th style={{ textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' }}>Trader</th>
+              <th style={{ textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' }}>Agent</th>
               <th style={{ textAlign: 'right', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' }}>Cash (USD)</th>
               <th style={{ textAlign: 'right', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12, textTransform: 'uppercase' }}>Net Worth</th>
             </tr>
@@ -137,7 +138,10 @@ export function LeaderboardView() {
                 <td style={{ padding: 16, borderBottom: '1px solid var(--border-color)', fontWeight: 600, width: 40 }}>
                   {rankIcon(i) || <span style={{ color: 'var(--text-secondary)' }}>{i + 1}</span>}
                 </td>
-                <td style={{ padding: 16, borderBottom: '1px solid var(--border-color)', fontFamily: 'var(--font-mono)', fontSize: 14 }}>{shortAddr(l.id)}</td>
+                <td style={{ padding: 16, borderBottom: '1px solid var(--border-color)', fontSize: 14 }}>
+                  <span style={{ fontWeight: 600 }}>{l.name || shortAddr(l.id)}</span>
+                  {l.name ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>{shortAddr(l.id)}</span> : null}
+                </td>
                 <td style={{ padding: 16, borderBottom: '1px solid var(--border-color)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmtUsd(l.usdVal)}</td>
                 <td style={{ padding: 16, borderBottom: '1px solid var(--border-color)', textAlign: 'right', color: 'var(--buy-green)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmtUsd(l.netWorth)}</td>
               </tr>

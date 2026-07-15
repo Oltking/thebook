@@ -37,6 +37,16 @@ type Side = enum {
   Sell,
 };
 
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+type TokenKind = enum {
+  Usd,
+  Btc,
+  Eth,
+  Vara,
+};
+
 type LeaderEntry = struct {
   id: actor_id,
   name: str,
@@ -141,6 +151,9 @@ service Orderbook {
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
   PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
+  /// Admin-only: register the VFT program ID that backs a custodied balance.
+  /// Must be set before deposit/withdraw can move real tokens for that kind.
+  SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);
   SignalCollab : (_partner: actor_id, _note: str) -> null;
   StartAutopilot : () -> null;
   Tick : () -> result (str, ContractError);
@@ -152,6 +165,9 @@ service Orderbook {
   query GetOrderbook : (asset: Asset) -> struct { vec struct { u64, u64 }, vec struct { u64, u64 } };
   query GetPortfolio : () -> struct { u64, u64, u64, u64 };
   query GetStatus : () -> struct { u32, u64, u32, bool, u32 };
+  query GetToken : (kind: TokenKind) -> actor_id;
+  /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
+  query GetTokens : () -> struct { actor_id, actor_id, actor_id, actor_id };
   query GetTrades : (asset: Asset, limit: u32) -> vec struct { u64, u64, u64, actor_id, actor_id };
 
   events {

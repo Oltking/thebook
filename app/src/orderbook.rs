@@ -641,6 +641,30 @@ impl<'a> OrderbookService<'a> {
         // return early forever, permanently locking that address out of funding.
     }
 
+    /// Admin-only: register the VFT program ID that backs a custodied balance.
+    /// Must be set before deposit/withdraw can move real tokens for that kind.
+    #[export]
+    pub fn set_token(&mut self, kind: TokenKind, address: ActorId) -> Result<(), ContractError> {
+        let mut st = self.state.borrow_mut();
+        if msg::source() != st.admin {
+            return Err(ContractError::NotAdmin);
+        }
+        st.set_token_of(kind, address);
+        Ok(())
+    }
+
+    #[export]
+    pub fn get_token(&self, kind: TokenKind) -> ActorId {
+        self.state.borrow().token_of(kind)
+    }
+
+    /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
+    #[export]
+    pub fn get_tokens(&self) -> (ActorId, ActorId, ActorId, ActorId) {
+        let st = self.state.borrow();
+        (st.token_usd, st.token_btc, st.token_eth, st.token_vara)
+    }
+
     #[export]
     pub async fn call_agent_service(
         &mut self,

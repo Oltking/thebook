@@ -83,6 +83,13 @@ pub mod orderbook {
             price: u64,
             qty: u64,
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env>;
+        /// Admin-only: register the VFT program ID that backs a custodied balance.
+        /// Must be set before deposit/withdraw can move real tokens for that kind.
+        fn set_token(
+            &mut self,
+            kind: TokenKind,
+            address: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env>;
         fn signal_collab(
             &mut self,
             _partner: ActorId,
@@ -106,6 +113,12 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env>;
         fn get_portfolio(&self) -> sails_rs::client::PendingCall<io::GetPortfolio, Self::Env>;
         fn get_status(&self) -> sails_rs::client::PendingCall<io::GetStatus, Self::Env>;
+        fn get_token(
+            &self,
+            kind: TokenKind,
+        ) -> sails_rs::client::PendingCall<io::GetToken, Self::Env>;
+        /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
+        fn get_tokens(&self) -> sails_rs::client::PendingCall<io::GetTokens, Self::Env>;
         fn get_trades(
             &self,
             asset: Asset,
@@ -166,6 +179,13 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env> {
             self.pending_call((side, asset, price, qty))
         }
+        fn set_token(
+            &mut self,
+            kind: TokenKind,
+            address: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env> {
+            self.pending_call((kind, address))
+        }
         fn signal_collab(
             &mut self,
             _partner: ActorId,
@@ -205,6 +225,15 @@ pub mod orderbook {
         fn get_status(&self) -> sails_rs::client::PendingCall<io::GetStatus, Self::Env> {
             self.pending_call(())
         }
+        fn get_token(
+            &self,
+            kind: TokenKind,
+        ) -> sails_rs::client::PendingCall<io::GetToken, Self::Env> {
+            self.pending_call((kind,))
+        }
+        fn get_tokens(&self) -> sails_rs::client::PendingCall<io::GetTokens, Self::Env> {
+            self.pending_call(())
+        }
         fn get_trades(
             &self,
             asset: Asset,
@@ -223,6 +252,7 @@ pub mod orderbook {
         sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(PlaceLimit (side: super::Side, asset: super::Asset, price: u64, qty: u64) -> Result<u64, super::ContractError>);
+        sails_rs::io_struct_impl!(SetToken (kind: super::TokenKind, address: ActorId) -> Result<(), super::ContractError>);
         sails_rs::io_struct_impl!(SignalCollab (_partner: ActorId, _note: String) -> ());
         sails_rs::io_struct_impl!(StartAutopilot () -> ());
         sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);
@@ -232,6 +262,8 @@ pub mod orderbook {
         sails_rs::io_struct_impl!(GetOrderbook (asset: super::Asset) -> (Vec<(u64,u64,)>,Vec<(u64,u64,)>,));
         sails_rs::io_struct_impl!(GetPortfolio () -> (u64,u64,u64,u64,));
         sails_rs::io_struct_impl!(GetStatus () -> (u32,u64,u32,bool,u32,));
+        sails_rs::io_struct_impl!(GetToken (kind: super::TokenKind) -> ActorId);
+        sails_rs::io_struct_impl!(GetTokens () -> (ActorId,ActorId,ActorId,ActorId,));
         sails_rs::io_struct_impl!(GetTrades (asset: super::Asset, limit: u32) -> Vec<(u64,u64,u64,ActorId,ActorId,)>);
     }
 
@@ -419,6 +451,18 @@ pub enum Asset {
 pub enum Side {
     Buy,
     Sell,
+}
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum TokenKind {
+    Usd,
+    Btc,
+    Eth,
+    Vara,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

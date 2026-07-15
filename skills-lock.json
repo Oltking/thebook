@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "vara-skills": {
+      "source": "gear-foundation/vara-skills",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "1218c6b5e5d4bf5db60e331a27ad920875dbddef450e0c4de8b220ee92b0bfd5"
+    }
+  }
+}

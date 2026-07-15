@@ -12,6 +12,10 @@ export function useOnboarding() {
       setShowWizard(true);
     }
     setInitialized(true);
+    // Let any component (e.g. the Header "Create Agent" button) re-open the wizard.
+    const open = () => setShowWizard(true);
+    window.addEventListener('thebookdex:open-wizard', open);
+    return () => window.removeEventListener('thebookdex:open-wizard', open);
   }, []);
 
   const completeOnboarding = useCallback(() => {

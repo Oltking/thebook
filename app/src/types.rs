@@ -50,6 +50,19 @@ impl Asset {
     }
 }
 
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum TokenKind {
+    Usd,
+    Btc,
+    Eth,
+    Vara,
+}
+
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]

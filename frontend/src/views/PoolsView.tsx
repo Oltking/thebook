@@ -155,7 +155,7 @@ export function PoolsView() {
 
       /* Bid: resting buy below mark — provides USD-side liquidity */
       const bt = program.orderbook.placeLimit('Buy', usdAsset, BigInt(usdQuote.bidTick), bidQty);
-      await bt.withAccount(account.address, { signer }).calculateGas();
+      await bt.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response: br } = await bt.signAndSend();
       const bres = await br();
       if (bres && typeof bres === 'object' && 'err' in bres) throw new Error(JSON.stringify((bres as any).err));
@@ -163,7 +163,7 @@ export function PoolsView() {
       /* Ask: resting sell above mark — provides asset-side liquidity (only if held) */
       if (sellQty > 0n) {
         const st = program.orderbook.placeLimit('Sell', usdAsset, BigInt(usdQuote.askTick), sellQty);
-        await st.withAccount(account.address, { signer }).calculateGas();
+        await st.withAccount(account.address, { signer }).calculateGas(true, 100);
         const { response: sr } = await st.signAndSend();
         const sres = await sr();
         if (sres && typeof sres === 'object' && 'err' in sres) throw new Error(JSON.stringify((sres as any).err));

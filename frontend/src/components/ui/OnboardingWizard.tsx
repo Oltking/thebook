@@ -5,7 +5,8 @@ import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from './Toast';
-import { Wallet, UserPlus, Rocket, ArrowRight, Check, X, Loader2 } from 'lucide-react';
+import { parseContractError } from '../../lib/errors';
+import { Wallet, Rocket, ArrowRight, Check, X, Loader2, Crosshair, Waypoints, TrendingUp, Bot } from 'lucide-react';
 import styles from './OnboardingWizard.module.css';
 
 interface OnboardingWizardProps {
@@ -14,7 +15,13 @@ interface OnboardingWizardProps {
   onNavigateToTab: (tab: string) => void;
 }
 
-type Step = 'welcome' | 'connect' | 'join' | 'done';
+type Step = 'welcome' | 'connect' | 'create' | 'done';
+
+const STRATEGIES: { id: AgentStrategy; label: string; desc: string; icon: typeof Crosshair }[] = [
+  { id: 'ArbitrageHunter', label: 'Arbitrage Hunter', desc: 'Hunts price gaps between the orderbook, AMM pools, and spot.', icon: Crosshair },
+  { id: 'MarketMaker',     label: 'Market Maker',     desc: 'Quotes both sides of the book and earns the spread.',        icon: Waypoints },
+  { id: 'Momentum',        label: 'Momentum',         desc: 'Rides assets that are trending and moving fast.',            icon: TrendingUp },
+];
 
 export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: OnboardingWizardProps) {
   const { account, login } = useAccount();
@@ -23,10 +30,12 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
   const [step, setStep] = useState<Step>('welcome');
   const [joining, setJoining] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [agentName, setAgentName] = useState('');
+  const [strategy, setStrategy] = useState<AgentStrategy>('ArbitrageHunter');
 
   const currentStep = (): Step => {
     if (!account) return step === 'welcome' ? 'welcome' : 'connect';
-    if (!portfolio) return 'join';
+    if (!portfolio) return 'create';
     return 'done';
   };
 
@@ -59,30 +68,34 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
     setConnecting(false);
   }, [login, error]);
 
-  const handleJoin = async () => {
+  const handleCreate = async () => {
+    const name = agentName.trim();
+    if (!name) { error('Give your agent a name.'); return; }
     setJoining(true);
-    await join();
+    const err = await join(name, strategy);
     setJoining(false);
-    if (portfolio) {
-      success('Welcome to thebookdex! You\'re all set.');
+    if (err) {
+      error(parseContractError(err));
+    } else {
+      success(`Agent "${name}" deployed. It's hunting the market for you.`);
     }
   };
 
   const handleFinish = () => {
     onComplete();
-    onNavigateToTab('trade');
+    onNavigateToTab('agent');
   };
 
   const steps = [
     { key: 'welcome', label: 'Welcome', done: effectiveStep !== 'welcome' },
     { key: 'connect', label: 'Connect Wallet', done: !!account },
-    { key: 'join', label: 'Join DEX', done: !!portfolio },
-    { key: 'done', label: 'Start Trading', done: false },
+    { key: 'create', label: 'Create Agent', done: !!portfolio },
+    { key: 'done', label: 'Deploy', done: false },
   ];
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Welcome to thebookdex">
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Create your trading agent">
         <button className={styles.closeBtn} onClick={onDismiss} aria-label="Skip onboarding">
           <X size={20} />
         </button>
@@ -102,10 +115,11 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               <div className={styles.iconWrap}>
                 <Rocket size={48} className={styles.rocket} />
               </div>
-              <h2 className={styles.title}>Welcome to thebookdex</h2>
+              <h2 className={styles.title}>You don't trade here. You deploy an agent.</h2>
               <p className={styles.desc}>
-                A decentralized exchange on Vara Network with a professional orderbook
-                and automated market maker. Trade BTC, ETH, and VARA with confidence.
+                thebookdex is an on-chain agent arena on Vara. Create your own trading
+                agent — it scans the orderbook, AMM pools, and live prices for market
+                opportunities and surfaces them for you to act on.
               </p>
               <button className={styles.primaryBtn} onClick={() => setStep('connect')}>
                 Get Started
@@ -121,8 +135,8 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               </div>
               <h2 className={styles.title}>Connect Your Wallet</h2>
               <p className={styles.desc}>
-                You'll need a Polkadot.js or SubWallet browser extension to interact
-                with the Vara Network. Click the button below to connect.
+                You'll need a Polkadot.js or SubWallet extension on Vara testnet. Your
+                wallet is your agent's identity on-chain.
               </p>
               <button className={styles.primaryBtn} onClick={handleConnectWallet} disabled={connecting}>
                 {connecting ? (
@@ -137,22 +151,58 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
             </>
           )}
 
-          {effectiveStep === 'join' && (
+          {effectiveStep === 'create' && (
             <>
               <div className={styles.iconWrap}>
-                <UserPlus size={48} className={styles.iconAccent} />
+                <Bot size={48} className={styles.iconAccent} />
               </div>
-              <h2 className={styles.title}>Join the DEX</h2>
+              <h2 className={styles.title}>Create Your Agent</h2>
               <p className={styles.desc}>
-                One-time setup to initialize your account on-chain. This is required
-                before you can trade, swap, or provide liquidity.
+                Name your agent and pick its trading style. This is a one-time on-chain
+                registration that funds your agent with starting balances.
               </p>
+
+              <input
+                className={styles.skipBtn}
+                style={{ width: '100%', textAlign: 'center', fontSize: 16, padding: '12px 14px', border: '1px solid var(--border, #2a2a3a)', borderRadius: 10, background: 'var(--bg-elevated, #16161f)', color: 'inherit', marginBottom: 14 }}
+                placeholder="Agent name (e.g. AlphaSeeker)"
+                value={agentName}
+                maxLength={24}
+                onChange={e => setAgentName(e.target.value)}
+              />
+
+              <div style={{ display: 'grid', gap: 8, width: '100%', marginBottom: 16 }}>
+                {STRATEGIES.map(s => {
+                  const Icon = s.icon;
+                  const active = strategy === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setStrategy(s.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                        padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+                        border: `1px solid ${active ? 'var(--accent, #6c5ce7)' : 'var(--border, #2a2a3a)'}`,
+                        background: active ? 'var(--accent-soft, rgba(108,92,231,0.12))' : 'transparent',
+                        color: 'inherit',
+                      }}
+                    >
+                      <Icon size={22} style={{ flexShrink: 0, color: active ? 'var(--accent, #6c5ce7)' : 'inherit' }} />
+                      <span style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ fontSize: 14 }}>{s.label}</strong>
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>{s.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
               <button
                 className={styles.primaryBtn}
-                onClick={handleJoin}
-                disabled={joining || loading}
+                onClick={handleCreate}
+                disabled={joining || loading || !agentName.trim()}
               >
-                {joining || loading ? 'Joining...' : 'Join DEX Now'}
+                {joining || loading ? 'Deploying agent...' : 'Deploy Agent'}
                 {!joining && !loading && <ArrowRight size={18} />}
               </button>
               <button className={styles.skipBtn} onClick={onDismiss}>
@@ -168,13 +218,13 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
                   <Check size={32} />
                 </div>
               </div>
-              <h2 className={styles.title}>You're All Set!</h2>
+              <h2 className={styles.title}>Your Agent Is Live!</h2>
               <p className={styles.desc}>
-                Your account is ready. Start trading, swapping tokens, or providing
-                liquidity to earn fees.
+                It's scanning the market for opportunities. Open the Agent dashboard to
+                see signals, or trade manually anytime.
               </p>
               <button className={styles.primaryBtn} onClick={handleFinish}>
-                Start Trading
+                Open Agent Dashboard
                 <ArrowRight size={18} />
               </button>
               <button className={styles.skipBtn} onClick={onDismiss}>

@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import styles from './AnnouncementBar.module.css';
+import { NETWORK_NAME, PROGRAM_ID_CONFIGURED } from '../../consts';
 
-const TEXT =
-  '🚀 TheBookDEX Mainnet Launch is coming · All profits from simulated trades will be settled as real VARA tokens · ' +
-  'Trade BTC · ETH · VARA perpetuals now · Your positions are tracked on-chain · ' +
-  'Powered by Vara Network · Be among the first futures traders on Gear Protocol · ' +
-  'Early traders earn real VARA at launch · Don\'t miss out · Start trading today · ';
+const LIVE_TEXT =
+  `🚀 thebookdex is live on ${NETWORK_NAME} · Trade BTC · ETH · VARA on an on-chain orderbook + AMM · ` +
+  'Balances are testnet simulation — no real funds at risk · ' +
+  'Powered by Vara Network on Gear Protocol · Click Join to get started · ';
+
+const UNCONFIGURED_TEXT =
+  '⚠ Program ID is not configured — set VITE_PROGRAM_ID in your environment (see DEPLOY.md). ' +
+  'Trading actions will fail until the frontend points at a deployed program. ';
+
+const TEXT = PROGRAM_ID_CONFIGURED ? LIVE_TEXT : UNCONFIGURED_TEXT;
 
 const SESSION_KEY = 'thebookdex:bar';
 

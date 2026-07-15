@@ -12,7 +12,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 export function PortfolioView() {
-  const { portfolio, loading, join, refresh: refreshPortfolio } = usePortfolio();
+  const { portfolio, loading, refresh: refreshPortfolio } = usePortfolio();
   const { program, account, isReady } = useSails();
   const { refreshAll, prices } = useMarketData();
   const [orders, setOrders] = useState<any[]>([]);
@@ -75,8 +75,8 @@ export function PortfolioView() {
             title={loading ? 'Loading...' : 'Welcome to thebookdex'}
             description={loading ? 'Loading portfolio...' : 'Join the DEX to start trading and tracking your balances.'}
             action={!loading && account ? {
-              label: 'Join DEX',
-              onClick: join,
+              label: 'Create Agent',
+              onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')),
             } : undefined}
           />
         </Card>

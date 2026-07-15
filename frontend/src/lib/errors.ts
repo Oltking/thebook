@@ -19,6 +19,7 @@ export function parseContractError(e: unknown): string {
   if (msg.includes('BadParams')) return 'Invalid parameters provided. Check your inputs and try again.';
   if (msg.includes('InsufficientOracleCredit')) return 'Oracle budget has been depleted. Please try again later.';
   if (msg.includes('pool') || msg.includes('Pool')) return 'Pool operation failed. Please try again.';
+  if (msg.includes('out of gas') || msg.includes('OutOfGas') || msg.includes('ran out of gas')) return 'The transaction ran out of gas. Please try again.';
   if (msg.includes('signAndSend') || msg.includes('signer')) return 'Transaction was rejected by your wallet or the network is congested. Try again.';
   if (msg.includes('timeout') || msg.includes('Timeout')) return 'The request timed out. The network may be congested. Please try again.';
   if (msg.includes('Connection') || msg.includes('connection')) return 'Connection lost. Please check your internet and try again.';

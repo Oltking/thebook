@@ -72,7 +72,9 @@ export function useTxStatus(): UseTxStatusReturn {
 
       updateStage('broadcasting');
       const transaction = buildTx();
-      await transaction.withAccount(account.address, { signer }).calculateGas();
+      // Gas safety: the node returns the *minimum* limit, which under-estimates real
+      // cost and causes intermittent "ran out of gas" failures. Add the max buffer.
+      await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
 
       updateStage('confirming');
       const { response } = await transaction.signAndSend();

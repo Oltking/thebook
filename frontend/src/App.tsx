@@ -4,6 +4,7 @@ import { SkeletonCard } from './components/ui/Skeleton';
 import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
+const AgentView = lazy(() => import('./views/AgentView').then(m => ({ default: m.AgentView })));
 const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m.TradeView })));
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
@@ -24,6 +25,8 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'agent':
+        return <AgentView />;
       case 'trade':
         return <TradeView mode="spot" />;
       case 'futures':

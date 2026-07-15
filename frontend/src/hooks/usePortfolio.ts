@@ -56,19 +56,22 @@ export function usePortfolio() {
     };
   }, [isReady, account, fetchPortfolio]);
 
-  const join = async () => {
-    if (!program || !account) return;
+  /** Create the agent on-chain. Returns null on success, or an error string. */
+  const join = async (name: string, strategy: AgentStrategy): Promise<string | null> => {
+    if (!program || !account) return 'Wallet not ready';
     setLoading(true);
     try {
       const { signer } = await web3FromSource(account.meta.source);
-      const transaction = program.orderbook.join();
-      await transaction.withAccount(account.address, { signer }).calculateGas();
+      const transaction = program.orderbook.join(name, strategy);
+      await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response } = await transaction.signAndSend();
       await response();
       localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');
       await fetchPortfolio();
-    } catch (e) {
+      return null;
+    } catch (e: any) {
       console.error('Join failed:', e);
+      return e?.message || String(e);
     } finally {
       setLoading(false);
     }

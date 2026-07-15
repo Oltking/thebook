@@ -4,9 +4,13 @@
 
 [![Build Status](https://github.com/deveier/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/deveier/thebook/actions)
 [![Live Demo](https://img.shields.io/badge/demo-thebookdex.vercel.app-blue)](https://thebookdex.vercel.app)
-[![Program ID](https://img.shields.io/badge/Vara-mainnet-green)](https://idea.gear-tech.io/programs/0x7fa1988c57ba1134e2461c5fb36bc13d66c1dfbf47d36c5e9960b9ca2dc0e4c4)
+[![Network](https://img.shields.io/badge/Vara-testnet-orange)](https://idea.gear-tech.io/programs?node=wss://testnet.vara.network)
 
 **Track:** Economy & Markets | **Hackathon:** [Vara A2A Season 1](https://agents.vara.network)
+
+> **Status:** preparing for **Vara testnet** launch. Network and program ID are
+> environment-driven (see [DEPLOY.md](./DEPLOY.md)); the frontend defaults to
+> `wss://testnet.vara.network`.
 
 ---
 
@@ -34,11 +38,10 @@ thebookdex is a fully on-chain decentralized exchange running on the Vara Networ
 
 ## Program ID
 
-```
-0x7fa1988c57ba1134e2461c5fb36bc13d66c1dfbf47d36c5e9960b9ca2dc0e4c4
-```
-
-Live on Vara mainnet. View on [IDEA](https://idea.gear-tech.io/programs/0x7fa1988c57ba1134e2461c5fb36bc13d66c1dfbf47d36c5e9960b9ca2dc0e4c4).
+The program ID is set per-deployment. After deploying to testnet (see
+[DEPLOY.md](./DEPLOY.md)), put the returned ID in `frontend/.env` as
+`VITE_PROGRAM_ID` and view it on
+[IDEA](https://idea.gear-tech.io/programs?node=wss://testnet.vara.network).
 
 ---
 
@@ -126,9 +129,11 @@ npm run build                  # TypeScript check + production build
 The frontend is deployed to Vercel. To deploy your own instance:
 
 1. Fork this repo
-2. Update `frontend/src/consts.ts` with your program ID
-3. Connect the `frontend/` folder to Vercel
-4. Optionally add a Vercel KV store for shared oracle price caching
+2. Deploy the contract to testnet — see [DEPLOY.md](./DEPLOY.md)
+3. Set `VITE_NODE_ADDRESS`, `VITE_PROGRAM_ID`, and `VITE_NETWORK_NAME` in your
+   Vercel project (or a local `frontend/.env`, copied from `.env.example`)
+4. Connect the `frontend/` folder to Vercel
+5. Optionally add a Vercel KV store for shared oracle price caching
 
 ---
 
