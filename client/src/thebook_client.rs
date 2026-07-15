@@ -58,6 +58,15 @@ pub mod orderbook {
             opponent: ActorId,
             amount: u64,
         ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env>;
+        /// Move real VFT tokens from the caller into the DEX vault, crediting their
+        /// internal balance. The caller must have `approve`d the DEX on the token
+        /// program for at least `amount` first. Credits only after the on-chain
+        /// transfer succeeds, so the internal balance stays fully token-backed.
+        fn deposit(
+            &mut self,
+            kind: TokenKind,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env>;
         /// Create the caller's agent with a chosen name + strategy, funding it with
         /// starting balances. Idempotent: re-joining returns the existing balances and
         /// keeps the original identity (name is immutable in this phase).
@@ -99,6 +108,14 @@ pub mod orderbook {
             &mut self,
         ) -> sails_rs::client::PendingCall<io::StartAutopilot, Self::Env>;
         fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env>;
+        /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
+        /// internal balance first, then transfers on-chain; if the transfer fails the
+        /// debit is reverted so funds are never silently lost.
+        fn withdraw(
+            &mut self,
+            kind: TokenKind,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env>;
         /// Caller's agent identity, or None if they haven't joined. Used by the UI to
         /// decide whether to show the "Create your Agent" onboarding.
         fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env>;
@@ -148,6 +165,13 @@ pub mod orderbook {
             amount: u64,
         ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env> {
             self.pending_call((opponent, amount))
+        }
+        fn deposit(
+            &mut self,
+            kind: TokenKind,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env> {
+            self.pending_call((kind, amount))
         }
         fn join(
             &mut self,
@@ -201,6 +225,13 @@ pub mod orderbook {
         fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env> {
             self.pending_call(())
         }
+        fn withdraw(
+            &mut self,
+            kind: TokenKind,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env> {
+            self.pending_call((kind, amount))
+        }
         fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env> {
             self.pending_call(())
         }
@@ -248,6 +279,7 @@ pub mod orderbook {
         sails_rs::io_struct_impl!(CallAgentService (target: ActorId, payload: Vec<u8>, gas_limit: u64) -> Result<Vec<u8>, super::ContractError>);
         sails_rs::io_struct_impl!(CancelOrder (oid: u64) -> Result<(), super::ContractError>);
         sails_rs::io_struct_impl!(Challenge (opponent: ActorId, amount: u64) -> Result<u32, super::ContractError>);
+        sails_rs::io_struct_impl!(Deposit (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
         sails_rs::io_struct_impl!(Join (name: String, strategy: super::AgentStrategy) -> (u64,u64,u64,u64,));
         sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
@@ -256,6 +288,7 @@ pub mod orderbook {
         sails_rs::io_struct_impl!(SignalCollab (_partner: ActorId, _note: String) -> ());
         sails_rs::io_struct_impl!(StartAutopilot () -> ());
         sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);
+        sails_rs::io_struct_impl!(Withdraw (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
         sails_rs::io_struct_impl!(GetIdentity () -> Option<(String,super::AgentStrategy,)>);
         sails_rs::io_struct_impl!(GetLeaderboard (limit: u32) -> Vec<super::LeaderEntry>);
         sails_rs::io_struct_impl!(GetMyOrders () -> Vec<(u64,super::Side,super::Asset,u64,u64,u64,super::OrderStatus,)>);
@@ -427,6 +460,18 @@ pub enum ContractError {
     ZeroAmount,
     AgentCallFailed,
 }
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum TokenKind {
+    Usd,
+    Btc,
+    Eth,
+    Vara,
+}
 /// The trading persona a user picks when creating their agent. Display/behaviour
 /// hint today; drives autopilot strategy selection in a later phase.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
@@ -451,18 +496,6 @@ pub enum Asset {
 pub enum Side {
     Buy,
     Sell,
-}
-/// The four balances the DEX custodies, each backed by a real VFT on-chain.
-/// `Usd` is a separate kind because the orderbook denominates in USD but the
-/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum TokenKind {
-    Usd,
-    Btc,
-    Eth,
-    Vara,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

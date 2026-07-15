@@ -18,6 +18,16 @@ type ContractError = enum {
   AgentCallFailed,
 };
 
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+type TokenKind = enum {
+  Usd,
+  Btc,
+  Eth,
+  Vara,
+};
+
 /// The trading persona a user picks when creating their agent. Display/behaviour
 /// hint today; drives autopilot strategy selection in a later phase.
 type AgentStrategy = enum {
@@ -35,16 +45,6 @@ type Asset = enum {
 type Side = enum {
   Buy,
   Sell,
-};
-
-/// The four balances the DEX custodies, each backed by a real VFT on-chain.
-/// `Usd` is a separate kind because the orderbook denominates in USD but the
-/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
-type TokenKind = enum {
-  Usd,
-  Btc,
-  Eth,
-  Vara,
 };
 
 type LeaderEntry = struct {
@@ -144,6 +144,11 @@ service Orderbook {
   CallAgentService : (target: actor_id, payload: vec u8, gas_limit: u64) -> result (vec u8, ContractError);
   CancelOrder : (oid: u64) -> result (null, ContractError);
   Challenge : (opponent: actor_id, amount: u64) -> result (u32, ContractError);
+  /// Move real VFT tokens from the caller into the DEX vault, crediting their
+  /// internal balance. The caller must have `approve`d the DEX on the token
+  /// program for at least `amount` first. Credits only after the on-chain
+  /// transfer succeeds, so the internal balance stays fully token-backed.
+  Deposit : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
   /// Create the caller's agent with a chosen name + strategy, funding it with
   /// starting balances. Idempotent: re-joining returns the existing balances and
   /// keeps the original identity (name is immutable in this phase).
@@ -157,6 +162,10 @@ service Orderbook {
   SignalCollab : (_partner: actor_id, _note: str) -> null;
   StartAutopilot : () -> null;
   Tick : () -> result (str, ContractError);
+  /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
+  /// internal balance first, then transfers on-chain; if the transfer fails the
+  /// debit is reverted so funds are never silently lost.
+  Withdraw : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
   /// Caller's agent identity, or None if they haven't joined. Used by the UI to
   /// decide whether to show the "Create your Agent" onboarding.
   query GetIdentity : () -> opt struct { str, AgentStrategy };

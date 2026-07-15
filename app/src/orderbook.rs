@@ -1,7 +1,7 @@
 use crate::state::DexState;
 use crate::types::*;
 use sails_rs::cell::RefCell;
-use sails_rs::gstd::msg;
+use sails_rs::gstd::{exec, msg};
 use sails_rs::prelude::*;
 use sails_rs::scale_codec::{Decode, Encode};
 
@@ -40,6 +40,45 @@ fn sub_asset(ag: &mut Agent, asset: Asset, qty: u64) {
         Asset::ETH => ag.eth -= qty,
         Asset::VARA => ag.vara -= qty,
     }
+}
+
+fn kind_balance(ag: &Agent, kind: TokenKind) -> u64 {
+    match kind {
+        TokenKind::Usd => ag.usd,
+        TokenKind::Btc => ag.btc,
+        TokenKind::Eth => ag.eth,
+        TokenKind::Vara => ag.vara,
+    }
+}
+
+fn credit_kind(ag: &mut Agent, kind: TokenKind, amount: u64) {
+    match kind {
+        TokenKind::Usd => ag.usd += amount,
+        TokenKind::Btc => ag.btc += amount,
+        TokenKind::Eth => ag.eth += amount,
+        TokenKind::Vara => ag.vara += amount,
+    }
+}
+
+fn debit_kind(ag: &mut Agent, kind: TokenKind, amount: u64) {
+    match kind {
+        TokenKind::Usd => ag.usd -= amount,
+        TokenKind::Btc => ag.btc -= amount,
+        TokenKind::Eth => ag.eth -= amount,
+        TokenKind::Vara => ag.vara -= amount,
+    }
+}
+
+/// Gas reserved for the DEX to finish after a VFT reply returns; the rest is
+/// forwarded to the token program for the transfer call.
+const VFT_GAS_RESERVE: u64 = 10_000_000_000;
+
+/// Build the SCALE route payload for a `Vft` service method call.
+fn vft_route(method: &str, args: Vec<u8>) -> Vec<u8> {
+    let mut payload = "Vft".encode();
+    payload.extend(method.encode());
+    payload.extend(args);
+    payload
 }
 
 pub struct OrderbookService<'a> {
@@ -663,6 +702,96 @@ impl<'a> OrderbookService<'a> {
     pub fn get_tokens(&self) -> (ActorId, ActorId, ActorId, ActorId) {
         let st = self.state.borrow();
         (st.token_usd, st.token_btc, st.token_eth, st.token_vara)
+    }
+
+    /// Move real VFT tokens from the caller into the DEX vault, crediting their
+    /// internal balance. The caller must have `approve`d the DEX on the token
+    /// program for at least `amount` first. Credits only after the on-chain
+    /// transfer succeeds, so the internal balance stays fully token-backed.
+    #[export]
+    pub async fn deposit(&mut self, kind: TokenKind, amount: u64) -> Result<u64, ContractError> {
+        if amount == 0 {
+            return Err(ContractError::ZeroAmount);
+        }
+        let (token, is_agent) = {
+            let st = self.state.borrow();
+            (st.token_of(kind), st.agents.contains_key(&msg::source()))
+        };
+        if token == ActorId::zero() {
+            return Err(ContractError::BadParams);
+        }
+        if !is_agent {
+            return Err(ContractError::JoinFirst);
+        }
+        let caller = msg::source();
+        let dex = exec::program_id();
+        let value = U256::from(amount);
+        let payload = vft_route("TransferFrom", (caller, dex, value).encode());
+        let gas = exec::gas_available().saturating_sub(VFT_GAS_RESERVE);
+        let ok = msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+            token,
+            RawPayload(payload),
+            gas as u128,
+            0,
+        )
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .await
+        .map_err(|_| ContractError::AgentCallFailed)?
+        .0;
+        if !ok {
+            return Err(ContractError::AgentCallFailed);
+        }
+        let mut st = self.state.borrow_mut();
+        if let Some(ag) = st.agents.get_mut(&caller) {
+            credit_kind(ag, kind, amount);
+        }
+        Ok(amount)
+    }
+
+    /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
+    /// internal balance first, then transfers on-chain; if the transfer fails the
+    /// debit is reverted so funds are never silently lost.
+    #[export]
+    pub async fn withdraw(&mut self, kind: TokenKind, amount: u64) -> Result<u64, ContractError> {
+        if amount == 0 {
+            return Err(ContractError::ZeroAmount);
+        }
+        let caller = msg::source();
+        let token = {
+            let mut st = self.state.borrow_mut();
+            let token = st.token_of(kind);
+            if token == ActorId::zero() {
+                return Err(ContractError::BadParams);
+            }
+            let ag = st.agents.get_mut(&caller).ok_or(ContractError::JoinFirst)?;
+            if kind_balance(ag, kind) < amount {
+                return Err(ContractError::InsufficientAsset);
+            }
+            debit_kind(ag, kind, amount);
+            token
+        };
+        let value = U256::from(amount);
+        let payload = vft_route("Transfer", (caller, value).encode());
+        let gas = exec::gas_available().saturating_sub(VFT_GAS_RESERVE);
+        let result = msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+            token,
+            RawPayload(payload),
+            gas as u128,
+            0,
+        );
+        let ok = match result {
+            Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
+            Err(_) => false,
+        };
+        if !ok {
+            // Transfer failed — give the caller their internal balance back.
+            let mut st = self.state.borrow_mut();
+            if let Some(ag) = st.agents.get_mut(&caller) {
+                credit_kind(ag, kind, amount);
+            }
+            return Err(ContractError::AgentCallFailed);
+        }
+        Ok(amount)
     }
 
     #[export]
