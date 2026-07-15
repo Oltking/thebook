@@ -1,4 +1,5 @@
 use sails_rs::ActorId;
+use sails_rs::U256;
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 
@@ -6,21 +7,86 @@ use thebook::WASM_BINARY;
 use thebook_client::amm::io as amm_io;
 use thebook_client::orderbook::io as ob_io;
 use thebook_client::*;
+use thebook_token::WASM_BINARY as TOKEN_WASM;
+use thebook_token_client::faucet::io as tok_faucet_io;
+use thebook_token_client::vft::io as tok_vft_io;
+use thebook_token_client::{
+    ThebookTokenClient, ThebookTokenClientCtors, ThebookTokenClientProgram,
+};
 
 const ALICE: u64 = 1;
 const BOB: u64 = 2;
 
+// Starting balances every test agent is funded to — via the real faucet→deposit
+// flow, not free money on join. Each backing token's faucet mints exactly this.
+const INITIAL_USD: u64 = 100_000;
+const INITIAL_BTC: u64 = 100_000;
+const INITIAL_ETH: u64 = 1_000_000;
+const INITIAL_VARA: u64 = 1_000_000_000;
+
+/// The four (TokenKind, starting amount) pairs the DEX custodies.
+fn kinds() -> [(TokenKind, u64); 4] {
+    [
+        (TokenKind::Usd, INITIAL_USD),
+        (TokenKind::Btc, INITIAL_BTC),
+        (TokenKind::Eth, INITIAL_ETH),
+        (TokenKind::Vara, INITIAL_VARA),
+    ]
+}
+
 async fn deploy() -> (GtestEnv, Actor<ThebookClientProgram, GtestEnv>) {
     let system = System::new();
-    system.mint_to(ALICE, 100_000_000_000_000);
-    system.mint_to(BOB, 100_000_000_000_000);
+    system.mint_to(ALICE, 100_000_000_000_000_000);
+    system.mint_to(BOB, 100_000_000_000_000_000);
     let env = GtestEnv::new(system, ALICE.into());
+
     let code_id = env.system().submit_code(WASM_BINARY);
     let program = env
         .deploy::<ThebookClientProgram>(code_id, b"thebookdex".to_vec())
         .new()
         .await
         .unwrap();
+    // The DEX sends VFT messages (deposit/withdraw) and must hold native balance to
+    // cover the existential deposit reserved for each reply.
+    env.system()
+        .transfer(ALICE, program.id(), 10_000_000_000_000, false);
+
+    // Deploy one mintable VFT per custodied balance and register it with the DEX.
+    // Each token's faucet mints exactly the starting amount for its kind, so an
+    // agent that claims + deposits once ends up with the canonical portfolio.
+    let token_code = env.system().submit_code(TOKEN_WASM);
+    let specs = [
+        (
+            TokenKind::Usd,
+            "wUSDC",
+            "wUSDC",
+            INITIAL_USD,
+            b"usd".to_vec(),
+        ),
+        (TokenKind::Btc, "wBTC", "wBTC", INITIAL_BTC, b"btc".to_vec()),
+        (TokenKind::Eth, "wETH", "wETH", INITIAL_ETH, b"eth".to_vec()),
+        (
+            TokenKind::Vara,
+            "wVARA",
+            "wVARA",
+            INITIAL_VARA,
+            b"vara".to_vec(),
+        ),
+    ];
+    for (kind, name, symbol, faucet, salt) in specs {
+        let token = env
+            .deploy::<ThebookTokenClientProgram>(token_code, salt)
+            .new(name.to_string(), symbol.to_string(), 6, U256::from(faucet))
+            .await
+            .unwrap();
+        let _: () = program
+            .orderbook()
+            .pending_call::<ob_io::SetToken>((kind, token.id()))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
     (env, program)
 }
 
@@ -34,26 +100,66 @@ fn amm_svc(program: &Actor<ThebookClientProgram, GtestEnv>) -> Service<amm::AmmI
     program.amm()
 }
 
-async fn join_alice(program: &Actor<ThebookClientProgram, GtestEnv>) {
+/// Fund `caller` to the canonical starting portfolio through the real onboarding:
+/// claim each backing token from its faucet, approve the DEX, then deposit.
+async fn fund(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>, caller: u64) {
+    let dex = program.id();
+    let (t_usd, t_btc, t_eth, t_vara): (ActorId, ActorId, ActorId, ActorId) = program
+        .orderbook()
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    let tokens = [t_usd, t_btc, t_eth, t_vara];
+    let dex_actor =
+        Actor::<ThebookClientProgram, GtestEnv>::new(env.clone().with_actor_id(caller.into()), dex);
+
+    for (tid, (kind, amount)) in tokens.into_iter().zip(kinds()) {
+        let token = Actor::<ThebookTokenClientProgram, GtestEnv>::new(
+            env.clone().with_actor_id(caller.into()),
+            tid,
+        );
+        let _: U256 = token
+            .faucet()
+            .pending_call::<tok_faucet_io::Claim>(())
+            .await
+            .unwrap()
+            .unwrap();
+        let _: bool = token
+            .vft()
+            .pending_call::<tok_vft_io::Approve>((dex, U256::from(amount)))
+            .await
+            .unwrap();
+        let _: u64 = dex_actor
+            .orderbook()
+            .pending_call::<ob_io::Deposit>((kind, amount))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}
+
+async fn join_alice(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
         .await
         .unwrap();
+    fund(env, program, ALICE).await;
 }
 
-async fn join_bob(program: &Actor<ThebookClientProgram, GtestEnv>) {
+async fn join_bob(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
         .await
         .unwrap();
+    fund(env, program, BOB).await;
 }
 
 // ── Orderbook tests ──
 
 #[tokio::test]
 async fn join_creates_agent() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
         .pending_call::<ob_io::GetPortfolio>(())
@@ -64,8 +170,8 @@ async fn join_creates_agent() {
 
 #[tokio::test]
 async fn join_sets_identity() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let id: Option<(String, AgentStrategy)> = orderbook_svc(&program)
         .pending_call::<ob_io::GetIdentity>(())
@@ -87,8 +193,8 @@ async fn join_sets_identity() {
 
 #[tokio::test]
 async fn place_limit_buy_then_cancel() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let oid: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 1))
@@ -112,8 +218,8 @@ async fn place_limit_buy_then_cancel() {
 
 #[tokio::test]
 async fn place_limit_sell_then_cancel() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let oid: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 60, 1))
@@ -137,7 +243,7 @@ async fn place_limit_sell_then_cancel() {
 #[tokio::test]
 async fn market_buy_fills_sell_order() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 2))
@@ -147,7 +253,7 @@ async fn market_buy_fills_sell_order() {
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketBuy>((Asset::BTC, 1))
@@ -165,7 +271,7 @@ async fn market_buy_fills_sell_order() {
 #[tokio::test]
 async fn market_sell_fills_buy_order() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
@@ -175,7 +281,7 @@ async fn market_sell_fills_buy_order() {
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketSell>((Asset::BTC, 1))
@@ -197,7 +303,7 @@ async fn market_sell_fills_buy_order() {
 #[tokio::test]
 async fn resting_buy_not_double_charged_on_market_sell() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
@@ -206,7 +312,7 @@ async fn resting_buy_not_double_charged_on_market_sell() {
         .unwrap();
 
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketSell>((Asset::BTC, 1))
         .await
@@ -226,7 +332,7 @@ async fn resting_buy_not_double_charged_on_market_sell() {
 #[tokio::test]
 async fn resting_buy_not_double_charged_on_limit_sell() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
         .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
@@ -235,7 +341,7 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
         .unwrap();
 
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
     let _: u64 = orderbook_svc(&bob)
         .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 1))
         .await
@@ -255,7 +361,7 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
 #[tokio::test]
 async fn signal_collab_does_not_lock_out_join() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let bob_id: ActorId = BOB.into();
     let _: () = orderbook_svc(&program)
@@ -268,10 +374,18 @@ async fn signal_collab_does_not_lock_out_join() {
         .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
         .await
         .unwrap();
+    // Join now creates a zero-balance identity (value comes from faucet+deposit).
+    // The regression is that signal_collab must not pre-insert an agent for Bob,
+    // which would make this join a no-op and lock him out — so identity must stick.
+    assert_eq!(bal, (0, 0, 0, 0), "unexpected starting balances");
+    let id: Option<(String, AgentStrategy)> = orderbook_svc(&bob)
+        .pending_call::<ob_io::GetIdentity>(())
+        .await
+        .unwrap();
     assert_eq!(
-        bal,
-        (100_000, 100_000, 1_000_000, 1_000_000_000),
-        "signal_collab locked Bob out of funded join"
+        id,
+        Some(("Bob".to_string(), AgentStrategy::MarketMaker)),
+        "signal_collab locked Bob out of joining"
     );
 }
 
@@ -279,9 +393,9 @@ async fn signal_collab_does_not_lock_out_join() {
 #[tokio::test]
 async fn challenge_does_not_burn_funds() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let bob_id: ActorId = BOB.into();
     let _: u32 = orderbook_svc(&program)
@@ -301,8 +415,8 @@ async fn challenge_does_not_burn_funds() {
 
 #[tokio::test]
 async fn amm_create_pool_works() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -324,8 +438,8 @@ async fn amm_create_pool_works() {
 
 #[tokio::test]
 async fn amm_same_asset_pool_fails() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let result: Result<Result<u64, ContractError>, GtestError> = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::BTC))
@@ -338,8 +452,8 @@ async fn amm_same_asset_pool_fails() {
 
 #[tokio::test]
 async fn amm_add_liquidity_works() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -373,7 +487,7 @@ async fn amm_add_liquidity_works() {
 #[tokio::test]
 async fn amm_swap_executes() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -389,7 +503,7 @@ async fn amm_swap_executes() {
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let amount_out: u64 = amm_svc(&bob)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1, 1))
@@ -412,7 +526,7 @@ async fn amm_swap_executes() {
 #[tokio::test]
 async fn swap_fee_accrues_to_pool_reserves() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -426,7 +540,7 @@ async fn swap_fee_accrues_to_pool_reserves() {
         .unwrap();
 
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
     let amount_out: u64 = amm_svc(&bob)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 1000, 1))
         .await
@@ -444,8 +558,8 @@ async fn swap_fee_accrues_to_pool_reserves() {
 
 #[tokio::test]
 async fn amm_remove_liquidity_works() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -477,8 +591,8 @@ async fn amm_remove_liquidity_works() {
 
 #[tokio::test]
 async fn list_pools_after_creation() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let _: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -497,7 +611,7 @@ async fn list_pools_after_creation() {
 #[tokio::test]
 async fn swap_insufficient_balance_fails() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -513,7 +627,7 @@ async fn swap_insufficient_balance_fails() {
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let result: Result<Result<u64, ContractError>, GtestError> = amm_svc(&bob)
         .pending_call::<amm_io::Swap>((pool_id, Asset::BTC, 999_999, 1))
@@ -526,8 +640,8 @@ async fn swap_insufficient_balance_fails() {
 
 #[tokio::test]
 async fn swap_slippage_protection() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -554,7 +668,7 @@ async fn swap_slippage_protection() {
 async fn full_dex_scenario() {
     let (env, program) = deploy().await;
     let pid = program.id();
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     // ALICE: sell 1 BTC at $50 on orderbook
     let _: u64 = orderbook_svc(&program)
@@ -577,7 +691,7 @@ async fn full_dex_scenario() {
 
     // BOB: market buy 1 BTC from orderbook, then swap 1 BTC for ETH via AMM
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
 
     let _: String = orderbook_svc(&bob)
         .pending_call::<ob_io::MarketBuy>((Asset::BTC, 1))
@@ -614,7 +728,7 @@ async fn full_dex_scenario() {
 #[tokio::test]
 async fn market_buy_insufficient_usd_does_not_mutate_state() {
     let (env, program) = deploy().await;
-    join_alice(&program).await;
+    join_alice(&env, &program).await;
 
     // Alice offers 1 BTC at a price Bob cannot cover (Bob starts with 100_000 USD).
     let _: u64 = orderbook_svc(&program)
@@ -629,7 +743,7 @@ async fn market_buy_insufficient_usd_does_not_mutate_state() {
 
     let pid = program.id();
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), pid);
-    join_bob(&bob).await;
+    join_bob(&env, &bob).await;
     let bob_before: (u64, u64, u64, u64) = orderbook_svc(&bob)
         .pending_call::<ob_io::GetPortfolio>(())
         .await
@@ -666,8 +780,8 @@ async fn market_buy_insufficient_usd_does_not_mutate_state() {
 /// and remove only saw the first, stranding the rest.
 #[tokio::test]
 async fn double_add_liquidity_then_remove_all() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let pool_id: u64 = amm_svc(&program)
         .pending_call::<amm_io::CreatePool>((Asset::BTC, Asset::ETH))
@@ -703,10 +817,128 @@ async fn double_add_liquidity_then_remove_all() {
     assert_eq!(port.2, 1_000_000, "ETH not fully restored");
 }
 
+// ── Vault (real-token) integration tests ──
+
+/// End-to-end: after the faucet→deposit onboarding, the DEX vault actually holds
+/// the caller's tokens, and `withdraw` sends real VFT back and debits the internal
+/// balance. Proves the internal balance is fully token-backed, not simulated.
+#[tokio::test]
+async fn deposit_then_withdraw_round_trip() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    // Alice is funded to the canonical portfolio via the real flow in join_alice.
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port, (100_000, 100_000, 1_000_000, 1_000_000_000));
+
+    // The wBTC token program holds the deposited BTC in the DEX's account, and
+    // Alice's own token balance is zero (she deposited all of it).
+    let (_, t_btc, _, _): (ActorId, ActorId, ActorId, ActorId) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    let btc = Actor::<ThebookTokenClientProgram, GtestEnv>::new(
+        env.clone().with_actor_id(ALICE.into()),
+        t_btc,
+    );
+    let dex_held: U256 = btc
+        .vft()
+        .pending_call::<tok_vft_io::BalanceOf>((program.id(),))
+        .await
+        .unwrap();
+    assert_eq!(dex_held, U256::from(INITIAL_BTC), "vault does not hold BTC");
+    let alice_wallet: U256 = btc
+        .vft()
+        .pending_call::<tok_vft_io::BalanceOf>((ALICE.into(),))
+        .await
+        .unwrap();
+    assert_eq!(
+        alice_wallet,
+        U256::zero(),
+        "Alice should have deposited all"
+    );
+
+    // Withdraw 40_000 BTC back to Alice's wallet.
+    let out: u64 = orderbook_svc(&program)
+        .pending_call::<ob_io::Withdraw>((TokenKind::Btc, 40_000u64))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out, 40_000);
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.1, 60_000, "internal BTC not debited on withdraw");
+    let alice_wallet: U256 = btc
+        .vft()
+        .pending_call::<tok_vft_io::BalanceOf>((ALICE.into(),))
+        .await
+        .unwrap();
+    assert_eq!(
+        alice_wallet,
+        U256::from(40_000u64),
+        "withdrawn tokens not received"
+    );
+}
+
+/// Withdrawing more than the internal balance must fail cleanly and leave both the
+/// internal balance and the on-chain vault untouched.
+#[tokio::test]
+async fn withdraw_over_balance_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = orderbook_svc(&program)
+        .pending_call::<ob_io::Withdraw>((TokenKind::Btc, 100_001u64))
+        .await;
+    match result {
+        Ok(Err(ContractError::InsufficientAsset)) => {}
+        other => panic!("expected InsufficientAsset, got {other:?}"),
+    }
+
+    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetPortfolio>(())
+        .await
+        .unwrap();
+    assert_eq!(port.1, 100_000, "balance changed on failed withdraw");
+}
+
+/// Deposit/withdraw are gated on the token being registered. A fresh DEX with no
+/// token wired up must reject deposits rather than credit unbacked balances.
+#[tokio::test]
+async fn deposit_unregistered_token_fails() {
+    let system = System::new();
+    system.mint_to(ALICE, 100_000_000_000_000_000);
+    let env = GtestEnv::new(system, ALICE.into());
+    let code_id = env.system().submit_code(WASM_BINARY);
+    let program = env
+        .deploy::<ThebookClientProgram>(code_id, b"bare".to_vec())
+        .new()
+        .await
+        .unwrap();
+    let _: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
+        .await
+        .unwrap();
+
+    let result: Result<Result<u64, ContractError>, GtestError> = orderbook_svc(&program)
+        .pending_call::<ob_io::Deposit>((TokenKind::Btc, 100u64))
+        .await;
+    match result {
+        Ok(Err(ContractError::BadParams)) => {}
+        other => panic!("expected BadParams, got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn call_agent_service_to_nonexistent_fails() {
-    let (_, program) = deploy().await;
-    join_alice(&program).await;
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
 
     let target = ActorId::from([0u8; 32]);
     let result: Result<Result<Vec<u8>, ContractError>, GtestError> = orderbook_svc(&program)

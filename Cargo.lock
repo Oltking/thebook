@@ -7225,6 +7225,8 @@ dependencies = [
  "sails-rs",
  "thebook-app",
  "thebook-client",
+ "thebook-token",
+ "thebook-token-client",
  "tokio",
 ]
 
@@ -7254,6 +7256,14 @@ dependencies = [
  "awesome-sails-storage",
  "awesome-sails-utils",
  "sails-rs",
+]
+
+[[package]]
+name = "thebook-token-client"
+version = "0.1.0"
+dependencies = [
+ "sails-rs",
+ "thebook-token",
 ]
 
 [[package]]

@@ -18,6 +18,8 @@ thebook-app.workspace = true
 sails-rs = { workspace = true, features = ["gtest", "gclient"] }
 thebook-app.workspace = true
 thebook-client.workspace = true
+thebook-token.workspace = true
+thebook-token-client.workspace = true
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 [build-dependencies]
@@ -26,7 +28,7 @@ thebook-app.workspace = true
 
 [workspace]
 resolver = "3"
-members = ["app", "client", "token"]
+members = ["app", "client", "token", "token-client"]
 
 # Launch-grade safety: trap on arithmetic overflow instead of silently wrapping.
 # A trapped contract message is reverted by the runtime (state rolled back), so an
@@ -49,6 +51,8 @@ sails-rs = "0.10.4"
 tokio = "1.48.0"
 thebook-app = { version = "0.1.0", path = "app" }
 thebook-client = { version = "0.1.0", path = "client" }
+thebook-token = { version = "0.1.0", path = "token" }
+thebook-token-client = { version = "0.1.0", path = "token-client" }
 # Official Gear VFT building blocks. The 0.2.x line targets sails-rs ^0.10 (0.3.x
 # requires sails-rs 1.x), so it matches our pinned 0.10.4 with no migration.
 awesome-sails = { version = "0.2.0", default-features = false }

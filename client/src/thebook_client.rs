@@ -67,9 +67,10 @@ pub mod orderbook {
             kind: TokenKind,
             amount: u64,
         ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env>;
-        /// Create the caller's agent with a chosen name + strategy, funding it with
-        /// starting balances. Idempotent: re-joining returns the existing balances and
-        /// keeps the original identity (name is immutable in this phase).
+        /// Register the caller's agent identity (name + strategy). Creates the account
+        /// with ZERO balances — real value comes from claiming test tokens at the faucet
+        /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
+        /// returns the existing balances and keeps the original identity.
         fn join(
             &mut self,
             name: String,

@@ -69,10 +69,6 @@ fn debit_kind(ag: &mut Agent, kind: TokenKind, amount: u64) {
     }
 }
 
-/// Gas reserved for the DEX to finish after a VFT reply returns; the rest is
-/// forwarded to the token program for the transfer call.
-const VFT_GAS_RESERVE: u64 = 10_000_000_000;
-
 /// Build the SCALE route payload for a `Vft` service method call.
 fn vft_route(method: &str, args: Vec<u8>) -> Vec<u8> {
     let mut payload = "Vft".encode();
@@ -93,9 +89,10 @@ impl<'a> OrderbookService<'a> {
 
 #[sails_rs::service(events = OrderbookEvent)]
 impl<'a> OrderbookService<'a> {
-    /// Create the caller's agent with a chosen name + strategy, funding it with
-    /// starting balances. Idempotent: re-joining returns the existing balances and
-    /// keeps the original identity (name is immutable in this phase).
+    /// Register the caller's agent identity (name + strategy). Creates the account
+    /// with ZERO balances — real value comes from claiming test tokens at the faucet
+    /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
+    /// returns the existing balances and keeps the original identity.
     #[export]
     pub fn join(&mut self, name: String, strategy: AgentStrategy) -> (u64, u64, u64, u64) {
         let caller = msg::source();
@@ -118,13 +115,13 @@ impl<'a> OrderbookService<'a> {
                 id: caller,
                 name,
                 strategy,
-                usd: INITIAL_USD,
-                btc: INITIAL_BTC,
-                eth: INITIAL_ETH,
-                vara: INITIAL_VARA,
+                usd: 0,
+                btc: 0,
+                eth: 0,
+                vara: 0,
             },
         );
-        (INITIAL_USD, INITIAL_BTC, INITIAL_ETH, INITIAL_VARA)
+        (0, 0, 0, 0)
     }
 
     /// Caller's agent identity, or None if they haven't joined. Used by the UI to
@@ -727,7 +724,8 @@ impl<'a> OrderbookService<'a> {
         let dex = exec::program_id();
         let value = U256::from(amount);
         let payload = vft_route("TransferFrom", (caller, dex, value).encode());
-        let gas = exec::gas_available().saturating_sub(VFT_GAS_RESERVE);
+        // Forward half of remaining gas; the rest runs our post-await continuation.
+        let gas = exec::gas_available() / 2;
         let ok = msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
             token,
             RawPayload(payload),
@@ -771,8 +769,10 @@ impl<'a> OrderbookService<'a> {
             token
         };
         let value = U256::from(amount);
+        // VFT `transfer(to, value)` from the DEX vault back to the caller.
         let payload = vft_route("Transfer", (caller, value).encode());
-        let gas = exec::gas_available().saturating_sub(VFT_GAS_RESERVE);
+        // Forward half of remaining gas; the rest runs our post-await continuation.
+        let gas = exec::gas_available() / 2;
         let result = msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
             token,
             RawPayload(payload),

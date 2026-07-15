@@ -11,6 +11,16 @@
 //! - `vft_metadata` — name / symbol / decimals
 //! - `faucet`       — public one-per-account `claim` of a deploy-time amount
 
+/// Compiled WASM of this token program, for host-side tests/deploy tooling.
+/// `build.rs` (`build_wasm`) emits `wasm_binary.rs` into `OUT_DIR`.
+#[cfg(not(target_arch = "wasm32"))]
+pub use code::WASM_BINARY_OPT as WASM_BINARY;
+
+#[cfg(not(target_arch = "wasm32"))]
+mod code {
+    include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
+}
+
 use awesome_sails::{
     access_control::{AccessControl, RolesStorage},
     vft,
@@ -113,10 +123,19 @@ impl Program {
         let deployer = Syscall::message_source();
         access_control_roles.grant_initial_admin(deployer);
 
+        // The sharded balance/allowance maps are configured with shard limits but
+        // start with zero allocated capacity — mint/approve would fail with a
+        // capacity overflow until at least one shard is materialised. Allocate the
+        // first shard of each so the faucet and transfers work from block one.
+        let mut allowances = Allowances::default();
+        allowances.allocate_next_shard();
+        let mut balances = Balances::default();
+        balances.allocate_next_shard();
+
         Self {
             access_control_roles: RefCell::new(access_control_roles),
-            allowances: Default::default(),
-            balances: Default::default(),
+            allowances: RefCell::new(allowances),
+            balances: RefCell::new(balances),
             metadata: Metadata::new(name, symbol, decimals),
             pause: Pause::default(),
             faucet_amount,
