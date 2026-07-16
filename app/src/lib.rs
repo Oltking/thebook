@@ -10,11 +10,13 @@ use sails_rs::prelude::*;
 
 pub mod amm;
 pub mod orderbook;
+pub mod perps;
 pub mod state;
 pub mod types;
 
 pub use amm::AmmService;
 pub use orderbook::OrderbookService;
+pub use perps::PerpsService;
 pub use state::DexState;
 
 pub struct Program {
@@ -42,5 +44,9 @@ impl Program {
 
     pub fn amm(&self) -> AmmService<'_> {
         AmmService::new(&self.state)
+    }
+
+    pub fn perps(&self) -> PerpsService<'_> {
+        PerpsService::new(&self.state)
     }
 }

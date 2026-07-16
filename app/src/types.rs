@@ -31,7 +31,7 @@ impl<T: Decode> Decode for SailsReply<T> {
     }
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum Asset {
@@ -159,6 +159,55 @@ pub struct Agent {
     pub vara: u64,
 }
 
+/// An isolated-margin perpetual position. `size` is in asset units (`ASSET_UNIT`
+/// per asset); `entry`/`margin` are in USD cents. PnL is settled at the on-chain
+/// mark price against the house reserve, so no balance is minted.
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Position {
+    pub owner: ActorId,
+    pub asset: Asset,
+    pub is_long: bool,
+    pub size: u64,
+    pub entry: u64,
+    pub margin: u64,
+    pub leverage: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct PerpOpenedEvent {
+    pub owner: ActorId,
+    pub asset: Asset,
+    pub is_long: bool,
+    pub size: u64,
+    pub entry: u64,
+    pub margin: u64,
+    pub leverage: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct PerpClosedEvent {
+    pub owner: ActorId,
+    pub asset: Asset,
+    pub exit: u64,
+    pub payout: u64,
+    pub pnl: i64,
+    pub liquidated: bool,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MarkPriceEvent {
+    pub asset: Asset,
+    pub price: u64,
+}
+
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -192,6 +241,11 @@ pub enum ContractError {
     ZeroAmount,
     AgentCallFailed,
     BookFull,
+    NoMarkPrice,
+    LeverageTooHigh,
+    PositionNotFound,
+    WrongDirection,
+    NotLiquidatable,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -283,6 +337,20 @@ pub const MAX_NAME_LEN: usize = 24;
 /// Cap on retained trade history. Older trades are dropped so on-chain state can't
 /// grow without bound; queries only ever read the most recent trades anyway.
 pub const MAX_TRADES: usize = 1_000;
+
+// ── Perpetual futures (GMX-style: keeper mark price + house-reserve settlement) ──
+/// Asset quantity scale: `1 asset = ASSET_UNIT internal size units` (matches the
+/// spot orderbook qty scale). Mark prices and margin are in **USD cents**, the same
+/// integer scale as the internal `usd` balance, so PnL math stays exact.
+pub const ASSET_UNIT: u64 = 100_000;
+/// Highest leverage a position may open at.
+pub const MAX_LEVERAGE: u32 = 20;
+/// Maintenance margin as bps of current notional. Below this equity → liquidatable.
+pub const MAINTENANCE_BPS: u64 = 50;
+/// Liquidator reward, in bps of the liquidated position's margin.
+pub const LIQUIDATION_FEE_BPS: u64 = 100;
+/// Cap on simultaneously-open perp positions across everyone (state-bloat guard).
+pub const MAX_PERP_POSITIONS: usize = 500;
 /// Cap on simultaneously-resting orders across the whole book. New limit orders are
 /// rejected past this so a spammer can't bloat state indefinitely.
 pub const MAX_OPEN_ORDERS: usize = 500;

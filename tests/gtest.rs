@@ -6,6 +6,7 @@ use sails_rs::gtest::*;
 use thebook::WASM_BINARY;
 use thebook_client::amm::io as amm_io;
 use thebook_client::orderbook::io as ob_io;
+use thebook_client::perps::io as perp_io;
 use thebook_client::*;
 use thebook_token::WASM_BINARY as TOKEN_WASM;
 use thebook_token_client::faucet::io as tok_faucet_io;
@@ -993,6 +994,217 @@ async fn set_token_non_admin_fails() {
     match result {
         Ok(Err(ContractError::NotAdmin)) => {}
         other => panic!("expected NotAdmin, got {other:?}"),
+    }
+}
+
+// ── Perpetual futures tests ──
+
+const BTC_MARK: u64 = 6_420_800; // $64,208.00 in USD cents
+
+fn perps_svc(
+    program: &Actor<ThebookClientProgram, GtestEnv>,
+) -> Service<perps::PerpsImpl, GtestEnv> {
+    program.perps()
+}
+
+/// Fund Alice, publish a BTC mark, and seed the house reserve. Returns nothing;
+/// Alice is admin (deployer) so she can set marks and fund the reserve.
+async fn setup_perps(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
+    join_alice(env, program).await;
+    let _: () = perps_svc(program)
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, BTC_MARK))
+        .await
+        .unwrap()
+        .unwrap();
+    // Seed reserve with $500 (50_000 cents) so winners can be paid.
+    let _: u64 = perps_svc(program)
+        .pending_call::<perp_io::FundReserve>((50_000u64,))
+        .await
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn perp_open_close_flat_returns_margin() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    let _: u64 = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, true, 10_000u64, 2u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Close at the same mark: PnL is 0, payout equals the margin, reserve untouched.
+    let (payout, pnl): (u64, i64) = perps_svc(&program)
+        .pending_call::<perp_io::ClosePosition>((Asset::BTC,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pnl, 0);
+    assert_eq!(payout, 10_000);
+    let reserve: u64 = perps_svc(&program)
+        .pending_call::<perp_io::GetReserve>(())
+        .await
+        .unwrap();
+    assert_eq!(reserve, 50_000, "flat close must not touch reserve");
+}
+
+#[tokio::test]
+async fn perp_long_profit_paid_from_reserve() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    let _: u64 = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, true, 10_000u64, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Mark rises ~10% → long is in profit.
+    let _: () = perps_svc(&program)
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, 7_062_880u64))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let (payout, pnl): (u64, i64) = perps_svc(&program)
+        .pending_call::<perp_io::ClosePosition>((Asset::BTC,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(pnl > 0, "long should profit on a price rise");
+    assert!(payout > 10_000, "payout should exceed margin");
+    let reserve: u64 = perps_svc(&program)
+        .pending_call::<perp_io::GetReserve>(())
+        .await
+        .unwrap();
+    assert!(reserve < 50_000, "profit must be paid from the reserve");
+    assert_eq!(reserve as i64, 50_000 - pnl, "reserve delta must equal PnL");
+}
+
+#[tokio::test]
+async fn perp_short_loss_grows_reserve() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    let _: u64 = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, false, 10_000u64, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Mark rises → short loses.
+    let _: () = perps_svc(&program)
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, 6_741_840u64))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let (payout, pnl): (u64, i64) = perps_svc(&program)
+        .pending_call::<perp_io::ClosePosition>((Asset::BTC,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(pnl < 0, "short should lose on a price rise");
+    assert!(payout < 10_000, "payout should be less than margin");
+    let reserve: u64 = perps_svc(&program)
+        .pending_call::<perp_io::GetReserve>(())
+        .await
+        .unwrap();
+    assert_eq!(
+        reserve as i64,
+        50_000 + (-pnl),
+        "reserve should absorb the loss"
+    );
+}
+
+#[tokio::test]
+async fn perp_liquidation_flow() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    // 20x long: a modest adverse move wipes the margin.
+    let _: u64 = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, true, 10_000u64, 20u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Healthy position is not liquidatable.
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    let early: Result<Result<(), ContractError>, GtestError> = bob
+        .perps()
+        .pending_call::<perp_io::Liquidate>((ALICE.into(), Asset::BTC))
+        .await;
+    match early {
+        Ok(Err(ContractError::NotLiquidatable)) => {}
+        other => panic!("expected NotLiquidatable, got {other:?}"),
+    }
+
+    // Mark drops ~6.5% → equity falls below maintenance.
+    let _: () = perps_svc(&program)
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, 6_000_000u64))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let _: () = bob
+        .perps()
+        .pending_call::<perp_io::Liquidate>((ALICE.into(), Asset::BTC))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Position is gone.
+    let positions: Vec<(Asset, bool, u64, u64, u64, u32, i64)> = perps_svc(&program)
+        .pending_call::<perp_io::GetPositions>((ALICE.into(),))
+        .await
+        .unwrap();
+    assert!(positions.is_empty(), "liquidated position must be removed");
+}
+
+#[tokio::test]
+async fn perp_leverage_cap_enforced() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, true, 10_000u64, 50u32))
+        .await;
+    match result {
+        Ok(Err(ContractError::LeverageTooHigh)) => {}
+        other => panic!("expected LeverageTooHigh, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn perp_set_mark_price_non_admin_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    let result: Result<Result<(), ContractError>, GtestError> = bob
+        .perps()
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, BTC_MARK))
+        .await;
+    match result {
+        Ok(Err(ContractError::NotAdmin)) => {}
+        other => panic!("expected NotAdmin, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn perp_open_without_mark_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::ETH, true, 10_000u64, 2u32))
+        .await;
+    match result {
+        Ok(Err(ContractError::NoMarkPrice)) => {}
+        other => panic!("expected NoMarkPrice, got {other:?}"),
     }
 }
 

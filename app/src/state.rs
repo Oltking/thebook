@@ -26,6 +26,14 @@ pub struct DexState {
     pub token_btc: ActorId,
     pub token_eth: ActorId,
     pub token_vara: ActorId,
+    // ── Perpetual futures ──
+    /// On-chain mark price per asset, in USD cents, pushed by the keeper.
+    pub mark_prices: BTreeMap<Asset, u64>,
+    /// Open isolated-margin positions.
+    pub positions: Vec<Position>,
+    /// House liquidity reserve (USD cents) that pays trader profits and absorbs
+    /// losses. Seeded by the admin from their own USD; never minted.
+    pub reserve_usd: u64,
 }
 
 impl DexState {

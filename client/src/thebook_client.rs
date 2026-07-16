@@ -7,6 +7,7 @@ pub trait ThebookClient {
     type Env: sails_rs::client::GearEnv;
     fn orderbook(&self) -> sails_rs::client::Service<orderbook::OrderbookImpl, Self::Env>;
     fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env>;
+    fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env>;
 }
 impl<E: sails_rs::client::GearEnv> ThebookClient
     for sails_rs::client::Actor<ThebookClientProgram, E>
@@ -17,6 +18,9 @@ impl<E: sails_rs::client::GearEnv> ThebookClient
     }
     fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env> {
         self.service(stringify!(Amm))
+    }
+    fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env> {
+        self.service(stringify!(Perps))
     }
 }
 pub trait ThebookClientCtors {
@@ -439,6 +443,181 @@ pub mod amm {
         }
     }
 }
+
+pub mod perps {
+    use super::*;
+    pub trait Perps {
+        type Env: sails_rs::client::GearEnv;
+        /// Close your whole position at the current mark price, settling PnL against the
+        /// house reserve. Returns `(payout_cents, pnl_cents_signed)`.
+        fn close_position(
+            &mut self,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::ClosePosition, Self::Env>;
+        /// Admin: move USD (cents) from your own balance into the house reserve that
+        /// pays trader profits. Never mints — total custodied USD is unchanged.
+        fn fund_reserve(
+            &mut self,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::FundReserve, Self::Env>;
+        /// Permissionless liquidation: if a position's equity has fallen to the
+        /// maintenance margin, anyone may close it at the mark. The liquidator earns a
+        /// small fee from the residual equity; the rest flows to the reserve.
+        fn liquidate(
+            &mut self,
+            owner: ActorId,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env>;
+        /// Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
+        /// cents from your balance; position size = margin * leverage at the mark price.
+        fn open_position(
+            &mut self,
+            asset: Asset,
+            is_long: bool,
+            margin: u64,
+            leverage: u32,
+        ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env>;
+        /// Keeper-only: publish the mark price (USD cents) for an asset. This is the
+        /// price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
+        fn set_mark_price(
+            &mut self,
+            asset: Asset,
+            price: u64,
+        ) -> sails_rs::client::PendingCall<io::SetMarkPrice, Self::Env>;
+        /// Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
+        /// USD cents. A zero leaves that asset's mark unchanged.
+        fn set_mark_prices(
+            &mut self,
+            btc: u64,
+            eth: u64,
+            vara: u64,
+        ) -> sails_rs::client::PendingCall<io::SetMarkPrices, Self::Env>;
+        /// Liquidation price (USD cents) for a position, i.e. the mark at which equity
+        /// hits maintenance margin. 0 if there is no such position.
+        fn get_liq_price(
+            &self,
+            owner: ActorId,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env>;
+        fn get_mark_price(
+            &self,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::GetMarkPrice, Self::Env>;
+        fn get_mark_prices(&self) -> sails_rs::client::PendingCall<io::GetMarkPrices, Self::Env>;
+        /// A trader's open positions as
+        /// `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
+        fn get_positions(
+            &self,
+            owner: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env>;
+        fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env>;
+    }
+    pub struct PerpsImpl;
+    impl<E: sails_rs::client::GearEnv> Perps for sails_rs::client::Service<PerpsImpl, E> {
+        type Env = E;
+        fn close_position(
+            &mut self,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::ClosePosition, Self::Env> {
+            self.pending_call((asset,))
+        }
+        fn fund_reserve(
+            &mut self,
+            amount: u64,
+        ) -> sails_rs::client::PendingCall<io::FundReserve, Self::Env> {
+            self.pending_call((amount,))
+        }
+        fn liquidate(
+            &mut self,
+            owner: ActorId,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env> {
+            self.pending_call((owner, asset))
+        }
+        fn open_position(
+            &mut self,
+            asset: Asset,
+            is_long: bool,
+            margin: u64,
+            leverage: u32,
+        ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env> {
+            self.pending_call((asset, is_long, margin, leverage))
+        }
+        fn set_mark_price(
+            &mut self,
+            asset: Asset,
+            price: u64,
+        ) -> sails_rs::client::PendingCall<io::SetMarkPrice, Self::Env> {
+            self.pending_call((asset, price))
+        }
+        fn set_mark_prices(
+            &mut self,
+            btc: u64,
+            eth: u64,
+            vara: u64,
+        ) -> sails_rs::client::PendingCall<io::SetMarkPrices, Self::Env> {
+            self.pending_call((btc, eth, vara))
+        }
+        fn get_liq_price(
+            &self,
+            owner: ActorId,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env> {
+            self.pending_call((owner, asset))
+        }
+        fn get_mark_price(
+            &self,
+            asset: Asset,
+        ) -> sails_rs::client::PendingCall<io::GetMarkPrice, Self::Env> {
+            self.pending_call((asset,))
+        }
+        fn get_mark_prices(&self) -> sails_rs::client::PendingCall<io::GetMarkPrices, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_positions(
+            &self,
+            owner: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env> {
+            self.pending_call((owner,))
+        }
+        fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env> {
+            self.pending_call(())
+        }
+    }
+
+    pub mod io {
+        use super::*;
+        sails_rs::io_struct_impl!(ClosePosition (asset: super::Asset) -> Result<(u64,i64,), super::ContractError>);
+        sails_rs::io_struct_impl!(FundReserve (amount: u64) -> Result<u64, super::ContractError>);
+        sails_rs::io_struct_impl!(Liquidate (owner: ActorId, asset: super::Asset) -> Result<(), super::ContractError>);
+        sails_rs::io_struct_impl!(OpenPosition (asset: super::Asset, is_long: bool, margin: u64, leverage: u32) -> Result<u64, super::ContractError>);
+        sails_rs::io_struct_impl!(SetMarkPrice (asset: super::Asset, price: u64) -> Result<(), super::ContractError>);
+        sails_rs::io_struct_impl!(SetMarkPrices (btc: u64, eth: u64, vara: u64) -> Result<(), super::ContractError>);
+        sails_rs::io_struct_impl!(GetLiqPrice (owner: ActorId, asset: super::Asset) -> u64);
+        sails_rs::io_struct_impl!(GetMarkPrice (asset: super::Asset) -> u64);
+        sails_rs::io_struct_impl!(GetMarkPrices () -> (u64,u64,u64,));
+        sails_rs::io_struct_impl!(GetPositions (owner: ActorId) -> Vec<(super::Asset,bool,u64,u64,u64,u32,i64,)>);
+        sails_rs::io_struct_impl!(GetReserve () -> u64);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum PerpsEvents {
+            MarkPrice(MarkPriceEvent),
+            Opened(PerpOpenedEvent),
+            Closed(PerpClosedEvent),
+        }
+        impl sails_rs::client::Event for PerpsEvents {
+            const EVENT_NAMES: &'static [Route] = &["MarkPrice", "Opened", "Closed"];
+        }
+        impl sails_rs::client::ServiceWithEvents for PerpsImpl {
+            type Event = PerpsEvents;
+        }
+    }
+}
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -461,6 +640,11 @@ pub enum ContractError {
     ZeroAmount,
     AgentCallFailed,
     BookFull,
+    NoMarkPrice,
+    LeverageTooHigh,
+    PositionNotFound,
+    WrongDirection,
+    NotLiquidatable,
 }
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.
 /// `Usd` is a separate kind because the orderbook denominates in USD but the
@@ -609,4 +793,34 @@ pub struct SwapExecutedEvent {
     pub asset_out: Asset,
     pub amount_out: u64,
     pub fee: u64,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MarkPriceEvent {
+    pub asset: Asset,
+    pub price: u64,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct PerpOpenedEvent {
+    pub owner: ActorId,
+    pub asset: Asset,
+    pub is_long: bool,
+    pub size: u64,
+    pub entry: u64,
+    pub margin: u64,
+    pub leverage: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct PerpClosedEvent {
+    pub owner: ActorId,
+    pub asset: Asset,
+    pub exit: u64,
+    pub payout: u64,
+    pub pnl: i64,
+    pub liquidated: bool,
 }

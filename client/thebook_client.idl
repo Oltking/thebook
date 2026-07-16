@@ -17,6 +17,11 @@ type ContractError = enum {
   ZeroAmount,
   AgentCallFailed,
   BookFull,
+  NoMarkPrice,
+  LeverageTooHigh,
+  PositionNotFound,
+  WrongDirection,
+  NotLiquidatable,
 };
 
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.
@@ -137,6 +142,30 @@ type SwapExecutedEvent = struct {
   fee: u64,
 };
 
+type MarkPriceEvent = struct {
+  asset: Asset,
+  price: u64,
+};
+
+type PerpOpenedEvent = struct {
+  owner: actor_id,
+  asset: Asset,
+  is_long: bool,
+  size: u64,
+  entry: u64,
+  margin: u64,
+  leverage: u32,
+};
+
+type PerpClosedEvent = struct {
+  owner: actor_id,
+  asset: Asset,
+  exit: u64,
+  payout: u64,
+  pnl: i64,
+  liquidated: bool,
+};
+
 constructor {
   New : ();
 };
@@ -202,6 +231,43 @@ service Amm {
     LiquidityAdded: LiquidityAddedEvent;
     LiquidityRemoved: LiquidityRemovedEvent;
     SwapExecuted: SwapExecutedEvent;
+  }
+};
+
+service Perps {
+  /// Close your whole position at the current mark price, settling PnL against the
+  /// house reserve. Returns `(payout_cents, pnl_cents_signed)`.
+  ClosePosition : (asset: Asset) -> result (struct { u64, i64 }, ContractError);
+  /// Admin: move USD (cents) from your own balance into the house reserve that
+  /// pays trader profits. Never mints — total custodied USD is unchanged.
+  FundReserve : (amount: u64) -> result (u64, ContractError);
+  /// Permissionless liquidation: if a position's equity has fallen to the
+  /// maintenance margin, anyone may close it at the mark. The liquidator earns a
+  /// small fee from the residual equity; the rest flows to the reserve.
+  Liquidate : (owner: actor_id, asset: Asset) -> result (null, ContractError);
+  /// Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
+  /// cents from your balance; position size = margin * leverage at the mark price.
+  OpenPosition : (asset: Asset, is_long: bool, margin: u64, leverage: u32) -> result (u64, ContractError);
+  /// Keeper-only: publish the mark price (USD cents) for an asset. This is the
+  /// price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
+  SetMarkPrice : (asset: Asset, price: u64) -> result (null, ContractError);
+  /// Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
+  /// USD cents. A zero leaves that asset's mark unchanged.
+  SetMarkPrices : (btc: u64, eth: u64, vara: u64) -> result (null, ContractError);
+  /// Liquidation price (USD cents) for a position, i.e. the mark at which equity
+  /// hits maintenance margin. 0 if there is no such position.
+  query GetLiqPrice : (owner: actor_id, asset: Asset) -> u64;
+  query GetMarkPrice : (asset: Asset) -> u64;
+  query GetMarkPrices : () -> struct { u64, u64, u64 };
+  /// A trader's open positions as
+  /// `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
+  query GetPositions : (owner: actor_id) -> vec struct { Asset, bool, u64, u64, u64, u32, i64 };
+  query GetReserve : () -> u64;
+
+  events {
+    MarkPrice: MarkPriceEvent;
+    Opened: PerpOpenedEvent;
+    Closed: PerpClosedEvent;
   }
 };
 
