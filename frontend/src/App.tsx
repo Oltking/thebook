@@ -28,9 +28,7 @@ function App() {
       case 'agent':
         return <AgentView />;
       case 'trade':
-        return <TradeView mode="spot" />;
-      case 'futures':
-        return <TradeView mode="futures" />;
+        return <TradeView />;
       case 'swap':
         return <SwapView />;
       case 'pools':
@@ -40,7 +38,7 @@ function App() {
       case 'portfolio':
         return <PortfolioView />;
       default:
-        return <TradeView mode="spot" />;
+        return <TradeView />;
     }
   };
 
