@@ -1,12 +1,26 @@
 use crate::state::DexState;
 use crate::types::*;
 use sails_rs::cell::RefCell;
-use sails_rs::gstd::msg;
+use sails_rs::gstd::{exec, msg};
 use sails_rs::prelude::*;
 use sails_rs::scale_codec::{Decode, Encode};
 
 extern crate alloc;
 use alloc::vec::Vec;
+
+/// Return the current mark for `asset`, or an error if it's unset or stale.
+/// A stale mark (keeper stalled) must never settle PnL or liquidations.
+fn fresh_mark(st: &DexState, asset: Asset) -> Result<u64, ContractError> {
+    let price = st.mark_prices.get(&asset).copied().unwrap_or(0);
+    if price == 0 {
+        return Err(ContractError::NoMarkPrice);
+    }
+    let updated = st.mark_updated.get(&asset).copied().unwrap_or(0);
+    if exec::block_height().saturating_sub(updated) > MAX_MARK_AGE_BLOCKS {
+        return Err(ContractError::StaleMark);
+    }
+    Ok(price)
+}
 
 #[sails_rs::event]
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -52,7 +66,9 @@ impl<'a> PerpsService<'a> {
         if msg::source() != st.admin {
             return Err(ContractError::NotAdmin);
         }
+        let block = exec::block_height();
         st.mark_prices.insert(asset, price);
+        st.mark_updated.insert(asset, block);
         self.emit_event(PerpsEvent::MarkPrice(MarkPriceEvent { asset, price }))
             .expect("emit MarkPrice failed");
         Ok(())
@@ -66,9 +82,11 @@ impl<'a> PerpsService<'a> {
         if msg::source() != st.admin {
             return Err(ContractError::NotAdmin);
         }
+        let block = exec::block_height();
         for (asset, price) in [(Asset::BTC, btc), (Asset::ETH, eth), (Asset::VARA, vara)] {
             if price > 0 {
                 st.mark_prices.insert(asset, price);
+                st.mark_updated.insert(asset, block);
                 self.emit_event(PerpsEvent::MarkPrice(MarkPriceEvent { asset, price }))
                     .expect("emit MarkPrice failed");
             }
@@ -138,10 +156,7 @@ impl<'a> PerpsService<'a> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
 
-        let mark = st.mark_prices.get(&asset).copied().unwrap_or(0);
-        if mark == 0 {
-            return Err(ContractError::NoMarkPrice);
-        }
+        let mark = fresh_mark(&st, asset)?;
 
         let ag = st.agents.get(&caller).ok_or(ContractError::JoinFirst)?;
         if ag.usd < margin {
@@ -213,10 +228,7 @@ impl<'a> PerpsService<'a> {
     pub fn close_position(&mut self, asset: Asset) -> Result<(u64, i64), ContractError> {
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
-        let mark = st.mark_prices.get(&asset).copied().unwrap_or(0);
-        if mark == 0 {
-            return Err(ContractError::NoMarkPrice);
-        }
+        let mark = fresh_mark(&st, asset)?;
         let i = st
             .positions
             .iter()
@@ -253,10 +265,7 @@ impl<'a> PerpsService<'a> {
     pub fn liquidate(&mut self, owner: ActorId, asset: Asset) -> Result<(), ContractError> {
         let liquidator = msg::source();
         let mut st = self.state.borrow_mut();
-        let mark = st.mark_prices.get(&asset).copied().unwrap_or(0);
-        if mark == 0 {
-            return Err(ContractError::NoMarkPrice);
-        }
+        let mark = fresh_mark(&st, asset)?;
         let i = st
             .positions
             .iter()

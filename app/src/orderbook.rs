@@ -664,34 +664,6 @@ impl<'a> OrderbookService<'a> {
         }
     }
 
-    #[export]
-    pub fn challenge(&mut self, opponent: ActorId, amount: u64) -> Result<u32, ContractError> {
-        let caller = msg::source();
-        let st = self.state.borrow();
-        let ag = st
-            .agents
-            .get(&caller)
-            .cloned()
-            .ok_or(ContractError::JoinFirst)?;
-        if ag.usd < amount {
-            return Err(ContractError::InsufficientUsd);
-        }
-        if !st.agents.contains_key(&opponent) {
-            return Err(ContractError::JoinFirst);
-        }
-        // Placeholder A2A primitive: validates the challenge is well-formed but does
-        // not stake/escrow funds yet. Deducting here would destroy the caller's USD
-        // with no settlement path, so leave balances untouched until stakes ship.
-        Ok(0)
-    }
-
-    #[export]
-    pub fn signal_collab(&mut self, _partner: ActorId, _note: String) {
-        // Placeholder A2A primitive. It intentionally does not create an agent for
-        // `partner`: doing so would insert a zero-balance record that makes `join`
-        // return early forever, permanently locking that address out of funding.
-    }
-
     /// Admin-only: register the VFT program ID that backs a custodied balance.
     /// Must be set before deposit/withdraw can move real tokens for that kind.
     #[export]

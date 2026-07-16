@@ -22,6 +22,7 @@ type ContractError = enum {
   PositionNotFound,
   WrongDirection,
   NotLiquidatable,
+  StaleMark,
 };
 
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.
@@ -173,7 +174,6 @@ constructor {
 service Orderbook {
   CallAgentService : (target: actor_id, payload: vec u8, gas_limit: u64) -> result (vec u8, ContractError);
   CancelOrder : (oid: u64) -> result (null, ContractError);
-  Challenge : (opponent: actor_id, amount: u64) -> result (u32, ContractError);
   /// Move real VFT tokens from the caller into the DEX vault, crediting their
   /// internal balance. The caller must have `approve`d the DEX on the token
   /// program for at least `amount` first. Credits only after the on-chain
@@ -190,7 +190,6 @@ service Orderbook {
   /// Admin-only: register the VFT program ID that backs a custodied balance.
   /// Must be set before deposit/withdraw can move real tokens for that kind.
   SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);
-  SignalCollab : (_partner: actor_id, _note: str) -> null;
   StartAutopilot : () -> null;
   Tick : () -> result (str, ContractError);
   /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the

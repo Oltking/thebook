@@ -22,6 +22,7 @@ export function parseContractError(e: unknown): string {
   if (msg.includes('PositionNotFound')) return 'You have no open position in this market.';
   if (msg.includes('WrongDirection')) return 'You already have a position the other way. Close it before opening the opposite side.';
   if (msg.includes('NotLiquidatable')) return 'This position is still above maintenance margin and cannot be liquidated.';
+  if (msg.includes('StaleMark')) return 'The mark price is stale — the price keeper is catching up. Try again in a moment.';
   if (msg.includes('AgentCallFailed')) return 'The token transfer failed. Make sure you approved the DEX and have enough balance, then try again.';
   if (msg.includes('BadParams')) return 'Invalid parameters provided. Check your inputs and try again.';
   if (msg.includes('pool') || msg.includes('Pool')) return 'Pool operation failed. Please try again.';

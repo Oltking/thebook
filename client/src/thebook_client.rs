@@ -57,11 +57,6 @@ pub mod orderbook {
             &mut self,
             oid: u64,
         ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env>;
-        fn challenge(
-            &mut self,
-            opponent: ActorId,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env>;
         /// Move real VFT tokens from the caller into the DEX vault, crediting their
         /// internal balance. The caller must have `approve`d the DEX on the token
         /// program for at least `amount` first. Credits only after the on-chain
@@ -104,11 +99,6 @@ pub mod orderbook {
             kind: TokenKind,
             address: ActorId,
         ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env>;
-        fn signal_collab(
-            &mut self,
-            _partner: ActorId,
-            _note: String,
-        ) -> sails_rs::client::PendingCall<io::SignalCollab, Self::Env>;
         fn start_autopilot(
             &mut self,
         ) -> sails_rs::client::PendingCall<io::StartAutopilot, Self::Env>;
@@ -164,13 +154,6 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env> {
             self.pending_call((oid,))
         }
-        fn challenge(
-            &mut self,
-            opponent: ActorId,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Challenge, Self::Env> {
-            self.pending_call((opponent, amount))
-        }
         fn deposit(
             &mut self,
             kind: TokenKind,
@@ -214,13 +197,6 @@ pub mod orderbook {
             address: ActorId,
         ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env> {
             self.pending_call((kind, address))
-        }
-        fn signal_collab(
-            &mut self,
-            _partner: ActorId,
-            _note: String,
-        ) -> sails_rs::client::PendingCall<io::SignalCollab, Self::Env> {
-            self.pending_call((_partner, _note))
         }
         fn start_autopilot(
             &mut self,
@@ -283,14 +259,12 @@ pub mod orderbook {
         use super::*;
         sails_rs::io_struct_impl!(CallAgentService (target: ActorId, payload: Vec<u8>, gas_limit: u64) -> Result<Vec<u8>, super::ContractError>);
         sails_rs::io_struct_impl!(CancelOrder (oid: u64) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(Challenge (opponent: ActorId, amount: u64) -> Result<u32, super::ContractError>);
         sails_rs::io_struct_impl!(Deposit (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
         sails_rs::io_struct_impl!(Join (name: String, strategy: super::AgentStrategy) -> (u64,u64,u64,u64,));
         sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(PlaceLimit (side: super::Side, asset: super::Asset, price: u64, qty: u64) -> Result<u64, super::ContractError>);
         sails_rs::io_struct_impl!(SetToken (kind: super::TokenKind, address: ActorId) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(SignalCollab (_partner: ActorId, _note: String) -> ());
         sails_rs::io_struct_impl!(StartAutopilot () -> ());
         sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(Withdraw (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
@@ -645,6 +619,7 @@ pub enum ContractError {
     PositionNotFound,
     WrongDirection,
     NotLiquidatable,
+    StaleMark,
 }
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.
 /// `Usd` is a separate kind because the orderbook denominates in USD but the

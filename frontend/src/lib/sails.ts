@@ -14,7 +14,7 @@ export class SailsProgram {
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
-      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull","NoMarkPrice","LeverageTooHigh","PositionNotFound","WrongDirection","NotLiquidatable"]},
+      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull","NoMarkPrice","LeverageTooHigh","PositionNotFound","WrongDirection","NotLiquidatable","StaleMark"]},
       Asset: {"_enum":["BTC","ETH","VARA"]},
       TokenKind: {"_enum":["Usd","Btc","Eth","Vara"]},
       Side: {"_enum":["Buy","Sell"]},
@@ -115,21 +115,6 @@ export class Orderbook {
       oid,
       'u64',
       'Result<Null, ContractError>',
-      this._program.programId,
-    );
-  }
-
-  public challenge(opponent: ActorId, amount: number | string | bigint): TransactionBuilder<{ ok: number } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: number } | { err: ContractError }>(
-      this._program.api,
-      this._program.registry,
-      'send_message',
-      'Orderbook',
-      'Challenge',
-      [opponent, amount],
-      '([u8;32], u64)',
-      'Result<u32, ContractError>',
       this._program.programId,
     );
   }
@@ -275,21 +260,6 @@ export class Orderbook {
       null,
       null,
       '([u8;32], [u8;32], [u8;32], [u8;32])',
-    );
-  }
-
-  public signalCollab(partner: ActorId, _note: string): TransactionBuilder<null> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<null>(
-      this._program.api,
-      this._program.registry,
-      'send_message',
-      'Orderbook',
-      'SignalCollab',
-      [partner, _note],
-      '([u8;32], String)',
-      'Null',
-      this._program.programId,
     );
   }
 

@@ -29,6 +29,9 @@ pub struct DexState {
     // ── Perpetual futures ──
     /// On-chain mark price per asset, in USD cents, pushed by the keeper.
     pub mark_prices: BTreeMap<Asset, u64>,
+    /// Block height at which each asset's mark was last published. Used to reject
+    /// perp actions against a stale (keeper-stalled) price.
+    pub mark_updated: BTreeMap<Asset, u32>,
     /// Open isolated-margin positions.
     pub positions: Vec<Position>,
     /// House liquidity reserve (USD cents) that pays trader profits and absorbs

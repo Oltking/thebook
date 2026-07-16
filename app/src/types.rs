@@ -246,6 +246,7 @@ pub enum ContractError {
     PositionNotFound,
     WrongDirection,
     NotLiquidatable,
+    StaleMark,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -351,6 +352,9 @@ pub const MAINTENANCE_BPS: u64 = 50;
 pub const LIQUIDATION_FEE_BPS: u64 = 100;
 /// Cap on simultaneously-open perp positions across everyone (state-bloat guard).
 pub const MAX_PERP_POSITIONS: usize = 500;
+/// Max age (in blocks) of a mark price before perp actions reject it as stale.
+/// At ~3s blocks this is ~7.5 min — far longer than the keeper's push cadence.
+pub const MAX_MARK_AGE_BLOCKS: u32 = 150;
 /// Cap on simultaneously-resting orders across the whole book. New limit orders are
 /// rejected past this so a spammer can't bloat state indefinitely.
 pub const MAX_OPEN_ORDERS: usize = 500;

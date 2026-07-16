@@ -357,61 +357,6 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
     assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
 }
 
-// Regression: signal_collab must NOT create a zero-balance agent for the partner,
-// which would make their later join() return early and never fund them.
-#[tokio::test]
-async fn signal_collab_does_not_lock_out_join() {
-    let (env, program) = deploy().await;
-    join_alice(&env, &program).await;
-
-    let bob_id: ActorId = BOB.into();
-    let _: () = orderbook_svc(&program)
-        .pending_call::<ob_io::SignalCollab>((bob_id, "gm".to_string()))
-        .await
-        .unwrap();
-
-    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    let bal: (u64, u64, u64, u64) = orderbook_svc(&bob)
-        .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
-        .await
-        .unwrap();
-    // Join now creates a zero-balance identity (value comes from faucet+deposit).
-    // The regression is that signal_collab must not pre-insert an agent for Bob,
-    // which would make this join a no-op and lock him out — so identity must stick.
-    assert_eq!(bal, (0, 0, 0, 0), "unexpected starting balances");
-    let id: Option<(String, AgentStrategy)> = orderbook_svc(&bob)
-        .pending_call::<ob_io::GetIdentity>(())
-        .await
-        .unwrap();
-    assert_eq!(
-        id,
-        Some(("Bob".to_string(), AgentStrategy::MarketMaker)),
-        "signal_collab locked Bob out of joining"
-    );
-}
-
-// Regression: challenge must not silently destroy the caller's USD.
-#[tokio::test]
-async fn challenge_does_not_burn_funds() {
-    let (env, program) = deploy().await;
-    join_alice(&env, &program).await;
-    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
-    join_bob(&env, &bob).await;
-
-    let bob_id: ActorId = BOB.into();
-    let _: u32 = orderbook_svc(&program)
-        .pending_call::<ob_io::Challenge>((bob_id, 500u64))
-        .await
-        .unwrap()
-        .unwrap();
-
-    let port: (u64, u64, u64, u64) = orderbook_svc(&program)
-        .pending_call::<ob_io::GetPortfolio>(())
-        .await
-        .unwrap();
-    assert_eq!(port.0, 100_000, "challenge burned caller USD");
-}
-
 // ── AMM tests ──
 
 #[tokio::test]
@@ -1192,6 +1137,44 @@ async fn perp_set_mark_price_non_admin_fails() {
         Ok(Err(ContractError::NotAdmin)) => {}
         other => panic!("expected NotAdmin, got {other:?}"),
     }
+}
+
+/// A mark that hasn't been refreshed within MAX_MARK_AGE_BLOCKS must be rejected,
+/// so a stalled keeper can't leave positions settling against a frozen price.
+#[tokio::test]
+async fn perp_stale_mark_rejected() {
+    let (env, program) = deploy().await;
+    setup_perps(&env, &program).await;
+
+    let _: u64 = perps_svc(&program)
+        .pending_call::<perp_io::OpenPosition>((Asset::BTC, true, 10_000u64, 2u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Advance well past the staleness window without republishing the mark.
+    let bn = env.system().block_height();
+    env.system().run_to_block(bn + 200);
+
+    let stale: Result<Result<(u64, i64), ContractError>, GtestError> = perps_svc(&program)
+        .pending_call::<perp_io::ClosePosition>((Asset::BTC,))
+        .await;
+    match stale {
+        Ok(Err(ContractError::StaleMark)) => {}
+        other => panic!("expected StaleMark, got {other:?}"),
+    }
+
+    // Republishing the mark makes it fresh again → close succeeds.
+    let _: () = perps_svc(&program)
+        .pending_call::<perp_io::SetMarkPrice>((Asset::BTC, BTC_MARK))
+        .await
+        .unwrap()
+        .unwrap();
+    let _: (u64, i64) = perps_svc(&program)
+        .pending_call::<perp_io::ClosePosition>((Asset::BTC,))
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tokio::test]

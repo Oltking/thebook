@@ -1,7 +1,7 @@
 import { ActorId } from 'sails-js';
 
 declare global {
-  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable";
+  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable" | "StaleMark";
 
   // Off-chain price snapshot (sourced from Binance/CoinGecko, not the contract).
   export interface PriceFeed {

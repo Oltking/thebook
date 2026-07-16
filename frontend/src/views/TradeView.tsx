@@ -326,12 +326,6 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
             {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
           </span>
         </div>
-        {isFutures && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-            <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fund</span>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--buy-green)', whiteSpace: 'nowrap' }}>+0.01%</span>
-          </div>
-        )}
         {lastExecPrice > 0n && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
             <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fill</span>
@@ -368,12 +362,6 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
                 {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
               </span>
             </div>
-            {isFutures && (
-              <div className={styles.statItem}>
-                <span className={styles.statLabel}>Funding Rate</span>
-                <span className={`${styles.statValue} ${styles.positive}`}>+0.0100%</span>
-              </div>
-            )}
             {lastExecPrice > 0n && (
               <div className={styles.statItem}>
                 <span className={styles.statLabel}>Last Fill</span>
