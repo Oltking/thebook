@@ -3,7 +3,7 @@ import { web3Accounts, web3Enable } from '@polkadot/extension-dapp';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
-import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, RefreshCw, LogOut } from 'lucide-react';
+import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import styles from './Header.module.css';
 import { usePortfolio } from '../../hooks/usePortfolio';
@@ -11,6 +11,7 @@ import { useToast } from '../ui/Toast';
 import { useViewport } from '../../hooks/useViewport';
 import { AccountSelector } from '../ui/AccountSelector';
 import { useMarketData } from '../../providers/MarketDataProvider';
+import { formatUsdPrice } from '../../lib/format';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -22,7 +23,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { portfolio, loading } = usePortfolio();
   const { error } = useToast();
   const { isMobile } = useViewport();
-  const { prices, lastFetched, pricesStalePer, pricesLoading, fetchPrices, fetchPrice } = useMarketData();
+  const { prices } = useMarketData();
   const [showAccountSelector, setShowAccountSelector] = useState(false);
 
   const handleConnect = useCallback(async () => {
@@ -65,14 +66,6 @@ export function Header({ onMenuClick }: HeaderProps) {
     window.dispatchEvent(new Event('thebookdex:open-wizard'));
   }, []);
 
-  const handleRefreshPrices = useCallback(() => {
-    if (!account) {
-      error('Connect a wallet first to refresh prices.');
-      return;
-    }
-    fetchPrices();
-  }, [account, fetchPrices, error]);
-
   const formatUsd = (val: bigint | number | string) => {
     return (Number(val) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
   };
@@ -95,41 +88,24 @@ export function Header({ onMenuClick }: HeaderProps) {
           <span className={styles.accent}>the</span>bookdex
         </div>
 
-        {/* Public price ticker — always visible */}
+        {/* Live public price ticker — auto-updates, no wallet or tap needed */}
         {!isMobile && (
           <div className={styles.ticker}>
             {priceTicker.map(({ asset, data }) => {
-              const isStale = pricesStalePer[asset as Asset];
+              const usd = data?.price_usd_micro ? Number(data.price_usd_micro) / 1_000_000 : null;
               return (
-                <button key={asset} className={styles.tickerItem} disabled={pricesLoading}
-                  onClick={() => account ? fetchPrice(asset as Asset) : handleRefreshPrices()}
-                  title={account ? `Click to refresh ${asset} price (1 signature)` : 'Connect wallet for prices'}>
+                <div key={asset} className={styles.tickerItem}>
                   <span className={styles.tickerAsset}>{asset}</span>
-                  <span className={styles.tickerPrice}>
-                    {data?.price_usd_micro
-                      ? `$${(Number(data.price_usd_micro) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : '---'}
-                  </span>
-                  {data?.change_24h_bps !== undefined && (
+                  <span className={styles.tickerPrice}>{formatUsdPrice(usd)}</span>
+                  {usd !== null && data?.change_24h_bps !== undefined && (
                     <span className={Number(data.change_24h_bps) >= 0 ? styles.tickerUp : styles.tickerDown}>
                       {Number(data.change_24h_bps) >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                       {(Number(data.change_24h_bps) / 100).toFixed(2)}%
                     </span>
                   )}
-                  {data?.price_usd_micro && isStale && (
-                    <span className={styles.tickerStaleHint}>outdated · tap</span>
-                  )}
-                </button>
+                </div>
               );
             })}
-            {pricesLoading && (
-              <span className={styles.tickerHint}>
-                <RefreshCw size={12} className={styles.spin} /> Fetching...
-              </span>
-            )}
-            {!account && !lastFetched && (
-              <div className={styles.tickerHint}>Connect wallet for prices</div>
-            )}
           </div>
         )}
 

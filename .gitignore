@@ -28,3 +28,6 @@ node_modules/
 # Build artifacts the deploy script copies next to itself
 scripts/thebook.opt.wasm
 scripts/thebook.idl
+
+# Local agent tooling state
+.claude/

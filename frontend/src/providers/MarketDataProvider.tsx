@@ -26,6 +26,8 @@ export interface PricePoint {
 
 const STALE_MS = 5 * 60 * 1000;
 const POLL_MS  = 5_000;
+const PRICE_POLL_MS = 4_000;
+const VARA_POLL_MS = 12_000;
 const MAX_HISTORY = 200;
 
 interface MarketContextValue {
@@ -62,28 +64,32 @@ function priceToUsd(feed: PriceFeed | null): number | null {
   return Number(feed.price_usd_micro) / 1_000_000;
 }
 
+async function fetchBinanceOnly(): Promise<Partial<MarketPrices>> {
+  const res = await fetch(
+    'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D',
+    { signal: AbortSignal.timeout(6000) }
+  );
+  if (!res.ok) throw new Error('not ok');
+  const rows = await res.json() as Array<{ symbol: string; lastPrice: string; priceChangePercent: string }>;
+  const out: Partial<MarketPrices> = {};
+  for (const row of rows) {
+    const feed: PriceFeed = {
+      symbol: row.symbol.replace('USDT', ''),
+      price_usd_micro: Math.round(parseFloat(row.lastPrice) * 1_000_000),
+      change_24h_bps: Math.round(parseFloat(row.priceChangePercent) * 100),
+      market_cap_usd: 0, volume_24h_usd: 0, updated_at_block: 0,
+    };
+    if (row.symbol === 'BTCUSDT') out.BTC = feed;
+    if (row.symbol === 'ETHUSDT') out.ETH = feed;
+  }
+  return out;
+}
+
+/** Fast BTC/ETH path — Binance if reachable, else CoinGecko (which also has VARA). */
 async function fetchBinanceDirect(): Promise<Partial<MarketPrices>> {
   try {
-    const res = await fetch(
-      'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D',
-      { signal: AbortSignal.timeout(6000) }
-    );
-    if (!res.ok) throw new Error('not ok');
-    const rows = await res.json() as Array<{ symbol: string; lastPrice: string; priceChangePercent: string }>;
-    const out: Partial<MarketPrices> = {};
-    for (const row of rows) {
-      const feed: PriceFeed = {
-        symbol: row.symbol.replace('USDT', ''),
-        price_usd_micro: Math.round(parseFloat(row.lastPrice) * 1_000_000),
-        change_24h_bps: Math.round(parseFloat(row.priceChangePercent) * 100),
-        market_cap_usd: 0, volume_24h_usd: 0, updated_at_block: 0,
-      };
-      if (row.symbol === 'BTCUSDT') out.BTC = feed;
-      if (row.symbol === 'ETHUSDT') out.ETH = feed;
-    }
-    return out;
+    return await fetchBinanceOnly();
   } catch {
-    /* Binance blocked or unavailable — try CoinGecko */
     return fetchCoinGeckoDirect();
   }
 }
@@ -225,23 +231,46 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  /* Refresh BTC+ETH prices directly from Binance every 60s — no wallet needed */
+  /* Live off-chain prices for all three assets — polled continuously, no wallet
+     needed. Runs while the tab is visible; catches up on return. */
   useEffect(() => {
+    let active = true;
     const refresh = async () => {
+      if (document.hidden) return;
       const direct = await fetchBinanceDirect();
-      if (direct.BTC || direct.ETH) {
-        const ts = Date.now();
-        setPrices(prev => ({ ...prev, ...direct }));
-        setLastFetched(ts);
-        setLastFetchedPerAsset(prev => ({
-          ...prev,
-          ...(direct.BTC ? { BTC: ts } : {}),
-          ...(direct.ETH ? { ETH: ts } : {}),
-        }));
-      }
+      if (!active || !(direct.BTC || direct.ETH || direct.VARA)) return;
+      const ts = Date.now();
+      setPrices(prev => ({ ...prev, ...direct }));
+      setLastFetched(ts);
+      setLastFetchedPerAsset(prev => ({
+        ...prev,
+        ...(direct.BTC ? { BTC: ts } : {}),
+        ...(direct.ETH ? { ETH: ts } : {}),
+        ...(direct.VARA ? { VARA: ts } : {}),
+      }));
     };
-    const id = setInterval(refresh, 60_000);
-    return () => clearInterval(id);
+    refresh();
+    const id = setInterval(refresh, PRICE_POLL_MS);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { active = false; clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
+  /* VARA has no Binance pair, so poll it independently from CoinGecko (slower, to
+     respect its rate limit) — never blocking the fast BTC/ETH path above. */
+  useEffect(() => {
+    let active = true;
+    const refreshVara = async () => {
+      if (document.hidden) return;
+      const g = await fetchCoinGeckoDirect();
+      if (!active || !g.VARA) return;
+      const ts = Date.now();
+      setPrices(prev => ({ ...prev, VARA: g.VARA! }));
+      setLastFetchedPerAsset(prev => ({ ...prev, VARA: ts }));
+    };
+    refreshVara();
+    const id = setInterval(refreshVara, VARA_POLL_MS);
+    return () => { active = false; clearInterval(id); };
   }, []);
 
   /* Core market data fetch */

@@ -10,7 +10,6 @@ const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
-const LeaderboardView = lazy(() => import('./views/LeaderboardView').then(m => ({ default: m.LeaderboardView })));
 
 function PageLoader() {
   return (
@@ -38,8 +37,6 @@ function App() {
         return <SwapView />;
       case 'pools':
         return <PoolsView />;
-      case 'leaderboard':
-        return <LeaderboardView />;
       case 'portfolio':
         return <PortfolioView />;
       default:
