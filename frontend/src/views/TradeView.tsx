@@ -2,7 +2,7 @@ import { Card } from '../components/ui/Card';
 import styles from './TradeView.module.css';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { usePortfolio } from '../hooks/usePortfolio';
-import { usePositions } from '../hooks/usePositions';
+import { usePerps } from '../hooks/usePerps';
 import { useSails } from '../hooks/useSails';
 import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
@@ -50,15 +50,17 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const { prices, orderbooks, trades, loading: marketLoading, pricesStalePer, pricesLoading, priceHistory, fetchPrice, refreshAll, tickMarket, tickLoading } = useMarketData();
   const { portfolio, refresh: refreshPortfolio } = usePortfolio();
   const { program, account } = useSails();
-  /* Positions scoped to the connected wallet address */
-  const { positions, addPosition, removePosition, unrealizedPnl, liqPrice } = usePositions(account?.decodedAddress);
+  /* Real on-chain perpetual positions + keeper mark prices */
+  const { positions, marks: perpMarks, openPosition, closePosition, busy: perpBusy, refresh: refreshPerps } = usePerps();
   const { success, error } = useToast();
   const { txState, executeTx, resetTx } = useTxStatus();
 
   const orderbook  = orderbooks[asset] || { bids: [], asks: [] };
   const tradesList = trades[asset] || [];
   const oracleData = prices[asset];
-  const markPrice  = oracleData ? Number(oracleData.price_usd_micro) / 1_000_000 : 0;
+  const offMark    = oracleData ? Number(oracleData.price_usd_micro) / 1_000_000 : 0;
+  /* Futures settle at the on-chain keeper mark; fall back to the off-chain feed. */
+  const markPrice  = isFutures && perpMarks[asset] > 0 ? perpMarks[asset] : offMark;
   const change24h  = oracleData ? Number(oracleData.change_24h_bps) / 100 : 0;
   const lastExecPrice = tradesList.length > 0 ? tradesList[0].price : 0n;
 
@@ -90,8 +92,6 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const displayNotional = actualCost * leverage;
 
   const assetQty = entryPrice > 0 ? actualCost / entryPrice : 0;
-  const contractQty = BigInt(Math.round(assetQty * 1e5));
-  const contractPrice = BigInt(Math.max(1, Math.round(entryPrice / 1000)));
 
   const estimatedLiqPrice = useMemo(() => {
     if (!entryPrice || leverage <= 1) return 0;
@@ -165,23 +165,14 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     finally { setCancellingOid(null); }
   }, [program, account, cancellingOid, error, success, refreshPortfolio, refreshAll, fetchMyOrders]);
 
-  const handleClosePosition = useCallback(async (pos: ReturnType<typeof usePositions>['positions'][0]) => {
+  const handleClosePosition = useCallback(async (posAsset: Asset) => {
     if (!program || !account) return;
-    const closeSide = pos.direction === 'Long' ? 'Sell' : 'Buy';
-    const q = BigInt(pos.sizeQty);
-    const p = BigInt(Math.max(1, Math.round(markPrice / 1000)));
-    const err = await executeTx(
-      () => program!.orderbook.placeLimit(closeSide as Side, pos.asset as Asset, p, q),
-      account,
-      () => {
-        removePosition(pos.id);
-        refreshPortfolio(); refreshAll();
-        success(`Position closed`);
-        setTimeout(() => { refreshPortfolio(); refreshAll(); }, 2500);
-      }
-    );
-    if (err) error(parseContractError(err));
-  }, [program, account, markPrice, executeTx, removePosition, refreshPortfolio, refreshAll, success, error]);
+    const err = await closePosition(posAsset);
+    if (err) { error(parseContractError(err)); return; }
+    success('Position closed');
+    refreshPortfolio(); refreshPerps();
+    setTimeout(() => { refreshPortfolio(); refreshPerps(); }, 2500);
+  }, [program, account, closePosition, refreshPortfolio, refreshPerps, success, error]);
 
   const handlePlaceOrder = async () => {
     if (!program || !account) return;
@@ -212,43 +203,23 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       return;
     }
 
-    if (actualCost <= 0) { error('Enter an amount'); return; }
-    if (assetQty <= 0) { error('Invalid amount'); return; }
-    if (orderType === 'Limit') {
-      const p = parseFloat(price);
-      if (isNaN(p) || p <= 0) { error('Enter a valid entry price'); return; }
-    }
+    /* Futures: open a real on-chain perpetual position. Margin is the USD you post;
+       the contract sizes it by leverage at the on-chain mark price. */
+    if (actualCost <= 0) { error('Enter a margin amount'); return; }
 
-    /* Guard: warn if cost exceeds available balance */
     const availableUsd = portfolio ? Number(portfolio.usd) / 100 : 0;
     if (actualCost > availableUsd) {
       error(`Insufficient balance. You have $${fmt(availableUsd)} available.`);
       return;
     }
+    if (markPrice <= 0) { error('No mark price yet — the keeper has not published one for this market.'); return; }
 
-    const spotSide: Side = direction === 'Long' ? 'Buy' : 'Sell';
-    const err = await executeTx(
-      () => orderType === 'Market'
-        ? (spotSide === 'Buy' ? program!.orderbook.marketBuy(asset, contractQty) : program!.orderbook.marketSell(asset, contractQty))
-        : program!.orderbook.placeLimit(spotSide, asset, contractPrice, contractQty),
-      account,
-      () => {
-        addPosition({
-          id: `${Date.now()}-${asset}`,
-          asset, direction, entryPrice, sizeQty: Number(contractQty), leverage,
-          margin: actualCost,
-          openedAt: new Date().toLocaleTimeString(),
-        });
-        setUsdAmount('');
-        refreshPortfolio(); refreshAll(); fetchMyOrders();
-        success(`${direction} opened · ${fmt(assetQty, 5)} ${asset} @ $${fmt(entryPrice)}`);
-        setTimeout(() => { refreshPortfolio(); refreshAll(); fetchMyOrders(); }, 2500);
-      }
-    );
-    if (err) {
-      const msg = parseContractError(err);
-      error(err.includes('NoLiquidity') || err.includes('NoBuyers') ? `${msg} Use Limit order or Quick Demo to seed the book.` : msg);
-    }
+    const err = await openPosition(asset, direction === 'Long', actualCost, leverage);
+    if (err) { error(parseContractError(err)); return; }
+    setUsdAmount('');
+    refreshPortfolio(); refreshPerps();
+    success(`${direction} opened · ${leverage}x ${asset} · $${fmt(actualCost)} margin`);
+    setTimeout(() => { refreshPortfolio(); refreshPerps(); }, 2500);
   };
 
   const executeDemoTrade = useCallback(async () => {
@@ -571,11 +542,9 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       <button
         className={direction === 'Long' ? styles.submitLong : styles.submitShort}
         onClick={handlePlaceOrder}
-        disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed'}
+        disabled={perpBusy}
       >
-        {txState.stage === 'broadcasting' || txState.stage === 'confirming'
-          ? 'Processing...'
-          : `Open ${direction} ${leverage > 1 ? `${leverage}x ` : ''}${asset}`}
+        {perpBusy ? 'Opening…' : `Open ${direction} ${leverage > 1 ? `${leverage}x ` : ''}${asset}`}
       </button>
       {!account && <div className={styles.connectWarn}>Connect wallet to trade</div>}
 
@@ -686,34 +655,33 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         <EmptyState title="No Open Positions" description="Open a Long or Short to see it here." />
       ) : (
         <div className={styles.positionsList}>
-          {positions.map(pos => {
-            const pnl = unrealizedPnl(pos, markPrice);
-            const liq = liqPrice(pos);
-            const pnlPct = pos.margin > 0 ? (pnl / pos.margin) * 100 : 0;
+          {positions.map((pos, idx) => {
+            const pnlPct = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+            const dir = pos.isLong ? 'Long' : 'Short';
             return (
-              <div key={pos.id} className={styles.positionCard}>
+              <div key={`${pos.asset}-${idx}`} className={styles.positionCard}>
                 <div className={styles.positionHeader}>
-                  <span className={pos.direction === 'Long' ? styles.longTag : styles.shortTag}>
-                    {pos.direction === 'Long' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {pos.asset} {pos.direction} {pos.leverage > 1 ? `${pos.leverage}x` : ''}
+                  <span className={pos.isLong ? styles.longTag : styles.shortTag}>
+                    {pos.isLong ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {pos.asset} {dir} {pos.leverage > 1 ? `${pos.leverage}x` : ''}
                   </span>
                   <button className={styles.closePositionBtn}
-                    onClick={() => handleClosePosition(pos)}
-                    disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed'}>
+                    onClick={() => handleClosePosition(pos.asset)}
+                    disabled={perpBusy}>
                     Close
                   </button>
                 </div>
                 <div className={styles.positionGrid}>
-                  <div><span className={styles.posLabel}>Entry</span><span>${fmt(pos.entryPrice)}</span></div>
-                  <div><span className={styles.posLabel}>Mark</span><span>{fmtMark(markPrice)}</span></div>
-                  <div><span className={styles.posLabel}>Liq.</span><span className={styles.negative}>${fmt(liq)}</span></div>
-                  <div><span className={styles.posLabel}>Size</span><span>{(pos.sizeQty/1e5).toFixed(4)} {pos.asset}</span></div>
+                  <div><span className={styles.posLabel}>Entry</span><span>${fmt(pos.entry)}</span></div>
+                  <div><span className={styles.posLabel}>Mark</span><span>{fmtMark(perpMarks[pos.asset] || markPrice)}</span></div>
+                  <div><span className={styles.posLabel}>Liq.</span><span className={styles.negative}>{pos.liqPrice > 0 ? `$${fmt(pos.liqPrice)}` : '—'}</span></div>
+                  <div><span className={styles.posLabel}>Size</span><span>{pos.size.toFixed(5)} {pos.asset}</span></div>
+                  <div><span className={styles.posLabel}>Margin</span><span>${fmt(pos.margin)}</span></div>
                   <div><span className={styles.posLabel}>PnL</span>
-                    <span className={pnl >= 0 ? styles.positive : styles.negative}>
-                      {pnl >= 0 ? '+' : ''}${fmt(Math.abs(pnl))} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                    <span className={pos.pnl >= 0 ? styles.positive : styles.negative}>
+                      {pos.pnl >= 0 ? '+' : ''}${fmt(Math.abs(pos.pnl))} ({pos.pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
                     </span>
                   </div>
-                  <div><span className={styles.posLabel}>Since</span><span>{pos.openedAt}</span></div>
                 </div>
               </div>
             );
@@ -779,9 +747,9 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', marginBottom: 'var(--space-sm)', borderRadius: 8,
           fontSize: 12, fontWeight: 600,
-          background: 'rgba(243,167,46,0.12)', border: '1px solid rgba(243,167,46,0.4)', color: '#f3a72e',
+          background: 'rgba(14,203,129,0.1)', border: '1px solid rgba(14,203,129,0.35)', color: 'var(--buy-green)',
         }}>
-          ⚠ Simulated — leverage &amp; positions are illustrative only. Orders execute as real spot trades on-chain; there are no on-chain perpetuals.
+          ● Live perpetuals — isolated margin, settled on-chain at the keeper mark price. Positions can be liquidated at maintenance margin.
         </div>
       )}
       <div className={styles.chartArea}>{chartPanel}</div>

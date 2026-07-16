@@ -9,11 +9,12 @@ export class SailsProgram {
   public readonly registry: TypeRegistry;
   public readonly orderbook: Orderbook;
   public readonly amm: Amm;
+  public readonly perps: Perps;
   private _program?: BaseGearProgram;
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
-      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull"]},
+      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull","NoMarkPrice","LeverageTooHigh","PositionNotFound","WrongDirection","NotLiquidatable"]},
       Asset: {"_enum":["BTC","ETH","VARA"]},
       TokenKind: {"_enum":["Usd","Btc","Eth","Vara"]},
       Side: {"_enum":["Buy","Sell"]},
@@ -40,6 +41,7 @@ export class SailsProgram {
 
     this.orderbook = new Orderbook(this);
     this.amm = new Amm(this);
+    this.perps = new Perps(this);
   }
 
   public get programId(): `0x${string}` {
@@ -591,5 +593,98 @@ export class Amm {
         callback(this._program.registry.createType('(String, String, SwapExecutedEvent)', message.payload)[2].toJSON() as unknown as SwapExecutedEvent);
       }
     });
+  }
+}
+export class Perps {
+  constructor(private _program: SailsProgram) {}
+
+  public setMarkPrice(asset: Asset, price: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'SetMarkPrice', [asset, price], '(Asset, u64)',
+      'Result<Null, ContractError>', this._program.programId,
+    );
+  }
+
+  public setMarkPrices(btc: number | string | bigint, eth: number | string | bigint, vara: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'SetMarkPrices', [btc, eth, vara], '(u64, u64, u64)',
+      'Result<Null, ContractError>', this._program.programId,
+    );
+  }
+
+  public fundReserve(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'FundReserve', amount, 'u64',
+      'Result<u64, ContractError>', this._program.programId,
+    );
+  }
+
+  public openPosition(asset: Asset, is_long: boolean, margin: number | string | bigint, leverage: number): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'OpenPosition', [asset, is_long, margin, leverage], '(Asset, bool, u64, u32)',
+      'Result<u64, ContractError>', this._program.programId,
+    );
+  }
+
+  public closePosition(asset: Asset): TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'ClosePosition', asset, 'Asset',
+      'Result<(u64, i64), ContractError>', this._program.programId,
+    );
+  }
+
+  public liquidate(owner: ActorId, asset: Asset): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api, this._program.registry, 'send_message',
+      'Perps', 'Liquidate', [owner, asset], '([u8;32], Asset)',
+      'Result<Null, ContractError>', this._program.programId,
+    );
+  }
+
+  public getMarkPrice(asset: Asset): QueryBuilder<number | string | bigint> {
+    return new QueryBuilder<number | string | bigint>(
+      this._program.api, this._program.registry, this._program.programId,
+      'Perps', 'GetMarkPrice', asset, 'Asset', 'u64',
+    );
+  }
+
+  public getMarkPrices(): QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]> {
+    return new QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]>(
+      this._program.api, this._program.registry, this._program.programId,
+      'Perps', 'GetMarkPrices', null, null, '(u64, u64, u64)',
+    );
+  }
+
+  public getReserve(): QueryBuilder<number | string | bigint> {
+    return new QueryBuilder<number | string | bigint>(
+      this._program.api, this._program.registry, this._program.programId,
+      'Perps', 'GetReserve', null, null, 'u64',
+    );
+  }
+
+  public getPositions(owner: ActorId): QueryBuilder<Array<[Asset, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>> {
+    return new QueryBuilder<Array<[Asset, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>>(
+      this._program.api, this._program.registry, this._program.programId,
+      'Perps', 'GetPositions', owner, '[u8;32]',
+      'Vec<(Asset, bool, u64, u64, u64, u32, i64)>',
+    );
+  }
+
+  public getLiqPrice(owner: ActorId, asset: Asset): QueryBuilder<number | string | bigint> {
+    return new QueryBuilder<number | string | bigint>(
+      this._program.api, this._program.registry, this._program.programId,
+      'Perps', 'GetLiqPrice', [owner, asset], '([u8;32], Asset)', 'u64',
+    );
   }
 }
