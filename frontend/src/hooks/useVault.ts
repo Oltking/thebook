@@ -58,8 +58,15 @@ export function useVault() {
           setStep('claiming');
           await send(() => token.claim());
         }
-        setStep('approving');
-        await send(() => token.approve(PROGRAM_ID, amount.toString()));
+        const allowed = await token
+          .allowance(account.decodedAddress, PROGRAM_ID)
+          .call()
+          .then((a) => BigInt(a?.toString() || '0'))
+          .catch(() => 0n);
+        if (allowed < amount) {
+          setStep('approving');
+          await send(() => token.approve(PROGRAM_ID, amount.toString()));
+        }
         setStep('depositing');
         await send(() => program.orderbook.deposit(kind, amount.toString()));
         setStep('done');
@@ -83,8 +90,15 @@ export function useVault() {
       setBusy(true);
       try {
         const { token } = tokenFor(program.api, kind);
-        setStep('approving');
-        await send(() => token.approve(PROGRAM_ID, amount.toString()));
+        const allowed = await token
+          .allowance(account.decodedAddress, PROGRAM_ID)
+          .call()
+          .then((a) => BigInt(a?.toString() || '0'))
+          .catch(() => 0n);
+        if (allowed < amount) {
+          setStep('approving');
+          await send(() => token.approve(PROGRAM_ID, amount.toString()));
+        }
         setStep('depositing');
         await send(() => program.orderbook.deposit(kind, amount.toString()));
         setStep('done');

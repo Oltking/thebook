@@ -20,7 +20,7 @@ type VaultModal = { name: string; kind: TokenKind; decimals: number; mode: 'depo
 export function PortfolioView() {
   const { portfolio, loading, refresh: refreshPortfolio } = usePortfolio();
   const { program, account, isReady } = useSails();
-  const { deposit, withdraw, busy: vaultBusy } = useVault();
+  const { deposit, withdraw, busy: vaultBusy, step: vaultStep } = useVault();
   const { refreshAll, prices } = useMarketData();
   const [orders, setOrders] = useState<any[]>([]);
   const [cancelling, setCancelling] = useState<number | null>(null);
@@ -361,7 +361,12 @@ export function PortfolioView() {
               }}
             >
               {vaultBusy && <Loader2 size={16} className={styles.spin ?? ''} />}
-              {vaultBusy ? 'Confirming...' : `${modal.mode === 'deposit' ? 'Deposit' : 'Withdraw'} ${modal.name}`}
+              {vaultBusy
+                ? (vaultStep === 'approving' ? 'Approving the DEX...'
+                  : vaultStep === 'depositing' ? 'Depositing...'
+                  : vaultStep === 'withdrawing' ? 'Withdrawing...'
+                  : 'Confirming...')
+                : `${modal.mode === 'deposit' ? 'Deposit' : 'Withdraw'} ${modal.name}`}
             </button>
           </div>
         </div>

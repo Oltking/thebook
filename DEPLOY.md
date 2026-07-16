@@ -33,8 +33,9 @@ cargo build --release
 
 Artifacts:
 
-- WASM: `target/wasm32-gear/release/thebook.opt.wasm`
-- IDL:  `thebook.idl` (interface used by the frontend client and the deploy script)
+- DEX WASM:   `target/wasm32-gear/release/thebook.opt.wasm`
+- Token WASM: `target/wasm32-gear/release/thebook_token.opt.wasm` (the wrapped VFT)
+- IDL:        `thebook.idl` (interface used by the frontend client and the deploy script)
 
 Run the tests too — they must pass before deploying:
 
@@ -65,6 +66,25 @@ and prints the **program id**. Keep that value.
 4. Provide the IDL (`thebook.idl`) when prompted and select the `New` constructor.
 5. Submit, then copy the resulting program id.
 
+## 2.5. Deploy the wrapped test tokens and register them
+
+The DEX custodies real VFT tokens, not simulated balances. Deploy one token
+program per traded balance (from `token/`, WASM `thebook_token.opt.wasm`), using the
+`New(name, symbol, decimals, faucet_amount)` constructor. Suggested config (the
+faucet amount is what each user claims once and then deposits):
+
+| Balance | name / symbol | decimals | faucet_amount |
+|---------|---------------|----------|---------------|
+| USD     | `wUSDC`       | 6        | 100000        |
+| BTC     | `wBTC`        | 6        | 100000        |
+| ETH     | `wETH`        | 6        | 1000000       |
+| VARA    | `wVARA`       | 6        | 1000000000    |
+
+After deploying all four, register each with the DEX **from the admin (deployer)
+account** by calling `Orderbook/SetToken(kind, token_program_id)` for each
+`TokenKind` (`Usd`, `Btc`, `Eth`, `Vara`) — via the IDEA portal or a script. Verify
+with the `Orderbook/GetTokens` query; deposits are rejected until a kind is set.
+
 ## 3. Wire the frontend to the new program
 
 ```bash
@@ -76,9 +96,16 @@ Edit `.env`:
 
 ```
 VITE_NODE_ADDRESS=wss://testnet.vara.network
-VITE_PROGRAM_ID=<program id from step 2>
+VITE_PROGRAM_ID=<DEX program id from step 2>
 VITE_NETWORK_NAME=Vara Testnet
+VITE_TOKEN_USD=<wUSDC program id from step 2.5>
+VITE_TOKEN_BTC=<wBTC program id from step 2.5>
+VITE_TOKEN_ETH=<wETH program id from step 2.5>
+VITE_TOKEN_VARA=<wVARA program id from step 2.5>
 ```
+
+Until all four `VITE_TOKEN_*` ids are set, the onboarding "claim starting balances"
+step and the Portfolio deposit/withdraw controls stay hidden.
 
 Then run locally or build:
 
@@ -93,9 +120,31 @@ Variables instead of committing `.env`.
 ## 4. Smoke test
 
 1. Connect a wallet (the deployer account is the program **admin** — only it can
-   manage oracle feeds / autopilot).
-2. Click **Join** to receive starting balances.
-3. Place a limit order, run a market order against it, and confirm balances update.
-4. Create an AMM pool, add liquidity, and swap.
+   register token addresses and manage autopilot).
+2. Create your agent (**Join** — a one-time identity registration; it grants **no**
+   free balance).
+3. Claim starting balances: the onboarding "Claim starting balances" step (or the
+   Portfolio deposit controls) runs claim → approve → deposit for each token.
+   Confirm the portfolio reflects the deposited amounts.
+4. Place a limit order, run a market order against it, and confirm balances update.
+5. Create an AMM pool, add liquidity, and swap.
+6. Withdraw an asset from the Portfolio and confirm the wrapped tokens return to
+   your wallet.
 
-If all four succeed, the testnet deployment is good.
+If all six succeed, the testnet deployment is good.
+
+## Data & indexing
+
+The frontend reads market data two ways, so no external indexer is required to
+launch:
+
+- **Live updates** via Gear event subscriptions (`Trade`, `SwapExecuted`,
+  `OrderPlaced`, …) — see `subscribeTo*Event` in `frontend/src/lib/sails.ts`.
+- **Recent history** via on-chain queries (`GetTrades`, `GetOrderbook`,
+  `ListPools`). Trade history is intentionally bounded on-chain (`MAX_TRADES`) to
+  cap state growth, so only recent trades are queryable.
+
+If you later need deep historical analytics (full trade history, per-user PnL over
+time), add an off-chain indexer (e.g. Subsquid) that ingests the same events into a
+database and serve it alongside the on-chain queries — the event shapes above are
+the ingestion contract.
