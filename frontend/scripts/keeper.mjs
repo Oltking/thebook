@@ -38,7 +38,9 @@ const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
 const SEED = process.env.VARA_SEED;
 const PROGRAM_ID = process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
 const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'thebook.idl');
-const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000);
+// On-chain marks can only change once per block (~3s on Vara), so we push at block
+// cadence. The UI ticker/chart keep updating in real-time from the off-chain feed.
+const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 2_500);
 
 function fail(msg) { console.error(`\n  ✗ ${msg}\n`); process.exit(1); }
 
