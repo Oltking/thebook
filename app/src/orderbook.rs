@@ -69,6 +69,14 @@ fn debit_kind(ag: &mut Agent, kind: TokenKind, amount: u64) {
     }
 }
 
+/// Drop the oldest trades so retained history never exceeds `MAX_TRADES`.
+fn trim_trades(st: &mut DexState) {
+    if st.trades.len() > MAX_TRADES {
+        let excess = st.trades.len() - MAX_TRADES;
+        st.trades.drain(0..excess);
+    }
+}
+
 /// Build the SCALE route payload for a `Vft` service method call.
 fn vft_route(method: &str, args: Vec<u8>) -> Vec<u8> {
     let mut payload = "Vft".encode();
@@ -148,6 +156,10 @@ impl<'a> OrderbookService<'a> {
         }
         let caller = msg::source();
         let mut st = self.state.borrow_mut();
+        // Reject before any escrow/matching so a full book never mutates state.
+        if st.orders.len() >= MAX_OPEN_ORDERS {
+            return Err(ContractError::BookFull);
+        }
         let ag = st
             .agents
             .get(&caller)
@@ -283,6 +295,7 @@ impl<'a> OrderbookService<'a> {
         }))
         .expect("emit OrderPlaced failed");
 
+        trim_trades(&mut st);
         Ok(oid)
     }
 
@@ -424,6 +437,7 @@ impl<'a> OrderbookService<'a> {
         st.orders
             .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
 
+        trim_trades(&mut st);
         Ok(format!("Bought {} {} for {}", filled, asset.name(), cost))
     }
 
@@ -520,6 +534,7 @@ impl<'a> OrderbookService<'a> {
         st.orders
             .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
 
+        trim_trades(&mut st);
         Ok(format!("Sold {} {} for {}", filled, asset.name(), rev))
     }
 

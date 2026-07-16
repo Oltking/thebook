@@ -191,6 +191,7 @@ pub enum ContractError {
     SlippageExceeded,
     ZeroAmount,
     AgentCallFailed,
+    BookFull,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -279,3 +280,9 @@ pub const SWAP_FEE_DEN: u64 = 1_000;
 pub const MAX_PAGE: u32 = 50;
 /// Max agent name length (bytes). Names are truncated to bound on-chain state.
 pub const MAX_NAME_LEN: usize = 24;
+/// Cap on retained trade history. Older trades are dropped so on-chain state can't
+/// grow without bound; queries only ever read the most recent trades anyway.
+pub const MAX_TRADES: usize = 1_000;
+/// Cap on simultaneously-resting orders across the whole book. New limit orders are
+/// rejected past this so a spammer can't bloat state indefinitely.
+pub const MAX_OPEN_ORDERS: usize = 500;

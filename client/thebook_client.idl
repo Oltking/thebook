@@ -16,6 +16,7 @@ type ContractError = enum {
   SlippageExceeded,
   ZeroAmount,
   AgentCallFailed,
+  BookFull,
 };
 
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.

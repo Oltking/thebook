@@ -5,6 +5,7 @@ export function parseContractError(e: unknown): string {
   if (msg.includes('InsufficientAsset')) return 'You don\'t have enough balance of that asset.';
   if (msg.includes('JoinFirst')) return 'You need to join the DEX first. Click "Join DEX" in the header — it\'s a one-time setup.';
   if (msg.includes('NotAuthorized')) return 'You are not authorized to perform this action.';
+  if (msg.includes('NotAdmin')) return 'This action is restricted to the DEX admin.';
   if (msg.includes('OrderNotFound')) return 'This order no longer exists. It may have been filled or cancelled.';
   if (msg.includes('OrderAlreadyDone')) return 'This order has already been filled or cancelled.';
   if (msg.includes('NoLiquidity')) return 'There is not enough liquidity to execute this trade. Try a smaller amount.';
@@ -15,9 +16,9 @@ export function parseContractError(e: unknown): string {
   if (msg.includes('InsufficientLiquidity')) return 'Insufficient liquidity in the pool for this swap. Try a smaller amount.';
   if (msg.includes('SlippageExceeded')) return 'Price moved more than your slippage tolerance. Try increasing slippage or try again.';
   if (msg.includes('ZeroAmount')) return 'Amount must be greater than zero.';
-  if (msg.includes('AgentCallFailed')) return 'Oracle service is unavailable. Please try again later.';
+  if (msg.includes('BookFull')) return 'The order book is full right now. Try a market order or place your limit order again shortly.';
+  if (msg.includes('AgentCallFailed')) return 'The token transfer failed. Make sure you approved the DEX and have enough balance, then try again.';
   if (msg.includes('BadParams')) return 'Invalid parameters provided. Check your inputs and try again.';
-  if (msg.includes('InsufficientOracleCredit')) return 'Oracle budget has been depleted. Please try again later.';
   if (msg.includes('pool') || msg.includes('Pool')) return 'Pool operation failed. Please try again.';
   if (msg.includes('out of gas') || msg.includes('OutOfGas') || msg.includes('ran out of gas')) return 'The transaction ran out of gas. Please try again.';
   if (msg.includes('signAndSend') || msg.includes('signer')) return 'Transaction was rejected by your wallet or the network is congested. Try again.';

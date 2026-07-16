@@ -935,6 +935,67 @@ async fn deposit_unregistered_token_fails() {
     }
 }
 
+// ── Edge-case / robustness tests ──
+
+#[tokio::test]
+async fn deposit_zero_amount_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = orderbook_svc(&program)
+        .pending_call::<ob_io::Deposit>((TokenKind::Btc, 0u64))
+        .await;
+    match result {
+        Ok(Err(ContractError::ZeroAmount)) => {}
+        other => panic!("expected ZeroAmount, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn withdraw_zero_amount_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = orderbook_svc(&program)
+        .pending_call::<ob_io::Withdraw>((TokenKind::Btc, 0u64))
+        .await;
+    match result {
+        Ok(Err(ContractError::ZeroAmount)) => {}
+        other => panic!("expected ZeroAmount, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn place_limit_zero_price_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let result: Result<Result<u64, ContractError>, GtestError> = orderbook_svc(&program)
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 0u64, 1u64))
+        .await;
+    match result {
+        Ok(Err(ContractError::BadParams)) => {}
+        other => panic!("expected BadParams, got {other:?}"),
+    }
+}
+
+/// Non-admin callers cannot re-point a token address (guards the vault backing).
+#[tokio::test]
+async fn set_token_non_admin_fails() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    let result: Result<Result<(), ContractError>, GtestError> = bob
+        .orderbook()
+        .pending_call::<ob_io::SetToken>((TokenKind::Btc, BOB.into()))
+        .await;
+    match result {
+        Ok(Err(ContractError::NotAdmin)) => {}
+        other => panic!("expected NotAdmin, got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn call_agent_service_to_nonexistent_fails() {
     let (env, program) = deploy().await;

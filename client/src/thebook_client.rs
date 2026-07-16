@@ -460,6 +460,7 @@ pub enum ContractError {
     SlippageExceeded,
     ZeroAmount,
     AgentCallFailed,
+    BookFull,
 }
 /// The four balances the DEX custodies, each backed by a real VFT on-chain.
 /// `Usd` is a separate kind because the orderbook denominates in USD but the

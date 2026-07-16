@@ -13,7 +13,7 @@ export class SailsProgram {
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
-      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed"]},
+      ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull"]},
       Asset: {"_enum":["BTC","ETH","VARA"]},
       TokenKind: {"_enum":["Usd","Btc","Eth","Vara"]},
       Side: {"_enum":["Buy","Sell"]},
