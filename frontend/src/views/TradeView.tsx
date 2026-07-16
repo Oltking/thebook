@@ -2,8 +2,9 @@ import { Card } from '../components/ui/Card';
 import styles from './TradeView.module.css';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { usePortfolio } from '../hooks/usePortfolio';
+import { usePositions } from '../hooks/usePositions';
 import { useSails } from '../hooks/useSails';
-import { BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
 import { useViewport } from '../hooks/useViewport';
@@ -13,15 +14,25 @@ import { useMarketData } from '../providers/MarketDataProvider';
 import { TradeChart } from '../components/chart/TradeChart';
 import { web3FromSource } from '@polkadot/extension-dapp';
 
-type PanelId = 'chart' | 'depth' | 'executions' | 'entry';
+type PanelId = 'chart' | 'depth' | 'executions' | 'entry' | 'positions';
+
+const LEVERAGE_OPTIONS = [1, 2, 5, 10, 25];
 
 function fmt(n: number, decimals = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-export function TradeView() {
+interface TradeViewProps {
+  mode?: 'spot' | 'futures';
+}
+
+export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const [asset, setAsset]         = useState<Asset>('BTC');
-  const [orderType, setOrderType] = useState<'Limit' | 'Market'>('Market');
+  /* Futures defaults to Limit — market orders need the book seeded first */
+  const [orderType, setOrderType] = useState<'Limit' | 'Market'>(mode === 'futures' ? 'Limit' : 'Market');
+  const [direction, setDirection] = useState<'Long' | 'Short'>('Long');
+  const [leverage, setLeverage]   = useState(1);
+  const [usdAmount, setUsdAmount] = useState('');
   const [price, setPrice]         = useState('');
   const [mobilePanel, setMobilePanel] = useState<PanelId>('chart');
   const [myOrders, setMyOrders]   = useState<any[]>([]);
@@ -31,11 +42,16 @@ export function TradeView() {
   const [qty, setQty]             = useState('');
   const { isMobile } = useViewport();
 
+  const isSpot    = mode === 'spot';
+  const isFutures = mode === 'futures';
+
   const priceAutoRef = useRef(false);
 
   const { prices, orderbooks, trades, loading: marketLoading, pricesStalePer, pricesLoading, priceHistory, fetchPrice, refreshAll, tickMarket, tickLoading } = useMarketData();
   const { portfolio, refresh: refreshPortfolio } = usePortfolio();
   const { program, account } = useSails();
+  /* Positions scoped to the connected wallet address */
+  const { positions, addPosition, removePosition, unrealizedPnl, liqPrice } = usePositions(account?.decodedAddress);
   const { success, error } = useToast();
   const { txState, executeTx, resetTx } = useTxStatus();
 
@@ -57,6 +73,31 @@ export function TradeView() {
       setPrice(markPrice.toFixed(2)); priceAutoRef.current = true;
     }
   }, [markPrice]);
+
+  const entryPrice = useMemo(() => {
+    if (orderType === 'Market') return markPrice;
+    const p = parseFloat(price);
+    return isNaN(p) || p <= 0 ? markPrice : p;
+  }, [orderType, price, markPrice]);
+
+  /* Actual USD to spend — what the contract deducts from balance */
+  const actualCost = useMemo(() => {
+    const a = parseFloat(usdAmount);
+    return isNaN(a) || a <= 0 ? 0 : a;
+  }, [usdAmount]);
+
+  /* Leverage only scales how the position is labelled and the liq price — not the real cost */
+  const displayNotional = actualCost * leverage;
+
+  const assetQty = entryPrice > 0 ? actualCost / entryPrice : 0;
+  const contractQty = BigInt(Math.round(assetQty * 1e5));
+  const contractPrice = BigInt(Math.max(1, Math.round(entryPrice / 1000)));
+
+  const estimatedLiqPrice = useMemo(() => {
+    if (!entryPrice || leverage <= 1) return 0;
+    const m = 0.9 / leverage;
+    return direction === 'Long' ? entryPrice * (1 - m) : entryPrice * (1 + m);
+  }, [entryPrice, leverage, direction]);
 
   const spotAvailableBalance = useMemo(() => {
     if (!portfolio) return { value: 0n, label: '$0.00', decimals: 2 };
@@ -124,33 +165,89 @@ export function TradeView() {
     finally { setCancellingOid(null); }
   }, [program, account, cancellingOid, error, success, refreshPortfolio, refreshAll, fetchMyOrders]);
 
+  const handleClosePosition = useCallback(async (pos: ReturnType<typeof usePositions>['positions'][0]) => {
+    if (!program || !account) return;
+    const closeSide = pos.direction === 'Long' ? 'Sell' : 'Buy';
+    const q = BigInt(pos.sizeQty);
+    const p = BigInt(Math.max(1, Math.round(markPrice / 1000)));
+    const err = await executeTx(
+      () => program!.orderbook.placeLimit(closeSide as Side, pos.asset as Asset, p, q),
+      account,
+      () => {
+        removePosition(pos.id);
+        refreshPortfolio(); refreshAll();
+        success(`Position closed`);
+        setTimeout(() => { refreshPortfolio(); refreshAll(); }, 2500);
+      }
+    );
+    if (err) error(parseContractError(err));
+  }, [program, account, markPrice, executeTx, removePosition, refreshPortfolio, refreshAll, success, error]);
+
   const handlePlaceOrder = async () => {
     if (!program || !account) return;
     if (pricesStalePer[asset] && !pricesLoading) await fetchPrice(asset);
 
-    if (!qty) { error('Enter a quantity'); return; }
-    const parsedQty = parseFloat(qty);
-    if (isNaN(parsedQty) || parsedQty <= 0) { error('Invalid quantity'); return; }
+    if (isSpot) {
+      if (!qty) { error('Enter a quantity'); return; }
+      const parsedQty = parseFloat(qty);
+      if (isNaN(parsedQty) || parsedQty <= 0) { error('Invalid quantity'); return; }
+      if (orderType === 'Limit') {
+        const p = parseFloat(price);
+        if (isNaN(p) || p <= 0) { error('Enter a valid price'); return; }
+      }
+      const q = BigInt(Math.round(parsedQty * 1e5));
+      const err = await executeTx(
+        () => orderType === 'Market'
+          ? (side === 'Buy' ? program!.orderbook.marketBuy(asset, q) : program!.orderbook.marketSell(asset, q))
+          : program!.orderbook.placeLimit(side, asset, BigInt(Math.max(1, Math.round(parseFloat(price)/1000))), q),
+        account,
+        () => {
+          setQty('');
+          refreshPortfolio(); refreshAll(); fetchMyOrders();
+          success(`${side} order placed!`);
+          setTimeout(() => { refreshPortfolio(); refreshAll(); fetchMyOrders(); }, 2500);
+        }
+      );
+      if (err) error(parseContractError(err));
+      return;
+    }
+
+    if (actualCost <= 0) { error('Enter an amount'); return; }
+    if (assetQty <= 0) { error('Invalid amount'); return; }
     if (orderType === 'Limit') {
       const p = parseFloat(price);
-      if (isNaN(p) || p <= 0) { error('Enter a valid price'); return; }
+      if (isNaN(p) || p <= 0) { error('Enter a valid entry price'); return; }
     }
-    const q = BigInt(Math.round(parsedQty * 1e5));
+
+    /* Guard: warn if cost exceeds available balance */
+    const availableUsd = portfolio ? Number(portfolio.usd) / 100 : 0;
+    if (actualCost > availableUsd) {
+      error(`Insufficient balance. You have $${fmt(availableUsd)} available.`);
+      return;
+    }
+
+    const spotSide: Side = direction === 'Long' ? 'Buy' : 'Sell';
     const err = await executeTx(
       () => orderType === 'Market'
-        ? (side === 'Buy' ? program!.orderbook.marketBuy(asset, q) : program!.orderbook.marketSell(asset, q))
-        : program!.orderbook.placeLimit(side, asset, BigInt(Math.max(1, Math.round(parseFloat(price)/1000))), q),
+        ? (spotSide === 'Buy' ? program!.orderbook.marketBuy(asset, contractQty) : program!.orderbook.marketSell(asset, contractQty))
+        : program!.orderbook.placeLimit(spotSide, asset, contractPrice, contractQty),
       account,
       () => {
-        setQty('');
+        addPosition({
+          id: `${Date.now()}-${asset}`,
+          asset, direction, entryPrice, sizeQty: Number(contractQty), leverage,
+          margin: actualCost,
+          openedAt: new Date().toLocaleTimeString(),
+        });
+        setUsdAmount('');
         refreshPortfolio(); refreshAll(); fetchMyOrders();
-        success(`${side} order placed!`);
+        success(`${direction} opened · ${fmt(assetQty, 5)} ${asset} @ $${fmt(entryPrice)}`);
         setTimeout(() => { refreshPortfolio(); refreshAll(); fetchMyOrders(); }, 2500);
       }
     );
     if (err) {
       const msg = parseContractError(err);
-      error(err.includes('NoLiquidity') || err.includes('NoBuyers') ? `${msg} Use a Limit order or Quick Demo to seed the book.` : msg);
+      error(err.includes('NoLiquidity') || err.includes('NoBuyers') ? `${msg} Use Limit order or Quick Demo to seed the book.` : msg);
     }
   };
 
@@ -194,12 +291,22 @@ export function TradeView() {
 
   const fmtMark = (v: number) => v > 0 ? `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---';
 
-  const mobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
+  const spotMobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
     { id: 'chart',      label: 'Chart',  icon: BarChart3 },
     { id: 'depth',      label: 'Depth',  icon: BookOpen },
     { id: 'executions', label: 'Trades', icon: ListOrdered },
     { id: 'entry',      label: 'Trade',  icon: ShoppingCart },
   ];
+
+  const futuresMobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
+    { id: 'chart',      label: 'Chart',      icon: BarChart3 },
+    { id: 'depth',      label: 'Depth',      icon: BookOpen },
+    { id: 'executions', label: 'Trades',     icon: ListOrdered },
+    { id: 'entry',      label: 'Open',       icon: ShoppingCart },
+    { id: 'positions',  label: 'Positions',  icon: Layers },
+  ];
+
+  const mobilePanels = isSpot ? spotMobilePanels : futuresMobilePanels;
 
   /* ────────────────── PANELS ────────────────── */
 
@@ -224,7 +331,7 @@ export function TradeView() {
               cursor: 'pointer',
             }}
           >
-            {a}
+            {isSpot ? a : `${a}-P`}
           </button>
         ))}
         <button onClick={() => fetchPrice(asset)} disabled={pricesLoading}
@@ -235,7 +342,9 @@ export function TradeView() {
       {/* Row 2: stats all in one horizontal line */}
       <div style={{ display: 'flex', flexDirection: 'row', gap: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Oracle</span>
+          <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {isSpot ? 'Oracle' : 'Mark'}
+          </span>
           <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: change24h >= 0 ? 'var(--buy-green)' : 'var(--sell-red)', whiteSpace: 'nowrap' }}>
             {fmtMark(markPrice)}
           </span>
@@ -246,6 +355,12 @@ export function TradeView() {
             {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
           </span>
         </div>
+        {isFutures && (
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fund</span>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--buy-green)', whiteSpace: 'nowrap' }}>+0.01%</span>
+          </div>
+        )}
         {lastExecPrice > 0n && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
             <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fill</span>
@@ -259,19 +374,19 @@ export function TradeView() {
   );
 
   const chartPanel = (
-    <Card title={`${asset} / USD`} className={styles.fullHeight}>
+    <Card title={isSpot ? `${asset} / USD` : `${asset}-PERP`} className={styles.fullHeight}>
       {isMobile ? mobileChartHeader : (
         <div className={styles.headerStats}>
           <div className={styles.assetSelector}>
             {(['BTC', 'ETH', 'VARA'] as Asset[]).map(a => (
               <button key={a} className={asset === a ? styles.activeAsset : ''} onClick={() => setAsset(a)}>
-                {a}
+                {isSpot ? a : `${a}-PERP`}
               </button>
             ))}
           </div>
           <div className={styles.marketStats}>
             <div className={styles.statItem}>
-              <span className={styles.statLabel}>Oracle Price</span>
+              <span className={styles.statLabel}>{isSpot ? 'Oracle Price' : 'Mark Price'}</span>
               <span className={`${styles.statValue} ${change24h >= 0 ? styles.positive : styles.negative}`}>
                 {fmtMark(markPrice)}
               </span>
@@ -282,6 +397,12 @@ export function TradeView() {
                 {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
               </span>
             </div>
+            {isFutures && (
+              <div className={styles.statItem}>
+                <span className={styles.statLabel}>Funding Rate</span>
+                <span className={`${styles.statValue} ${styles.positive}`}>+0.0100%</span>
+              </div>
+            )}
             {lastExecPrice > 0n && (
               <div className={styles.statItem}>
                 <span className={styles.statLabel}>Last Fill</span>
@@ -356,7 +477,128 @@ export function TradeView() {
     </Card>
   );
 
-  const entryPanel = (
+  const maxMargin = portfolio ? Number(portfolio.usd) / 100 : 0;
+
+  const futuriesEntryPanel = (
+    <Card title="Open Position">
+      <div className={styles.directionBtns}>
+        <button className={`${styles.longBtn} ${direction === 'Long' ? '' : styles.inactive}`}
+          onClick={() => setDirection('Long')}>
+          <TrendingUp size={15} /> Long
+        </button>
+        <button className={`${styles.shortBtn} ${direction === 'Short' ? '' : styles.inactive}`}
+          onClick={() => setDirection('Short')}>
+          <TrendingDown size={15} /> Short
+        </button>
+      </div>
+
+      <div className={styles.orderTypeTabs}>
+        <button className={orderType === 'Market' ? styles.activeType : ''} onClick={() => setOrderType('Market')}>Market</button>
+        <button className={orderType === 'Limit' ? styles.activeType : ''} onClick={() => setOrderType('Limit')}>Limit</button>
+      </div>
+
+      <div className={styles.leverageRow}>
+        <span className={styles.leverageLabel}>Leverage</span>
+        <div className={styles.leverageBtns}>
+          {LEVERAGE_OPTIONS.map(lev => (
+            <button key={lev} className={`${styles.leverageBtn} ${leverage === lev ? styles.leverageActive : ''}`}
+              onClick={() => setLeverage(lev)}>{lev}x</button>
+          ))}
+        </div>
+      </div>
+
+      {orderType === 'Limit' && (
+        <div className={styles.formGroup}>
+          <label>Entry Price (USD)</label>
+          <input type="number" value={price}
+            onChange={e => { setPrice(e.target.value); priceAutoRef.current = false; }} placeholder="0.00" />
+          {markPrice > 0 && (
+            <div className={styles.inputHint}
+              onClick={() => { setPrice(markPrice.toFixed(2)); priceAutoRef.current = true; }}>
+              Mark: {fmtMark(markPrice)}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={styles.formGroup}>
+        <label>Margin (USD)</label>
+        <input type="number" value={usdAmount} onChange={e => setUsdAmount(e.target.value)} placeholder="100" />
+        {account && portfolio && maxMargin > 0 && (
+          <div className={styles.balanceTag} onClick={() => setUsdAmount(maxMargin.toFixed(2))}>
+            Available: ${fmt(maxMargin)}
+          </div>
+        )}
+        {account && portfolio && maxMargin > 0 && (
+          <div className={styles.presets}>
+            {[25, 50, 75, 100].map(pct => (
+              <button key={pct} className={styles.presetBtn}
+                onClick={() => setUsdAmount(((maxMargin * pct) / 100).toFixed(2))}>{pct}%</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {actualCost > 0 && entryPrice > 0 && (
+        <div className={styles.positionPreview}>
+          <div className={styles.previewRow}>
+            <span>USD Cost</span>
+            <span className={styles.positive}>${fmt(actualCost)}</span>
+          </div>
+          <div className={styles.previewRow}>
+            <span>Size</span>
+            <span>{fmt(assetQty, 5)} {asset}</span>
+          </div>
+          {leverage > 1 && (
+            <div className={styles.previewRow}>
+              <span>Display Notional</span>
+              <span>${fmt(displayNotional)}</span>
+            </div>
+          )}
+          <div className={styles.previewRow}>
+            <span>Mark Price</span>
+            <span>{fmtMark(markPrice)}</span>
+          </div>
+          {estimatedLiqPrice > 0 && (
+            <div className={styles.previewRow}>
+              <span>Est. Liq. Price</span>
+              <span className={styles.negative}>{fmtMark(estimatedLiqPrice)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        className={direction === 'Long' ? styles.submitLong : styles.submitShort}
+        onClick={handlePlaceOrder}
+        disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed'}
+      >
+        {txState.stage === 'broadcasting' || txState.stage === 'confirming'
+          ? 'Processing...'
+          : `Open ${direction} ${leverage > 1 ? `${leverage}x ` : ''}${asset}`}
+      </button>
+      {!account && <div className={styles.connectWarn}>Connect wallet to trade</div>}
+
+      {account && myOrders.length > 0 && (
+        <div className={styles.myOrders}>
+          <div className={styles.myOrdersHeader}>Pending Orders ({myOrders.length})</div>
+          {myOrders.slice(0, 5).map((o: any, i: number) => (
+            <div key={i} className={styles.myOrderRow}>
+              <span className={o[1] === 'Buy' ? styles.buyText : styles.askText}>{String(o[1])} {String(o[2])}</span>
+              <span className={styles.myOrderPrice}>${(Number(o[3])*1000).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+              <span className={styles.myOrderQty}>{(Number(o[4])/1e5).toFixed(4)}</span>
+              <button className={styles.cancelSmBtn} onClick={() => handleCancelOrder(o[0])}
+                disabled={cancellingOid === Number(o[0])}>
+                {cancellingOid === Number(o[0]) ? '…' : '✕'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
+  const spotEntryPanel = (
     <Card title="Place Order">
       <div className={styles.spotSideButtons}>
         <button
@@ -436,6 +678,51 @@ export function TradeView() {
     </Card>
   );
 
+  const entryPanel = isSpot ? spotEntryPanel : futuriesEntryPanel;
+
+  const positionsPanel = (
+    <Card title="My Positions" className={styles.fullHeight}>
+      {positions.length === 0 ? (
+        <EmptyState title="No Open Positions" description="Open a Long or Short to see it here." />
+      ) : (
+        <div className={styles.positionsList}>
+          {positions.map(pos => {
+            const pnl = unrealizedPnl(pos, markPrice);
+            const liq = liqPrice(pos);
+            const pnlPct = pos.margin > 0 ? (pnl / pos.margin) * 100 : 0;
+            return (
+              <div key={pos.id} className={styles.positionCard}>
+                <div className={styles.positionHeader}>
+                  <span className={pos.direction === 'Long' ? styles.longTag : styles.shortTag}>
+                    {pos.direction === 'Long' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {pos.asset} {pos.direction} {pos.leverage > 1 ? `${pos.leverage}x` : ''}
+                  </span>
+                  <button className={styles.closePositionBtn}
+                    onClick={() => handleClosePosition(pos)}
+                    disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed'}>
+                    Close
+                  </button>
+                </div>
+                <div className={styles.positionGrid}>
+                  <div><span className={styles.posLabel}>Entry</span><span>${fmt(pos.entryPrice)}</span></div>
+                  <div><span className={styles.posLabel}>Mark</span><span>{fmtMark(markPrice)}</span></div>
+                  <div><span className={styles.posLabel}>Liq.</span><span className={styles.negative}>${fmt(liq)}</span></div>
+                  <div><span className={styles.posLabel}>Size</span><span>{(pos.sizeQty/1e5).toFixed(4)} {pos.asset}</span></div>
+                  <div><span className={styles.posLabel}>PnL</span>
+                    <span className={pnl >= 0 ? styles.positive : styles.negative}>
+                      {pnl >= 0 ? '+' : ''}${fmt(Math.abs(pnl))} ({pnl >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                    </span>
+                  </div>
+                  <div><span className={styles.posLabel}>Since</span><span>{pos.openedAt}</span></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+
   const executionsPanel = (
     <Card title="Executions" className={styles.fullHeight}>
       <div className={styles.obHeader}><span>Price</span><span>Size</span><span>Time</span></div>
@@ -461,21 +748,24 @@ export function TradeView() {
         <div className={styles.mobileTabs}>
           {mobilePanels.map(p => {
             const Icon = p.icon;
+            const hasBadge = p.id === 'positions' && positions.length > 0;
             return (
               <button key={p.id}
                 className={`${styles.mobileTab} ${mobilePanel === p.id ? styles.mobileTabActive : ''}`}
                 onClick={() => setMobilePanel(p.id)}>
                 <Icon size={16} />
                 <span>{p.label}</span>
+                {hasBadge && <span className={styles.badge}>{positions.length}</span>}
               </button>
             );
           })}
         </div>
-        <div className={`${styles.mobilePanel} ${mobilePanel !== 'entry' ? styles.mobilePanelFill : ''}`}>
+        <div className={`${styles.mobilePanel} ${mobilePanel !== 'entry' && mobilePanel !== 'positions' ? styles.mobilePanelFill : ''}`}>
           {mobilePanel === 'chart'      && chartPanel}
           {mobilePanel === 'depth'      && depthPanel}
           {mobilePanel === 'executions' && executionsPanel}
           {mobilePanel === 'entry'      && entryPanel}
+          {mobilePanel === 'positions'  && isFutures && positionsPanel}
         </div>
         <TxStatusOverlay state={txState} onClose={resetTx} />
       </div>
@@ -484,9 +774,22 @@ export function TradeView() {
 
   return (
     <div className={styles.grid}>
+      {isFutures && (
+        <div style={{
+          gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', marginBottom: 'var(--space-sm)', borderRadius: 8,
+          fontSize: 12, fontWeight: 600,
+          background: 'rgba(243,167,46,0.12)', border: '1px solid rgba(243,167,46,0.4)', color: '#f3a72e',
+        }}>
+          ⚠ Simulated — leverage &amp; positions are illustrative only. Orders execute as real spot trades on-chain; there are no on-chain perpetuals.
+        </div>
+      )}
       <div className={styles.chartArea}>{chartPanel}</div>
       <div className={styles.orderbookArea}>{depthPanel}</div>
-      <div className={styles.entryArea}>{entryPanel}</div>
+      <div className={styles.entryArea}>
+        {entryPanel}
+        {isFutures && <div style={{ marginTop: 'var(--space-sm)' }}>{positionsPanel}</div>}
+      </div>
       <div className={styles.tradesArea}>{executionsPanel}</div>
       <TxStatusOverlay state={txState} onClose={resetTx} />
     </div>
