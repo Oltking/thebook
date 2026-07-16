@@ -85,6 +85,28 @@ account** by calling `Orderbook/SetToken(kind, token_program_id)` for each
 `TokenKind` (`Usd`, `Btc`, `Eth`, `Vara`) — via the IDEA portal or a script. Verify
 with the `Orderbook/GetTokens` query; deposits are rejected until a kind is set.
 
+## 2.6. Turn on perpetual futures (mark-price keeper + house reserve)
+
+Perps settle PnL and liquidations at an **on-chain mark price** and pay profits
+from a **house reserve**, so two admin steps bring them online:
+
+1. **Seed the reserve.** As the admin, deposit USD (see the vault flow), then call
+   `Perps/FundReserve(amount)` (amount in USD cents) to move some of your USD into
+   the house reserve that pays trader profits. Query it with `Perps/GetReserve`.
+2. **Run the price keeper.** It pushes live BTC/ETH/VARA prices on-chain every few
+   seconds via `Perps/SetMarkPrices` (admin-only):
+
+   ```bash
+   cd frontend
+   VARA_SEED="<admin seed>" \
+   PROGRAM_ID=<DEX program id> \
+   NODE_ADDRESS=wss://testnet.vara.network \
+   npm run keeper
+   ```
+
+Without a published mark price, opening a position returns `NoMarkPrice`; without a
+funded reserve, winning closes are capped at what the reserve can pay.
+
 ## 3. Wire the frontend to the new program
 
 ```bash
@@ -130,8 +152,10 @@ Variables instead of committing `.env`.
 5. Create an AMM pool, add liquidity, and swap.
 6. Withdraw an asset from the Portfolio and confirm the wrapped tokens return to
    your wallet.
+7. With the keeper running and the reserve funded (§2.6), open a Long on the
+   Futures tab, watch PnL move with the mark, and close it.
 
-If all six succeed, the testnet deployment is good.
+If all seven succeed, the testnet deployment is good.
 
 ## Data & indexing
 

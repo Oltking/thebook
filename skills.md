@@ -50,6 +50,24 @@ Automated market maker with constant product formula.
 | `ListPools` | Query (no gas) | List all pools |
 | `GetPool(id)` | Query (no gas) | Get pool state |
 
+### Perps Service
+
+On-chain perpetual futures with isolated margin, settled at a keeper-published mark
+price against a house reserve. Prices/margin are in **USD cents**; size is in asset
+units (`1 asset = 100000`).
+
+| Method | Call pattern | Description |
+|---|---|---|
+| `OpenPosition` | `Perps/OpenPosition(asset, is_long, margin, leverage)` | Open/add an isolated position (leverage ≤ 20) |
+| `ClosePosition` | `Perps/ClosePosition(asset)` | Close at mark; returns `(payout, pnl)` cents |
+| `Liquidate` | `Perps/Liquidate(owner, asset)` | Permissionless close when equity ≤ maintenance |
+| `GetPositions(owner)` | Query (no gas) | `(asset, is_long, size, entry, margin, leverage, pnl)` rows |
+| `GetMarkPrices` | Query (no gas) | `(btc, eth, vara)` mark prices in cents |
+| `GetLiqPrice(owner, asset)` | Query (no gas) | Liquidation price in cents |
+
+Mark prices are pushed by the admin keeper (`SetMarkPrices`); PnL is paid from /
+absorbed by the admin-seeded reserve, so no balance is ever minted.
+
 ## How to call (cross-program)
 
 Use the Sails route encoding pattern. Every Sails program echoes the route in the reply, so use `SailsReply<T>` to decode:
