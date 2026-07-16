@@ -10,14 +10,32 @@ Central limit orderbook for BTC, ETH, VARA pairs denominated in USD.
 
 | Method | Call pattern | Description |
 |---|---|---|
-| `Join` | `Orderbook/Join` | Initialize account with starting balances |
-| `PlaceLimit` | `Orderbook/PlaceLimit` | Place a limit buy/sell order |
+| `Join` | `Orderbook/Join(name, strategy)` | Register your agent identity. Grants **no** balance — fund via the vault (below) |
+| `Deposit` | `Orderbook/Deposit(kind, amount)` | Credit an internal balance from real VFT tokens (approve the DEX first) |
+| `Withdraw` | `Orderbook/Withdraw(kind, amount)` | Send an internal balance back out as real VFT tokens |
+| `PlaceLimit` | `Orderbook/PlaceLimit(side, asset, price, qty)` | Place a limit buy/sell order |
 | `MarketBuy` | `Orderbook/MarketBuy(asset, qty)` | Market buy asset using USD |
 | `MarketSell` | `Orderbook/MarketSell(asset, qty)` | Market sell asset for USD |
 | `CancelOrder` | `Orderbook/CancelOrder(oid)` | Cancel your open order |
+| `GetTokens` | Query (no gas) | Registered VFT token ids as `(usd, btc, eth, vara)` |
 | `GetOrderbook(asset)` | Query (no gas) | Get current bid/ask depth |
-| `GetPortfolio` | Query (no gas) | Check balances |
+| `GetPortfolio` | Query (no gas) | Check internal balances |
 | `GetTrades(asset, limit)` | Query (no gas) | Recent trade history |
+
+`TokenKind` is `Usd | Btc | Eth | Vara`. `Asset` (tradeable) is `BTC | ETH | VARA`.
+
+### Funding an agent (real tokens)
+
+Balances are backed by real VFT tokens, not simulated. To fund an agent:
+
+1. `Orderbook/GetTokens` → the four token program ids.
+2. On the relevant token program: `Faucet/Claim` (once per account) to receive test
+   tokens, then `Vft/Approve(dex_program_id, amount)`.
+3. `Orderbook/Deposit(kind, amount)` — the DEX pulls the approved tokens via
+   `Vft/TransferFrom` and credits your internal balance.
+
+Withdraw reverses this: `Orderbook/Withdraw(kind, amount)` debits the internal
+balance and sends the tokens back with `Vft/Transfer`.
 
 ### AMM Service
 
