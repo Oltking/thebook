@@ -5,7 +5,9 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-  background: var(--bg-color);
+  background: rgba(9, 10, 20, 0.6);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
   position: sticky;
   top: var(--announcement-height, 0px);
   z-index: 100;
@@ -14,13 +16,17 @@
 
 .logo {
   font-size: var(--font-size-xl);
-  font-weight: 700;
-  letter-spacing: -0.5px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   white-space: nowrap;
 }
 
 .accent {
-  color: var(--primary);
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .menuBtn {
@@ -67,21 +73,24 @@
 .offline { background-color: var(--sell-red); }
 
 .connectButton {
-  background: var(--primary);
-  color: #000;
+  background: var(--accent-gradient);
+  color: #fff;
   padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-weight: 700;
   font-size: var(--font-size-sm);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  transition: opacity var(--transition-fast);
+  box-shadow: var(--glow-accent);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast);
   white-space: nowrap;
 }
 
 .connectButton:hover {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: var(--glow-accent), 0 8px 24px rgba(139, 92, 246, 0.4);
 }
 
 .accountInfo {
@@ -113,16 +122,23 @@
 }
 
 .joinButton {
-  background: var(--buy-green);
+  background: var(--accent-gradient);
   color: #fff;
   padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-weight: 700;
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   font-size: var(--font-size-sm);
   white-space: nowrap;
+  box-shadow: var(--glow-accent);
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.joinButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .joinButton:disabled {

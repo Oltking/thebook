@@ -1,14 +1,32 @@
 :root {
-  /* ── Colors ── */
-  --bg-color: #0b0e11;
-  --card-bg: #1e2329;
-  --card-bg-hover: #2b3139;
-  --border-color: #363c4e;
-  --text-main: #eaecef;
-  --text-secondary: #848e9c;
-  --primary: #00b272;
-  --buy-green: #0ecb81;
-  --sell-red: #f6465d;
+  /* ── Aurora neon-glass palette ── */
+  --bg-color: #07080f;
+  --bg-elevated: #0e1020;
+  /* Glass surfaces: translucent so the aurora backdrop glows through (blur added
+     on the surface itself). --card-solid is for places that must be opaque. */
+  --card-bg: rgba(20, 22, 38, 0.55);
+  --card-bg-hover: rgba(32, 35, 58, 0.72);
+  --card-solid: #12142400;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(139, 92, 246, 0.22);
+  --text-main: #eef0fb;
+  --text-secondary: #99a0bd;
+
+  /* Brand accent: violet → teal. --primary drives active/hover states app-wide. */
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --primary: #8b5cf6;
+  --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #6366f1 45%, #22d3ee 100%);
+  --accent-soft: rgba(139, 92, 246, 0.14);
+
+  --buy-green: #24e39b;
+  --sell-red: #ff5d78;
+
+  /* ── Glow & elevation ── */
+  --glow-accent: 0 0 28px rgba(139, 92, 246, 0.35);
+  --glow-teal: 0 0 24px rgba(34, 211, 238, 0.3);
+  --shadow-card: 0 16px 44px rgba(3, 4, 12, 0.55);
+  --shadow-pop: 0 24px 60px rgba(3, 4, 12, 0.7);
 
   /* ── Layout ── */
   --announcement-height: 32px;
@@ -37,9 +55,10 @@
   --font-size-2xl: clamp(24px, 1.5rem + 0.5vw, 32px);
 
   /* ── Border Radius ── */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
 
   /* ── Transitions ── */
   --transition-fast: 150ms ease;
@@ -72,10 +91,18 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   background-color: var(--bg-color);
+  /* Fixed aurora glows behind the whole app — the glass surfaces sit over this. */
+  background-image:
+    radial-gradient(55rem 55rem at 12% -12%, rgba(139, 92, 246, 0.20), transparent 60%),
+    radial-gradient(48rem 48rem at 105% 0%, rgba(34, 211, 238, 0.14), transparent 55%),
+    radial-gradient(46rem 46rem at 50% 118%, rgba(99, 102, 241, 0.13), transparent 62%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  letter-spacing: -0.01em;
   overflow-x: hidden;
   max-width: 100vw;
 }
@@ -97,14 +124,17 @@ button {
 input, select, textarea {
   font-family: inherit;
   font-size: inherit;
-  background: none;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   color: var(--text-main);
   outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 input:focus, select:focus, textarea:focus {
-  border-color: var(--primary);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 #root {
@@ -132,14 +162,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: rgba(139, 92, 246, 0.35);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: rgba(139, 92, 246, 0.6);
   background-clip: padding-box;
 }
 
@@ -149,8 +179,23 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Brand text selection ── */
 ::selection {
-  background: rgba(14, 203, 129, 0.28);
-  color: var(--text-main);
+  background: rgba(139, 92, 246, 0.35);
+  color: #fff;
+}
+
+/* ── Aurora utility classes ── */
+.gradient-text {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.glass {
+  background: var(--card-bg);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--border-color);
 }
 
 /* ── Utility Classes ── */

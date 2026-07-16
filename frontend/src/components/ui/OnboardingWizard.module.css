@@ -11,9 +11,12 @@
 }
 
 .modal {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(40rem 20rem at 50% -10%, rgba(139, 92, 246, 0.18), transparent 70%),
+    var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop), var(--glow-accent);
   max-width: 460px;
   width: 100%;
   position: relative;
@@ -151,19 +154,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  background: var(--primary);
-  color: #000;
+  background: var(--accent-gradient);
+  color: #fff;
   padding: var(--space-sm) var(--space-xl);
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 48px;
-  transition: opacity var(--transition-fast);
+  box-shadow: var(--glow-accent);
+  transition: transform var(--transition-fast), filter var(--transition-fast);
   margin-top: var(--space-sm);
 }
 
 .primaryBtn:hover {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .primaryBtn:disabled {

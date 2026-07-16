@@ -37,18 +37,20 @@
 }
 
 .primaryBtn {
-  background: var(--primary);
-  color: #000;
+  background: var(--accent-gradient);
+  color: #fff;
   padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-md);
-  font-weight: 600;
+  font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  transition: opacity var(--transition-fast);
+  box-shadow: var(--glow-accent);
+  transition: transform var(--transition-fast), filter var(--transition-fast);
 }
 
 .primaryBtn:hover {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .secondaryBtn {

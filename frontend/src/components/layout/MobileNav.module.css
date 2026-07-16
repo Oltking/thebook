@@ -14,9 +14,9 @@
   padding-top: var(--space-xs);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   /* blur backdrop for a premium feel */
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  background: rgba(30, 35, 41, 0.94);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  background: rgba(9, 10, 20, 0.82);
 }
 
 .item {
@@ -40,7 +40,11 @@
 }
 
 .active {
-  color: var(--primary);
+  color: var(--accent);
+}
+
+.active svg {
+  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.6));
 }
 
 .label {
