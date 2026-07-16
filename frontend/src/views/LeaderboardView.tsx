@@ -70,16 +70,16 @@ export function LeaderboardView() {
   const shortAddr = (id: string) => `${id.slice(0, 6)}...${id.slice(-4)}`;
 
   const rankIcon = (i: number) => {
-    if (i === 0) return <Trophy size={18} color="var(--primary)" />;
-    if (i === 1) return <Medal size={18} color="var(--text-secondary)" />;
-    if (i === 2) return <Award size={18} color="var(--sell-red)" />;
+    if (i === 0) return <Trophy size={18} color="#f5c451" style={{ filter: 'drop-shadow(0 0 6px rgba(245,196,81,0.55))' }} />;
+    if (i === 1) return <Medal size={18} color="#c7cede" />;
+    if (i === 2) return <Award size={18} color="#d98a52" />;
     return null;
   };
 
   if (ranked.length === 0) {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 16 }}>Leaderboard</h1>
+        <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 16 }}>Leaderboard</h1>
         <Card title="Top Agents">
           <EmptyState
             title={marketLoading ? 'Loading...' : 'No Traders Yet'}
@@ -93,7 +93,7 @@ export function LeaderboardView() {
   if (isMobile) {
     return (
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 16 }}>Leaderboard</h1>
+        <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 16 }}>Leaderboard</h1>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {ranked.map((l, i) => (
             <Card key={l.id}>
@@ -121,7 +121,7 @@ export function LeaderboardView() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 24 }}>Leaderboard</h1>
+      <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 24 }}>Leaderboard</h1>
       <Card title="Top Agents">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>

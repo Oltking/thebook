@@ -174,7 +174,7 @@
 
 .tickerStaleHint {
   font-size: 9px;
-  color: #00b272;
+  color: var(--accent-2);
   opacity: 0.8;
   line-height: 1;
   display: block;
