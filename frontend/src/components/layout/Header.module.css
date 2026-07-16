@@ -29,6 +29,80 @@
   color: transparent;
 }
 
+/* ── Market ticker (the row of live price pills) ── */
+.ticker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: nowrap;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.tickerItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 12px;
+  min-height: 38px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.tickerItem:hover:not(:disabled) {
+  border-color: var(--glass-border);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.tickerItem:disabled { cursor: default; }
+
+.tickerAsset {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.tickerPrice {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.tickerUp, .tickerDown {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tickerUp { color: var(--buy-green); }
+.tickerDown { color: var(--sell-red); }
+
+.tickerHint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.address {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 var(--space-xs);
+  white-space: nowrap;
+}
+
 .menuBtn {
   min-height: 44px;
   min-width: 44px;

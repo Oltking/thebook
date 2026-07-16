@@ -8,6 +8,8 @@ import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
 import { findOpportunities, type Opportunity, type StrategyName } from '../lib/opportunities';
 import { fetchAgentBrief, type BriefResult } from '../lib/agentBrief';
+import { Card } from '../components/ui/Card';
+import { EmptyState } from '../components/ui/EmptyState';
 
 const STRATEGY_META: Record<StrategyName, { label: string; icon: typeof Crosshair }> = {
   ArbitrageHunter: { label: 'Arbitrage Hunter', icon: Crosshair },
@@ -114,13 +116,27 @@ export function AgentView() {
   const addrShort = account ? `${account.address.slice(0, 6)}…${account.address.slice(-4)}` : '';
 
   if (!account) {
-    return <div style={{ padding: 32, opacity: 0.7 }}>Connect a wallet to view your agent.</div>;
+    return (
+      <div style={{ maxWidth: 520, margin: '10vh auto 0', padding: '0 16px' }}>
+        <Card title="Your Agent">
+          <EmptyState
+            title="Connect your wallet"
+            description="Connect a wallet to view your trading agent, its live P&L, and the opportunities it has surfaced."
+          />
+        </Card>
+      </div>
+    );
   }
   if (!portfolio || !identity) {
     return (
-      <div style={{ padding: 32, opacity: 0.8 }}>
-        <Bot size={28} style={{ marginBottom: 8 }} />
-        <p>No agent yet. Click <strong>Create Agent</strong> in the header to deploy one.</p>
+      <div style={{ maxWidth: 520, margin: '10vh auto 0', padding: '0 16px' }}>
+        <Card title="Your Agent">
+          <EmptyState
+            title="No agent yet"
+            description="Deploy a trading agent to start scanning the orderbook, AMM pools, and live prices for opportunities."
+            action={{ label: 'Create Agent', onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')) }}
+          />
+        </Card>
       </div>
     );
   }

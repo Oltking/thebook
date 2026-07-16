@@ -4,9 +4,9 @@ import styles from './AnnouncementBar.module.css';
 import { NETWORK_NAME, PROGRAM_ID_CONFIGURED } from '../../consts';
 
 const LIVE_TEXT =
-  `🚀 thebookdex is live on ${NETWORK_NAME} · Trade BTC · ETH · VARA on an on-chain orderbook + AMM · ` +
-  'Balances are testnet simulation — no real funds at risk · ' +
-  'Powered by Vara Network on Gear Protocol · Click Join to get started · ';
+  `🚀 thebookdex is live on ${NETWORK_NAME} · Spot orderbook · AMM pools · on-chain perpetuals · ` +
+  'Trade BTC · ETH · VARA with real, withdrawable testnet tokens · ' +
+  'Powered by Vara Network on Gear Protocol · Create your agent to get started · ';
 
 const UNCONFIGURED_TEXT =
   '⚠ Program ID is not configured — set VITE_PROGRAM_ID in your environment (see DEPLOY.md). ' +

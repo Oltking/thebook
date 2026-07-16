@@ -433,9 +433,18 @@
   font-weight: 600;
 }
 
+/* Unselected side of a Buy/Sell (or Long/Short) toggle → clean ghost, not a
+   muddy desaturated fill. */
 .inactive {
-  opacity: 0.35;
-  filter: saturate(0.3);
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: inset 0 0 0 1px var(--border-color) !important;
+  filter: none !important;
+}
+
+.inactive:hover {
+  color: var(--text-main) !important;
+  box-shadow: inset 0 0 0 1px var(--glass-border) !important;
 }
 
 .submitBuy, .submitSell {
@@ -923,24 +932,26 @@
 }
 
 .spotBuyBtn {
-  background: var(--buy-green);
-  color: #fff;
+  background: linear-gradient(135deg, #24e39b, #16b981);
+  color: #04120c;
   padding: var(--space-sm);
-  border-radius: var(--radius-sm);
-  font-weight: 700;
+  border-radius: var(--radius-md);
+  font-weight: 800;
   font-size: var(--font-size-sm);
   min-height: 44px;
+  box-shadow: 0 0 18px rgba(36, 227, 155, 0.22);
   transition: all var(--transition-fast);
 }
 
 .spotSellBtn {
-  background: var(--sell-red);
+  background: linear-gradient(135deg, #ff5d78, #f43f5e);
   color: #fff;
   padding: var(--space-sm);
-  border-radius: var(--radius-sm);
-  font-weight: 700;
+  border-radius: var(--radius-md);
+  font-weight: 800;
   font-size: var(--font-size-sm);
   min-height: 44px;
+  box-shadow: 0 0 18px rgba(255, 93, 120, 0.22);
   transition: all var(--transition-fast);
 }
 
