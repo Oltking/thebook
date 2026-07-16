@@ -4,6 +4,7 @@ import { SkeletonCard } from './components/ui/Skeleton';
 import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
+const HomeView = lazy(() => import('./views/HomeView').then(m => ({ default: m.HomeView })));
 const AgentView = lazy(() => import('./views/AgentView').then(m => ({ default: m.AgentView })));
 const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m.TradeView })));
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
@@ -20,11 +21,13 @@ function PageLoader() {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState('trade');
+  const [activeTab, setActiveTab] = useState('home');
   const { showWizard, completeOnboarding, dismissWizard } = useOnboarding();
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'home':
+        return <HomeView onNavigate={setActiveTab} />;
       case 'agent':
         return <AgentView />;
       case 'trade':
@@ -40,7 +43,7 @@ function App() {
       case 'portfolio':
         return <PortfolioView />;
       default:
-        return <TradeView mode="spot" />;
+        return <HomeView onNavigate={setActiveTab} />;
     }
   };
 

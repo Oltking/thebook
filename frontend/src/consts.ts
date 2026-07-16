@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowLeftRight, Droplets, User, BarChart2, Trophy, Bot } from 'lucide-react';
+import { TrendingUp, ArrowLeftRight, Droplets, User, BarChart2, Trophy, Bot, Sparkles } from 'lucide-react';
 
 // Network + program are environment-driven so the same build can target testnet,
 // mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
@@ -51,6 +51,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  { id: 'home',      label: 'Home',      icon: Sparkles },
   { id: 'agent',     label: 'Agent',     icon: Bot },
   { id: 'trade',     label: 'Trade',     icon: BarChart2 },
   { id: 'futures',   label: 'Futures',   icon: TrendingUp },

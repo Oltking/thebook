@@ -14,47 +14,52 @@
 
 .nav {
   flex: 1;
-  padding: var(--space-md) var(--space-xs);
+  padding: var(--space-md) var(--space-sm);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .navItem {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-sm);
+  gap: 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 11px;
-  transition: all var(--transition-fast);
+  font-weight: 500;
+  font-size: 14px;
+  transition: color var(--transition-fast), background var(--transition-fast);
   white-space: nowrap;
-  min-height: 38px;
+  min-height: 42px;
   width: 100%;
   text-align: left;
   overflow: hidden;
 }
+
+.navItem svg { flex-shrink: 0; opacity: 0.85; }
 
 .navItem:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-main);
 }
 
-.active {
+.active,
+.active:hover {
   background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 600;
 }
+.active svg { opacity: 1; }
 
 /* Green rail marking the active item. */
 .active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 18%;
-  bottom: 18%;
+  top: 22%;
+  bottom: 22%;
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
@@ -62,31 +67,38 @@
 
 .footer {
   padding: var(--space-sm);
-  border-top: 1px solid var(--border-color);
+}
+
+.footer > .marketStatus:first-child {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+.footer > .marketStatus:last-child {
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .marketStatus {
   background: var(--card-bg);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  padding: 9px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .label {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .value {
   font-weight: 600;
-  color: var(--buy-green);
-  font-size: 10px;
+  color: var(--text-main);
+  font-size: 12px;
   font-family: var(--font-mono);
 }
 

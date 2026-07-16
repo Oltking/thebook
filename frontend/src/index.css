@@ -36,8 +36,8 @@
 
   /* ── Layout ── */
   --announcement-height: 32px;
-  --sidebar-width: 120px;
-  --sidebar-collapsed-width: 60px;
+  --sidebar-width: 216px;
+  --sidebar-collapsed-width: 64px;
   --header-height: 64px;
   --bottom-nav-height: 64px;
 

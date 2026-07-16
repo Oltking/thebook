@@ -31,6 +31,9 @@ export function SwapView() {
   const { success, error } = useToast();
   const { txState, executeTx, resetTx } = useTxStatus();
 
+  // The token pickers always offer every asset so they never render empty; whether
+  // a route actually exists is handled separately by `activePool`.
+  const ALL_ASSETS: Asset[] = ['BTC', 'ETH', 'VARA'];
   const availAssets = useMemo(
     () => [...new Set(pools.flatMap(p => [p.asset_a, p.asset_b]))],
     [pools]
@@ -126,7 +129,7 @@ export function SwapView() {
                 aria-label="Amount to swap from" />
               <select value={fromAsset} onChange={e => setFromAsset(e.target.value as Asset)}
                 className={styles.assetSelect} aria-label="From asset">
-                {availAssets.filter(a => a !== toAsset).map(a => <option key={a}>{a}</option>)}
+                {ALL_ASSETS.filter(a => a !== toAsset).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>
@@ -144,7 +147,7 @@ export function SwapView() {
                 aria-label="Estimated amount to receive" />
               <select value={toAsset} onChange={e => setToAsset(e.target.value as Asset)}
                 className={styles.assetSelect} aria-label="To asset">
-                {availAssets.filter(a => a !== fromAsset).map(a => <option key={a}>{a}</option>)}
+                {ALL_ASSETS.filter(a => a !== fromAsset).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>

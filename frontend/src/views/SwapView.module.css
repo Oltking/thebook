@@ -43,6 +43,8 @@
 
 .amountInput {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   font-size: var(--font-size-2xl);
   font-weight: 600;
   border: none;
@@ -57,26 +59,32 @@
 }
 
 .assetSelect {
-  background: var(--card-bg);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  font-size: var(--font-size-sm);
+  background-color: var(--card-solid);
+  padding: 10px 34px 10px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: var(--font-size-base);
+  letter-spacing: 0.01em;
   border: 1px solid var(--border-strong);
   color: var(--text-main);
-  min-height: 44px;
+  min-height: 46px;
+  min-width: 96px;
+  flex-shrink: 0;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  padding-right: calc(var(--space-sm) + 14px);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2300d38a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300d38a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat: no-repeat;
-  background-position: right var(--space-xs) center;
+  background-position: right 12px center;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .assetSelect:hover {
   border-color: var(--accent);
+  background-color: var(--card-bg-hover);
 }
+.assetSelect:focus { border-color: var(--accent); }
+.assetSelect option { background: var(--bg-elevated); color: var(--text-main); }
 
 .divider {
   display: flex;
