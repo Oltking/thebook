@@ -16,6 +16,34 @@ export const PROGRAM_ID_CONFIGURED =
 
 export const NETWORK_NAME = import.meta.env.VITE_NETWORK_NAME ?? 'Vara Testnet';
 
+const ZERO_ADDR =
+  '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+
+// The four wrapped test tokens the DEX custodies. Each is a separate VFT program
+// deployed from `token/`; users claim from its faucet then deposit into the DEX.
+// Program IDs are environment-driven so the same build works across deployments.
+export interface TokenMeta {
+  kind: TokenKind;
+  label: string;
+  symbol: string;
+  decimals: number;
+  programId: `0x${string}`;
+}
+
+export const TOKENS: TokenMeta[] = [
+  { kind: 'Usd', label: 'US Dollar', symbol: 'wUSDC', decimals: 6, programId: (import.meta.env.VITE_TOKEN_USD ?? ZERO_ADDR) as `0x${string}` },
+  { kind: 'Btc', label: 'Bitcoin', symbol: 'wBTC', decimals: 6, programId: (import.meta.env.VITE_TOKEN_BTC ?? ZERO_ADDR) as `0x${string}` },
+  { kind: 'Eth', label: 'Ethereum', symbol: 'wETH', decimals: 6, programId: (import.meta.env.VITE_TOKEN_ETH ?? ZERO_ADDR) as `0x${string}` },
+  { kind: 'Vara', label: 'Vara', symbol: 'wVARA', decimals: 6, programId: (import.meta.env.VITE_TOKEN_VARA ?? ZERO_ADDR) as `0x${string}` },
+];
+
+export const TOKENS_CONFIGURED = TOKENS.every((t) => t.programId !== ZERO_ADDR);
+
+// Optional gasless backend that issues/points to a voucher sponsoring the user's
+// claim + deposit gas. When unset, the UI falls back to the user paying gas.
+export const GASLESS_BACKEND =
+  (import.meta.env.VITE_GASLESS_BACKEND ?? '') as string;
+
 export interface NavItem {
   id: string;
   label: string;

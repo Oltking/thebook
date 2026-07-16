@@ -14,8 +14,8 @@ export class SailsProgram {
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
       ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed"]},
-      PriceFeed: {"symbol":"String","price_usd_micro":"u64","change_24h_bps":"i32","market_cap_usd":"u64","volume_24h_usd":"u64","updated_at_block":"u32"},
       Asset: {"_enum":["BTC","ETH","VARA"]},
+      TokenKind: {"_enum":["Usd","Btc","Eth","Vara"]},
       Side: {"_enum":["Buy","Sell"]},
       AgentStrategy: {"_enum":["ArbitrageHunter","MarketMaker","Momentum"]},
       LeaderEntry: {"id":"[u8;32]","name":"String","strategy":"AgentStrategy","usd":"u64","net_worth":"u64"},
@@ -205,18 +205,74 @@ export class Orderbook {
     );
   }
 
-  public pushOracleData(oracle: ActorId, data: number | string | bigint): TransactionBuilder<null> {
+  public deposit(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<null>(
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
       this._program.api,
       this._program.registry,
       'send_message',
       'Orderbook',
-      'PushOracleData',
-      [oracle, data],
-      '([u8;32], u64)',
-      'Null',
+      'Deposit',
+      [kind, amount],
+      '(TokenKind, u64)',
+      'Result<u64, ContractError>',
       this._program.programId,
+    );
+  }
+
+  public withdraw(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Orderbook',
+      'Withdraw',
+      [kind, amount],
+      '(TokenKind, u64)',
+      'Result<u64, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  public setToken(kind: TokenKind, address: ActorId): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Orderbook',
+      'SetToken',
+      [kind, address],
+      '(TokenKind, [u8;32])',
+      'Result<Null, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  public getToken(kind: TokenKind): QueryBuilder<ActorId> {
+    return new QueryBuilder<ActorId>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetToken',
+      kind,
+      'TokenKind',
+      '[u8;32]',
+    );
+  }
+
+  public getTokens(): QueryBuilder<[ActorId, ActorId, ActorId, ActorId]> {
+    return new QueryBuilder<[ActorId, ActorId, ActorId, ActorId]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetTokens',
+      null,
+      null,
+      '([u8;32], [u8;32], [u8;32], [u8;32])',
     );
   }
 
@@ -245,21 +301,6 @@ export class Orderbook {
       'StartAutopilot',
       null,
       null,
-      'Null',
-      this._program.programId,
-    );
-  }
-
-  public subscribeOracle(oracle: ActorId, label: string): TransactionBuilder<null> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<null>(
-      this._program.api,
-      this._program.registry,
-      'send_message',
-      'Orderbook',
-      'SubscribeOracle',
-      [oracle, label],
-      '([u8;32], String)',
       'Null',
       this._program.programId,
     );
@@ -332,8 +373,8 @@ export class Orderbook {
     );
   }
 
-  public getStatus(): QueryBuilder<[number, number | string | bigint, number, boolean, number, number]> {
-    return new QueryBuilder<[number, number | string | bigint, number, boolean, number, number]>(
+  public getStatus(): QueryBuilder<[number, number | string | bigint, number, boolean, number]> {
+    return new QueryBuilder<[number, number | string | bigint, number, boolean, number]>(
       this._program.api,
       this._program.registry,
       this._program.programId,
@@ -341,7 +382,7 @@ export class Orderbook {
       'GetStatus',
       null,
       null,
-      '(u32, u64, u32, bool, u32, u32)',
+      '(u32, u64, u32, bool, u32)',
     );
   }
 

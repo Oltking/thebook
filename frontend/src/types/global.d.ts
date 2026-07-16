@@ -3,6 +3,7 @@ import { ActorId } from 'sails-js';
 declare global {
   export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed";
 
+  // Off-chain price snapshot (sourced from Binance/CoinGecko, not the contract).
   export interface PriceFeed {
     symbol: string;
     price_usd_micro: number | string | bigint;
@@ -13,6 +14,8 @@ declare global {
   }
 
   export type Asset = "BTC" | "ETH" | "VARA";
+
+  export type TokenKind = "Usd" | "Btc" | "Eth" | "Vara";
 
   export type Side = "Buy" | "Sell";
 
