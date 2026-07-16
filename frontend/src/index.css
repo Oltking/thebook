@@ -1,32 +1,38 @@
 :root {
-  /* ── Aurora neon-glass palette ── */
-  --bg-color: #07080f;
-  --bg-elevated: #0e1020;
-  /* Glass surfaces: translucent so the aurora backdrop glows through (blur added
-     on the surface itself). --card-solid is for places that must be opaque. */
-  --card-bg: rgba(20, 22, 38, 0.55);
-  --card-bg-hover: rgba(32, 35, 58, 0.72);
-  --card-solid: #12142400;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(139, 92, 246, 0.22);
-  --text-main: #eef0fb;
-  --text-secondary: #99a0bd;
+  /* ── "Terminal Green": black canvas · white type · one green accent ──
+     Flat and high-contrast like a premium exchange terminal. No glass blur,
+     no gradients-as-decoration, no colored glows. */
+  --bg-color: #0a0b0d;
+  --bg-elevated: #101216;
+  /* Flat, OPAQUE panel surfaces (no backdrop blur). */
+  --card-bg: #121417;
+  --card-bg-hover: #181b20;
+  --card-solid: #121417;
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --glass-border: rgba(0, 211, 138, 0.35);
+  --text-main: #f3f5f7;
+  --text-secondary: #868e9c;
+  --text-dim: #5a616d;
 
-  /* Brand accent: violet → teal. --primary drives active/hover states app-wide. */
-  --accent: #8b5cf6;
-  --accent-2: #22d3ee;
-  --primary: #8b5cf6;
-  --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #6366f1 45%, #22d3ee 100%);
-  --accent-soft: rgba(139, 92, 246, 0.14);
+  /* Brand accent: a single confident trading green. --primary drives active/
+     hover states app-wide. Green buttons take NEAR-BLACK text for contrast. */
+  --accent: #00d38a;
+  --accent-2: #00d38a;
+  --primary: #00d38a;
+  --accent-hover: #14e39a;
+  --on-accent: #04140d;
+  --accent-gradient: linear-gradient(180deg, #00e094 0%, #00c47e 100%);
+  --accent-soft: rgba(0, 211, 138, 0.12);
 
-  --buy-green: #24e39b;
-  --sell-red: #ff5d78;
+  --buy-green: #00d38a;
+  --sell-red: #ff4d5e;
+  --sell-soft: rgba(255, 77, 94, 0.12);
 
-  /* ── Glow & elevation ── */
-  --glow-accent: 0 0 28px rgba(139, 92, 246, 0.35);
-  --glow-teal: 0 0 24px rgba(34, 211, 238, 0.3);
-  --shadow-card: 0 16px 44px rgba(3, 4, 12, 0.55);
-  --shadow-pop: 0 24px 60px rgba(3, 4, 12, 0.7);
+  /* ── Elevation (subtle, neutral — no color glow) ── */
+  --glow-accent: none;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
 
   /* ── Layout ── */
   --announcement-height: 32px;
@@ -54,11 +60,11 @@
   --font-size-xl: clamp(20px, 1.25rem + 0.3vw, 24px);
   --font-size-2xl: clamp(24px, 1.5rem + 0.5vw, 32px);
 
-  /* ── Border Radius ── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
+  /* ── Border Radius (sharp, terminal-like) ── */
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   /* ── Transitions ── */
   --transition-fast: 150ms ease;
@@ -91,11 +97,8 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   background-color: var(--bg-color);
-  /* Fixed aurora glows behind the whole app — the glass surfaces sit over this. */
-  background-image:
-    radial-gradient(55rem 55rem at 12% -12%, rgba(139, 92, 246, 0.20), transparent 60%),
-    radial-gradient(48rem 48rem at 105% 0%, rgba(34, 211, 238, 0.14), transparent 55%),
-    radial-gradient(46rem 46rem at 50% 118%, rgba(99, 102, 241, 0.13), transparent 62%);
+  /* One faint green wash at the very top — a whisper of brand, not a light show. */
+  background-image: radial-gradient(60rem 32rem at 50% -18%, rgba(0, 211, 138, 0.06), transparent 70%);
   background-attachment: fixed;
   background-repeat: no-repeat;
   color: var(--text-main);
@@ -162,14 +165,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.6);
+  background: rgba(0, 211, 138, 0.5);
   background-clip: padding-box;
 }
 
@@ -179,22 +182,16 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Brand text selection ── */
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(0, 211, 138, 0.3);
   color: #fff;
 }
 
-/* ── Aurora utility classes ── */
+/* ── Utility classes ── */
 .gradient-text {
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  color: var(--accent);
 }
 .glass {
   background: var(--card-bg);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
   border: 1px solid var(--border-color);
 }
 

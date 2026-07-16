@@ -96,8 +96,8 @@
 }
 
 .mobileTabActive {
-  background: var(--primary) !important;
-  color: #000 !important;
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
   font-weight: 600;
 }
 
@@ -198,9 +198,10 @@
 }
 
 .buyBtn {
-  background: var(--buy-green);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
+.buyBtn:hover { background: var(--accent-hover); }
 
 .sellBtn {
   background: var(--sell-red);
@@ -270,8 +271,8 @@
 }
 
 .presetBtn:hover {
-  background: var(--primary);
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .totalInfo {
@@ -450,21 +451,20 @@
 .submitBuy, .submitSell {
   width: 100%;
   padding: var(--space-md);
-  color: #04120c;
   border-radius: var(--radius-md);
   font-weight: 800;
   font-size: var(--font-size-base);
   letter-spacing: 0.02em;
-  transition: transform var(--transition-fast), filter var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast);
   min-height: 48px;
 }
 
-.submitBuy:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 8px 26px rgba(36, 227, 155, 0.4); }
-.submitSell:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 8px 26px rgba(255, 93, 120, 0.4); }
+.submitBuy:hover:not(:disabled) { background: var(--accent-hover); }
+.submitSell:hover:not(:disabled) { background: var(--sell-red); filter: brightness(1.1); }
 .submitBuy:disabled, .submitSell:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.submitBuy { background: linear-gradient(135deg, #24e39b, #16b981); box-shadow: 0 0 20px rgba(36, 227, 155, 0.25); }
-.submitSell { background: linear-gradient(135deg, #ff5d78, #f43f5e); color: #fff; box-shadow: 0 0 20px rgba(255, 93, 120, 0.25); }
+.submitBuy { background: var(--accent); color: var(--on-accent); }
+.submitSell { background: var(--sell-red); color: #fff; }
 
 .orderTypeTabs {
   display: grid;
@@ -484,8 +484,8 @@
 }
 
 .orderTypeTabs .activeType {
-  background: var(--primary);
-  color: #000;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -528,12 +528,12 @@
 
 .ask::before {
   right: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 93, 120, 0.22));
+  background: rgba(255, 77, 94, 0.18);
 }
 
 .bid::before {
   left: 0;
-  background: linear-gradient(270deg, transparent, rgba(36, 227, 155, 0.22));
+  background: rgba(0, 211, 138, 0.18);
 }
 
 .obRow:hover {
@@ -672,16 +672,16 @@
   width: 100%;
   padding: var(--space-sm);
   border-radius: var(--radius-md);
-  background: var(--primary);
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   min-height: 38px;
   cursor: pointer;
-  transition: filter var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
-.demoBtn:hover:not(:disabled) { filter: brightness(1.1); }
+.demoBtn:hover:not(:disabled) { background: var(--accent-hover); }
 .demoBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .seedBtn {
@@ -739,8 +739,9 @@
   min-height: 44px;
 }
 
-.longBtn  { background: var(--buy-green);  color: #fff; }
+.longBtn  { background: var(--accent);     color: var(--on-accent); }
 .shortBtn { background: var(--sell-red);   color: #fff; }
+.longBtn:hover  { background: var(--accent-hover); }
 
 /* ── Leverage ── */
 .leverageRow {
@@ -780,9 +781,9 @@
 .leverageBtn:hover { color: var(--primary); border-color: var(--primary); }
 
 .leverageActive {
-  background: rgba(0,178,114,0.15) !important;
-  color: var(--primary) !important;
-  border-color: var(--primary) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
 }
 
 /* ── Position preview ── */
@@ -816,14 +817,15 @@
   font-weight: 800;
   font-size: var(--font-size-base);
   letter-spacing: 0.02em;
-  transition: transform var(--transition-fast), filter var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast);
   min-height: 48px;
   margin-bottom: var(--space-sm);
 }
 
-.submitLong  { background: linear-gradient(135deg, #24e39b, #16b981); color: #04120c; box-shadow: 0 0 20px rgba(36, 227, 155, 0.25); }
-.submitShort { background: linear-gradient(135deg, #ff5d78, #f43f5e); box-shadow: 0 0 20px rgba(255, 93, 120, 0.25); }
-.submitLong:hover:not(:disabled), .submitShort:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.submitLong  { background: var(--accent); color: var(--on-accent); }
+.submitShort { background: var(--sell-red); color: #fff; }
+.submitLong:hover:not(:disabled)  { background: var(--accent-hover); }
+.submitShort:hover:not(:disabled) { filter: brightness(1.1); }
 .submitLong:disabled, .submitShort:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Positions list ── */
@@ -932,27 +934,27 @@
 }
 
 .spotBuyBtn {
-  background: linear-gradient(135deg, #24e39b, #16b981);
-  color: #04120c;
+  background: var(--accent);
+  color: var(--on-accent);
   padding: var(--space-sm);
   border-radius: var(--radius-md);
   font-weight: 800;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  box-shadow: 0 0 18px rgba(36, 227, 155, 0.22);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
+.spotBuyBtn:hover:not(:disabled) { background: var(--accent-hover); }
+
 .spotSellBtn {
-  background: linear-gradient(135deg, #ff5d78, #f43f5e);
+  background: var(--sell-red);
   color: #fff;
   padding: var(--space-sm);
   border-radius: var(--radius-md);
   font-weight: 800;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  box-shadow: 0 0 18px rgba(255, 93, 120, 0.22);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
 .modeTag {

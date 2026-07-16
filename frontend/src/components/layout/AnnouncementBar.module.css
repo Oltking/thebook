@@ -2,10 +2,9 @@
   height: var(--announcement-height, 28px);
   width: 100%;
   max-width: 100%;
-  background: linear-gradient(90deg, #2a1a5e 0%, #5b3fd6 30%, #22d3ee 50%, #5b3fd6 70%, #2a1a5e 100%);
-  background-size: 300% 100%;
-  animation: bgMove 12s ease infinite;
-  color: #eef4ff;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
   display: flex;

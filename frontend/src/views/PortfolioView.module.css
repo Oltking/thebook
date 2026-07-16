@@ -85,11 +85,7 @@
 .netWorthValue {
   font-size: var(--font-size-2xl);
   font-weight: 800;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  color: var(--accent);
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
   margin-bottom: var(--space-xs);

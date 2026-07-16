@@ -147,8 +147,8 @@ export function AgentView() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         <Panel>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'rgba(108,92,231,0.15)' }}>
-              <StratIcon size={26} style={{ color: '#6c5ce7' }} />
+            <div style={{ width: 48, height: 48, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--accent-soft)' }}>
+              <StratIcon size={26} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
               <div style={{ fontSize: 18, fontWeight: 700 }}>{identity.name || 'Unnamed Agent'}</div>
@@ -175,7 +175,7 @@ export function AgentView() {
       <Panel>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: brief ? 12 : 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Sparkles size={18} style={{ color: '#6c5ce7' }} />
+            <Sparkles size={18} style={{ color: 'var(--accent)' }} />
             <strong style={{ fontSize: 15 }}>Agent Brief</strong>
             {brief && (
               <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
@@ -184,7 +184,7 @@ export function AgentView() {
             )}
           </div>
           <button onClick={analyze} disabled={briefLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#6c5ce7', color: '#fff', fontWeight: 600, cursor: briefLoading ? 'default' : 'pointer', opacity: briefLoading ? 0.6 : 1 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 600, cursor: briefLoading ? 'default' : 'pointer', opacity: briefLoading ? 0.6 : 1 }}>
             {briefLoading ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />}
             {briefLoading ? 'Thinking…' : brief ? 'Re-analyze' : 'Ask the agent'}
           </button>
@@ -198,7 +198,7 @@ export function AgentView() {
       <Panel>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Activity size={18} style={{ color: '#6c5ce7' }} />
+            <Activity size={18} style={{ color: 'var(--accent)' }} />
             <strong style={{ fontSize: 15 }}>Opportunity Feed</strong>
             <span style={{ fontSize: 12, opacity: 0.6 }}>{opportunities.length} signal{opportunities.length === 1 ? '' : 's'}</span>
           </div>
@@ -230,7 +230,7 @@ export function AgentView() {
                 <button
                   onClick={() => execute(opp)}
                   disabled={executingId !== null}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: '#6c5ce7', color: '#fff', fontWeight: 600, fontSize: 13, cursor: executingId ? 'default' : 'pointer', opacity: executingId && executingId !== opp.id ? 0.5 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 600, fontSize: 13, cursor: executingId ? 'default' : 'pointer', opacity: executingId && executingId !== opp.id ? 0.5 : 1 }}>
                   <Zap size={14} /> {executingId === opp.id ? 'Executing…' : 'Execute'}
                 </button>
               </div>

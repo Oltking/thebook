@@ -23,6 +23,7 @@
   background: var(--card-bg-hover);
   padding: var(--space-md);
   border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
   margin-bottom: var(--space-2xs);
 }
 
@@ -46,18 +47,35 @@
   font-weight: 600;
   border: none;
   background: none;
+  color: var(--text-main);
   min-height: 44px;
   font-family: var(--font-mono);
+}
+
+.amountInput::placeholder {
+  color: var(--text-dim);
 }
 
 .assetSelect {
   background: var(--card-bg);
   padding: var(--space-xs) var(--space-sm);
-  border-radius: 20px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-size: var(--font-size-sm);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
+  color: var(--text-main);
   min-height: 44px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: calc(var(--space-sm) + 14px);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2300d38a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right var(--space-xs) center;
+}
+
+.assetSelect:hover {
+  border-color: var(--accent);
 }
 
 .divider {
@@ -103,8 +121,8 @@
 }
 
 .slippageActive {
-  background: var(--primary);
-  color: #000;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .slippageInput {
@@ -135,12 +153,19 @@
 .swapBtn {
   width: 100%;
   padding: var(--space-md);
-  background: var(--primary);
-  color: #000;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
   border-radius: var(--radius-lg);
   font-weight: 700;
   font-size: var(--font-size-lg);
   margin-top: var(--space-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
+}
+
+.swapBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .swapBtn:disabled {

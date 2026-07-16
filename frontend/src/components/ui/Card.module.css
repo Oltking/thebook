@@ -1,31 +1,17 @@
 .card {
   position: relative;
   background: var(--card-bg);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
-}
-
-/* A faint gradient hairline along the top edge reads as light catching glass. */
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.5), rgba(34, 211, 238, 0.4), transparent);
-  opacity: 0.7;
-  pointer-events: none;
+  transition: border-color var(--transition-base);
 }
 
 .card:hover {
-  border-color: var(--glass-border);
-  box-shadow: var(--shadow-card), var(--glow-accent);
+  border-color: var(--border-strong);
 }
 
 .header {

@@ -221,12 +221,12 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
                       style={{
                         display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
                         padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-                        border: `1px solid ${active ? 'var(--accent, #6c5ce7)' : 'var(--border, #2a2a3a)'}`,
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border, #2a2a3a)'}`,
                         background: active ? 'var(--accent-soft, rgba(108,92,231,0.12))' : 'transparent',
                         color: 'inherit',
                       }}
                     >
-                      <Icon size={22} style={{ flexShrink: 0, color: active ? 'var(--accent, #6c5ce7)' : 'inherit' }} />
+                      <Icon size={22} style={{ flexShrink: 0, color: active ? 'var(--accent)' : 'inherit' }} />
                       <span style={{ display: 'flex', flexDirection: 'column' }}>
                         <strong style={{ fontSize: 14 }}>{s.label}</strong>
                         <span style={{ fontSize: 12, opacity: 0.7 }}>{s.desc}</span>

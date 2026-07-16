@@ -21,20 +21,20 @@
 }
 
 .createBtn {
-  background: var(--accent-gradient);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  box-shadow: var(--glow-accent);
-  transition: transform var(--transition-fast), filter var(--transition-fast);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
 }
 
 .createBtn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
+  background: var(--accent-hover);
 }
 
 .createForm {
@@ -57,13 +57,19 @@
 
 .createForm button {
   padding: var(--space-sm) var(--space-lg);
-  background: var(--accent-gradient);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  box-shadow: var(--glow-accent);
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
+}
+
+.createForm button:hover {
+  background: var(--accent-hover);
 }
 
 /* ── Desktop: Table ── */
@@ -247,13 +253,19 @@
 .btnPrimary {
   flex: 1;
   padding: var(--space-sm) var(--space-md);
-  background: var(--accent-gradient);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 44px;
-  box-shadow: var(--glow-accent);
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .btnPrimary:disabled {
@@ -287,8 +299,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(38,166,154,0.12);
-  color: var(--buy-green, #26a69a);
+  background: var(--accent-soft);
+  color: var(--accent);
   border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: var(--font-size-xs);

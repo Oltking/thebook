@@ -356,7 +356,7 @@ export function PortfolioView() {
               style={{
                 width: '100%', padding: '12px 14px', fontSize: 15, fontWeight: 600,
                 border: 'none', borderRadius: 10, cursor: vaultBusy ? 'default' : 'pointer',
-                background: 'var(--accent, #6c5ce7)', color: '#fff',
+                background: 'var(--accent)', color: 'var(--on-accent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >

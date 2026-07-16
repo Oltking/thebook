@@ -11,12 +11,10 @@
 }
 
 .modal {
-  background:
-    radial-gradient(40rem 20rem at 50% -10%, rgba(139, 92, 246, 0.18), transparent 70%),
-    var(--bg-elevated);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-pop), var(--glow-accent);
+  box-shadow: var(--shadow-pop);
   max-width: 460px;
   width: 100%;
   position: relative;
@@ -154,21 +152,19 @@
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  background: var(--accent-gradient);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   padding: var(--space-sm) var(--space-xl);
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: var(--font-size-sm);
   min-height: 48px;
-  box-shadow: var(--glow-accent);
-  transition: transform var(--transition-fast), filter var(--transition-fast);
+  transition: background var(--transition-fast);
   margin-top: var(--space-sm);
 }
 
 .primaryBtn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
+  background: var(--accent-hover);
 }
 
 .primaryBtn:disabled {
