@@ -68,7 +68,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     priceAutoRef.current = false;
     if (markPrice > 0) { setPrice(markPrice.toFixed(2)); priceAutoRef.current = true; }
     else setPrice('');
-  }, [asset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [asset]);
 
   useEffect(() => {
     if (markPrice > 0 && !priceAutoRef.current) {

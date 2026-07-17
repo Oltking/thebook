@@ -25,7 +25,7 @@ export function AccountSelector({ onSelect, onClose }: AccountSelectorProps) {
           return;
         }
         setAccounts(all);
-      } catch (e) {
+      } catch {
         setError('Failed to detect wallet. Try refreshing the page.');
       } finally {
         setLoading(false);
