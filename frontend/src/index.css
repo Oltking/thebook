@@ -1,33 +1,39 @@
 :root {
-  /* ── "Terminal Green": black canvas · white type · one green accent ──
-     Flat and high-contrast like a premium exchange terminal. No glass blur,
-     no gradients-as-decoration, no colored glows. */
-  --bg-color: #0a0b0d;
-  --bg-elevated: #101216;
-  /* Flat, OPAQUE panel surfaces (no backdrop blur). */
-  --card-bg: #121417;
-  --card-bg-hover: #181b20;
-  --card-solid: #121417;
-  --border-color: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.13);
-  --glass-border: rgba(0, 211, 138, 0.35);
-  --text-main: #f3f5f7;
-  --text-secondary: #868e9c;
-  --text-dim: #5a616d;
+  /* ── Vara brand system · light-first, mint accent, wavy grounds ──
+     Palette lifted from the Vara press kit: signature mint #02FBC1, deep
+     teal-ink #031720, off-white grounds. Flat panels, one confident accent.
+     Every color token is redefined per theme below (media + data-theme). */
 
-  /* Brand accent: a single confident trading green. --primary drives active/
-     hover states app-wide. Green buttons take NEAR-BLACK text for contrast. */
-  --accent: #00d38a;
-  --accent-2: #00d38a;
-  --primary: #00d38a;
-  --accent-hover: #14e39a;
-  --on-accent: #04140d;
-  --accent-gradient: linear-gradient(180deg, #00e094 0%, #00c47e 100%);
-  --accent-soft: rgba(0, 211, 138, 0.12);
+  /* LIGHT (default) — white/off-white Vara grounds */
+  --bg-color: #F7FBFA;
+  --bg-elevated: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --card-bg-hover: #F3F5F7;
+  --card-solid: #FFFFFF;
+  --border-color: #E4EAEC;
+  --border-strong: #D3DCDF;
+  --glass-border: rgba(2, 251, 193, 0.5);
+  --text-main: #031720;
+  --text-secondary: #58696E;
+  --text-dim: #9CACB1;
 
-  --buy-green: #00d38a;
-  --sell-red: #ff4d5e;
-  --sell-soft: rgba(255, 77, 94, 0.12);
+  /* Accent: --accent is the readable interactive color (works as text AND as a
+     button ground with --on-accent text). --accent-bright is the vivid Vara
+     mint reserved for fills, waves and decorative brand moments. */
+  --accent: #009E77;
+  --accent-2: #02FBC1;
+  --accent-bright: #02FBC1;
+  --primary: #009E77;
+  --accent-hover: #007D5D;
+  --on-accent: #FFFFFF;
+  /* Light: readable green gradient so white button text keeps contrast.
+     (Dark mode overrides this back to bright mint with dark --on-accent.) */
+  --accent-gradient: linear-gradient(180deg, #00B489 0%, #008E68 100%);
+  --accent-soft: rgba(2, 251, 193, 0.16);
+
+  --buy-green: #009E77;
+  --sell-red: #E24339;
+  --sell-soft: rgba(226, 67, 57, 0.12);
 
   /* ── Elevation (subtle, neutral — no color glow) ── */
   --glow-accent: none;
@@ -78,6 +84,66 @@
   /* --bp-xl: 1280px; */
 }
 
+/* ── DARK theme (Vara deep teal-ink) ──
+   Applied when the OS prefers dark AND the user hasn't forced a theme, or when
+   the user explicitly picks dark via [data-theme="dark"]. Mint reads great on
+   this ground, so --accent becomes the bright mint here. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-color: #04121A;
+    --bg-elevated: #071E28;
+    --card-bg: #071E28;
+    --card-bg-hover: #0A2530;
+    --card-solid: #071E28;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --glass-border: rgba(2, 251, 193, 0.35);
+    --text-main: #F3F5F7;
+    --text-secondary: #9CACB1;
+    --text-dim: #5F757E;
+
+    --accent: #02FBC1;
+    --primary: #02FBC1;
+    --accent-hover: #05EAB1;
+    --on-accent: #031720;
+    --accent-soft: rgba(2, 251, 193, 0.13);
+    --accent-gradient: linear-gradient(180deg, #02FBC1 0%, #05EAB1 100%);
+
+    --buy-green: #14E0A1;
+    --sell-red: #FF5A67;
+    --sell-soft: rgba(255, 90, 103, 0.14);
+
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45);
+    --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Explicit user choice always wins over the OS preference, both directions. */
+:root[data-theme="dark"] {
+  --bg-color: #04121A;
+  --bg-elevated: #071E28;
+  --card-bg: #071E28;
+  --card-bg-hover: #0A2530;
+  --card-solid: #071E28;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --glass-border: rgba(2, 251, 193, 0.35);
+  --text-main: #F3F5F7;
+  --text-secondary: #9CACB1;
+  --text-dim: #5F757E;
+  --accent: #02FBC1;
+  --primary: #02FBC1;
+  --accent-hover: #05EAB1;
+  --on-accent: #031720;
+  --accent-soft: rgba(2, 251, 193, 0.13);
+  --accent-gradient: linear-gradient(180deg, #02FBC1 0%, #05EAB1 100%);
+  --buy-green: #14E0A1;
+  --sell-red: #FF5A67;
+  --sell-soft: rgba(255, 90, 103, 0.14);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
 *,
 *::before,
 *::after {
@@ -97,10 +163,6 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   background-color: var(--bg-color);
-  /* One faint green wash at the very top — a whisper of brand, not a light show. */
-  background-image: radial-gradient(60rem 32rem at 50% -18%, rgba(0, 211, 138, 0.06), transparent 70%);
-  background-attachment: fixed;
-  background-repeat: no-repeat;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -109,6 +171,25 @@ body {
   overflow-x: hidden;
   max-width: 100vw;
 }
+
+/* ── Signature Vara wavy contour lines — a faint fixed brand backdrop ──
+   Inline SVG data URI of flowing bezier waves in mint; sits behind everything
+   at low opacity so it reads on both white and deep-teal grounds. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: cover;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='900' viewBox='0 0 1440 900'%3E%3Cg fill='none' stroke='%2302FBC1' stroke-opacity='0.22' stroke-width='1.4'%3E%3Cpath d='M-40 160 C 300 60 560 280 820 170 S 1280 60 1520 200'/%3E%3Cpath d='M-40 260 C 300 160 560 380 820 270 S 1280 160 1520 300'/%3E%3Cpath d='M-40 360 C 300 260 560 480 820 370 S 1280 260 1520 400'/%3E%3Cpath d='M-40 470 C 320 360 580 590 840 470 S 1300 350 1520 510'/%3E%3Cpath d='M-40 590 C 300 490 560 700 820 600 S 1280 480 1520 620'/%3E%3Cpath d='M-40 710 C 320 610 580 820 840 710 S 1300 600 1520 750'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Keep app content above the wave backdrop. */
+#root { position: relative; z-index: 1; }
 
 a {
   color: inherit;
@@ -127,7 +208,7 @@ button {
 input, select, textarea {
   font-family: inherit;
   font-size: inherit;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--card-bg-hover);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-main);
@@ -172,7 +253,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 211, 138, 0.5);
+  background: rgba(2, 251, 193, 0.6);
   background-clip: padding-box;
 }
 
@@ -182,8 +263,8 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Brand text selection ── */
 ::selection {
-  background: rgba(0, 211, 138, 0.3);
-  color: #fff;
+  background: rgba(2, 251, 193, 0.35);
+  color: var(--text-main);
 }
 
 /* ── Utility classes ── */

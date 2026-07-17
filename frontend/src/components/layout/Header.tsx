@@ -3,9 +3,10 @@ import { web3Accounts, web3Enable } from '@polkadot/extension-dapp';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
-import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
+import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut, Sun, Moon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import styles from './Header.module.css';
+import { useTheme } from '../../hooks/useTheme';
 import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from '../ui/Toast';
 import { useViewport } from '../../hooks/useViewport';
@@ -24,6 +25,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { error } = useToast();
   const { isMobile } = useViewport();
   const { prices } = useMarketData();
+  const { theme, toggle } = useTheme();
   const [showAccountSelector, setShowAccountSelector] = useState(false);
 
   const handleConnect = useCallback(async () => {
@@ -110,6 +112,15 @@ export function Header({ onMenuClick }: HeaderProps) {
         )}
 
         <div className={styles.actions}>
+          <button
+            onClick={toggle}
+            className={styles.iconBtn}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
           {account && !isMobile && (
             <div className={styles.balanceInfo}>
               <span className={styles.balanceLabel}>Balance:</span>
