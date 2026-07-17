@@ -134,12 +134,17 @@ export function PortfolioView() {
       <div className={styles.emptyState}>
         <Card title="My Portfolio">
           <EmptyState
-            title={loading ? 'Loading...' : 'Welcome to thebookdex'}
-            description={loading ? 'Loading portfolio...' : 'Join the DEX to start trading and tracking your balances.'}
-            action={!loading && account ? {
+            title={loading ? 'Loading...' : account ? 'Welcome to thebookdex' : 'Connect to get started'}
+            description={loading ? 'Loading portfolio...' : account
+              ? 'Create your agent to start trading and tracking your balances.'
+              : 'Connect a wallet to trade, provide liquidity, and track your balances.'}
+            action={loading ? undefined : account ? {
               label: 'Create Agent',
               onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')),
-            } : undefined}
+            } : {
+              label: 'Connect wallet',
+              onClick: () => window.dispatchEvent(new Event('thebookdex:connect')),
+            }}
           />
         </Card>
       </div>

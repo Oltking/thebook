@@ -263,7 +263,13 @@
   transition: background var(--transition-fast);
 }
 .oppExec:hover:not(:disabled) { background: var(--accent-hover); }
-.oppExec:disabled { opacity: 0.45; cursor: default; }
+/* Disabled reads as a clear ghost, not a washed-out solid button. */
+.oppExec:disabled {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  cursor: not-allowed;
+}
 
 /* ── Quick actions ── */
 .quick {

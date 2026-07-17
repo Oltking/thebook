@@ -116,6 +116,42 @@ async function fetchCoinGeckoDirect(): Promise<Partial<MarketPrices>> {
   } catch { return {}; }
 }
 
+/** VARA-only, resilient: CoinGecko first, CryptoCompare as a fallback so a
+ *  rate-limited or slow CoinGecko never leaves the ticker showing "—". */
+async function fetchVaraOnly(): Promise<PriceFeed | null> {
+  const make = (usd: number, chg: number): PriceFeed => ({
+    symbol: 'VARA',
+    price_usd_micro: Math.round(usd * 1_000_000),
+    change_24h_bps: Math.round(chg * 100),
+    market_cap_usd: 0, volume_24h_usd: 0, updated_at_block: 0,
+  });
+  // 1 · CoinGecko
+  try {
+    const res = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=vara-network&vs_currencies=usd&include_24hr_change=true',
+      { signal: AbortSignal.timeout(8_000) },
+    );
+    if (res.ok) {
+      const d = await res.json() as Record<string, { usd?: number; usd_24h_change?: number }>;
+      const v = d['vara-network'];
+      if (v?.usd) return make(v.usd, v.usd_24h_change ?? 0);
+    }
+  } catch { /* fall through */ }
+  // 2 · CryptoCompare fallback
+  try {
+    const res = await fetch(
+      'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=VARA&tsyms=USD',
+      { signal: AbortSignal.timeout(8_000) },
+    );
+    if (res.ok) {
+      const d = await res.json() as { RAW?: { VARA?: { USD?: { PRICE?: number; CHANGEPCT24HOUR?: number } } } };
+      const raw = d.RAW?.VARA?.USD;
+      if (raw?.PRICE) return make(raw.PRICE, raw.CHANGEPCT24HOUR ?? 0);
+    }
+  } catch { /* give up this round */ }
+  return null;
+}
+
 async function loadSharedPrices(): Promise<{ prices: MarketPrices; timestamp: number | null; history: PricePoint[] }> {
   try {
     const res = await fetch(API_URL);
@@ -260,17 +296,23 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
      respect its rate limit) — never blocking the fast BTC/ETH path above. */
   useEffect(() => {
     let active = true;
+    let haveVara = false;
+    let timer: ReturnType<typeof setTimeout>;
     const refreshVara = async () => {
-      if (document.hidden) return;
-      const g = await fetchCoinGeckoDirect();
-      if (!active || !g.VARA) return;
-      const ts = Date.now();
-      setPrices(prev => ({ ...prev, VARA: g.VARA! }));
-      setLastFetchedPerAsset(prev => ({ ...prev, VARA: ts }));
+      if (!document.hidden) {
+        const v = await fetchVaraOnly();
+        if (active && v) {
+          haveVara = true;
+          setPrices(prev => ({ ...prev, VARA: v }));
+          setLastFetchedPerAsset(prev => ({ ...prev, VARA: Date.now() }));
+        }
+      }
+      if (!active) return;
+      // Retry quickly until we have a first value; then settle to the slow poll.
+      timer = setTimeout(refreshVara, haveVara ? VARA_POLL_MS : 4_000);
     };
     refreshVara();
-    const id = setInterval(refreshVara, VARA_POLL_MS);
-    return () => { active = false; clearInterval(id); };
+    return () => { active = false; clearTimeout(timer); };
   }, []);
 
   /* Core market data fetch */

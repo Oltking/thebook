@@ -122,6 +122,7 @@ export function AgentView() {
           <EmptyState
             title="Connect your wallet"
             description="Connect a wallet to view your trading agent, its live P&L, and the opportunities it has surfaced."
+            action={{ label: 'Connect wallet', onClick: () => window.dispatchEvent(new Event('thebookdex:connect')) }}
           />
         </Card>
       </div>

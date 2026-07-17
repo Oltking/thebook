@@ -4,7 +4,7 @@ import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut, Sun, Moon } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styles from './Header.module.css';
 import { useTheme } from '../../hooks/useTheme';
 import { usePortfolio } from '../../hooks/usePortfolio';
@@ -50,6 +50,13 @@ export function Header({ onMenuClick }: HeaderProps) {
     }
     setShowAccountSelector(true);
   }, [error, login]);
+
+  // Let any view (e.g. empty-state CTAs) trigger the wallet connect flow.
+  useEffect(() => {
+    const onConnect = () => { handleConnect(); };
+    window.addEventListener('thebookdex:connect', onConnect);
+    return () => window.removeEventListener('thebookdex:connect', onConnect);
+  }, [handleConnect]);
 
   const handleAccountSelect = useCallback((acc: InjectedAccountWithMeta) => {
     web3Enable('thebookdex').then(exts => {
