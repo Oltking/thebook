@@ -725,6 +725,46 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     </Card>
   );
 
+  /* Spot: a compact market card so the entry column reads full even when the
+     user has no resting orders (thin-book testnet). Genuinely useful data. */
+  const bestBid = orderbook.bids.length > 0 ? Number(orderbook.bids[0][0]) * 1000 : 0;
+  const bestAsk = orderbook.asks.length > 0 ? Number(orderbook.asks[0][0]) * 1000 : 0;
+  const spreadUsd = bestBid > 0 && bestAsk > 0 ? bestAsk - bestBid : 0;
+  const change24 = prices[asset] ? Number(prices[asset]!.change_24h_bps) / 100 : null;
+  const usdBal = portfolio ? Number(portfolio.usd) / 100 : 0;
+  const assetBal = portfolio ? Number(asset === 'BTC' ? portfolio.btc : asset === 'ETH' ? portfolio.eth : portfolio.vara) / 1e5 : 0;
+
+  const spotMarketPanel = (
+    <Card title={`${asset}/USD Market`}>
+      <div className={styles.mkStat}>
+        <span>Mark price</span>
+        <span className={styles.mkVal}>{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</span>
+      </div>
+      <div className={styles.mkStat}>
+        <span>24h change</span>
+        <span className={styles.mkVal} style={{ color: change24 == null ? 'var(--text-secondary)' : change24 >= 0 ? 'var(--buy-green)' : 'var(--sell-red)' }}>
+          {change24 == null ? '—' : `${change24 >= 0 ? '+' : ''}${change24.toFixed(2)}%`}
+        </span>
+      </div>
+      <div className={styles.mkStat}>
+        <span>Best bid / ask</span>
+        <span className={styles.mkVal}>
+          {bestBid > 0 ? `$${bestBid.toLocaleString()}` : '—'} <span style={{ color: 'var(--text-dim)' }}>/</span> {bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '—'}
+        </span>
+      </div>
+      <div className={styles.mkStat}>
+        <span>Spread</span>
+        <span className={styles.mkVal}>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</span>
+      </div>
+      {account && portfolio && (
+        <div className={styles.mkDivider}>
+          <div className={styles.mkStat}><span>Your USD</span><span className={styles.mkVal}>${usdBal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+          <div className={styles.mkStat}><span>Your {asset}</span><span className={styles.mkVal}>{assetBal.toLocaleString(undefined, { maximumFractionDigits: 5 })}</span></div>
+        </div>
+      )}
+    </Card>
+  );
+
   if (isMobile) {
     return (
       <div className={styles.mobileContainer}>
@@ -771,7 +811,9 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       <div className={styles.orderbookArea}>{depthPanel}</div>
       <div className={styles.entryArea}>
         {entryPanel}
-        {isFutures && <div style={{ marginTop: 'var(--space-sm)' }}>{positionsPanel}</div>}
+        {isFutures
+          ? <div style={{ marginTop: 'var(--space-sm)' }}>{positionsPanel}</div>
+          : <div style={{ marginTop: 'var(--space-sm)' }}>{spotMarketPanel}</div>}
       </div>
       <div className={styles.tradesArea}>{executionsPanel}</div>
       <TxStatusOverlay state={txState} onClose={resetTx} />

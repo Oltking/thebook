@@ -38,6 +38,28 @@
   overflow-x: hidden;
 }
 
+/* Spot market summary card (fills the entry column) */
+.mkStat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-md);
+  padding: 7px 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.mkVal {
+  color: var(--text-main);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.mkDivider {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+
 /* ── Tablet Portrait (768–1023px) ── */
 @media (max-width: 1023px) and (min-width: 768px) {
   .grid {
