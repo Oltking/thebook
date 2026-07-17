@@ -67,6 +67,34 @@ export function SwapView() {
   /* Keep the estimated output in sync with both assets, the amount, and live reserves */
   useEffect(() => { calculateOut(amountIn); }, [calculateOut, amountIn]);
 
+  /* First-class quote: rate, price impact, min received, LP fee — the trust
+     surface an agent (or human) reads before confirming. */
+  const quote = useMemo(() => {
+    const pin = parseFloat(amountIn);
+    const pout = parseFloat(amountOut);
+    if (!activePool || isNaN(pin) || pin <= 0 || isNaN(pout) || pout <= 0) return null;
+    const reserveIn = Number(fromAsset === activePool.asset_a ? activePool.reserve_a : activePool.reserve_b) / 1e5;
+    const reserveOut = Number(fromAsset === activePool.asset_a ? activePool.reserve_b : activePool.reserve_a) / 1e5;
+    const mid = reserveIn > 0 ? reserveOut / reserveIn : 0;      // spot out-per-in before trade
+    const exec = pout / pin;                                     // realized out-per-in
+    const impactPct = mid > 0 ? Math.max(0, (1 - exec / mid) * 100) : 0;
+    return {
+      rate: exec,
+      impactPct,
+      minReceived: pout * (1 - slippage / 100),
+      fee: pin * 0.003,
+    };
+  }, [activePool, amountIn, amountOut, fromAsset, slippage]);
+
+  const impactClass = quote
+    ? quote.impactPct >= 5 ? styles.impactHigh : quote.impactPct >= 1 ? styles.impactMed : styles.impactLow
+    : undefined;
+
+  const usdHint = (amt: string, asset: Asset) => {
+    const v = parseFloat(amt);
+    return !isNaN(v) && v > 0 && priceUsd(asset) > 0 ? `≈ $${(v * priceUsd(asset)).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '';
+  };
+
   /* Default to a real pool on first load, then keep the pair valid (never From == To) */
   const initRef = useRef(false);
   useEffect(() => {
@@ -132,6 +160,7 @@ export function SwapView() {
                 {ALL_ASSETS.filter(a => a !== toAsset).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
+            {usdHint(amountIn, fromAsset) && <div className={styles.usdHint}>{usdHint(amountIn, fromAsset)}</div>}
           </div>
 
           <div className={styles.divider}>
@@ -150,6 +179,7 @@ export function SwapView() {
                 {ALL_ASSETS.filter(a => a !== fromAsset).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
+            {usdHint(amountOut, toAsset) && <div className={styles.usdHint}>{usdHint(amountOut, toAsset)}</div>}
           </div>
 
           <div className={styles.slippageRow}>
@@ -168,10 +198,30 @@ export function SwapView() {
             </div>
           </div>
 
-          {activePool && (
+          {quote && activePool && (
             <div className={styles.priceInfo}>
               <div className={styles.infoRow}>
-                <span>Pool Reserves</span>
+                <span>Rate</span>
+                <span>1 {fromAsset} = {quote.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })} {toAsset}</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span>Price impact</span>
+                <span className={impactClass}>{quote.impactPct < 0.01 ? '<0.01' : quote.impactPct.toFixed(2)}%</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span>Min. received ({slippage}% slip)</span>
+                <span>{quote.minReceived.toLocaleString(undefined, { maximumFractionDigits: 5 })} {toAsset}</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span>LP fee (0.3%)</span>
+                <span>{quote.fee.toLocaleString(undefined, { maximumFractionDigits: 6 })} {fromAsset}</span>
+              </div>
+            </div>
+          )}
+          {!quote && activePool && (
+            <div className={styles.priceInfo}>
+              <div className={styles.infoRow}>
+                <span>Pool reserves</span>
                 <span>{fmtUnits(activePool.reserve_a)} {activePool.asset_a} / {fmtUnits(activePool.reserve_b)} {activePool.asset_b}</span>
               </div>
             </div>

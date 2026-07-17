@@ -186,6 +186,15 @@ export function PoolsView() {
   const fmt = (val: bigint | number | string) =>
     (Number(val) / 10**5).toLocaleString(undefined, { maximumFractionDigits: 6 });
 
+  const priceUsd = (a: Asset) => {
+    const f = prices[a];
+    return f ? Number(f.price_usd_micro) / 1_000_000 : 0;
+  };
+  const poolTvlUsd = (p: Pool) =>
+    (Number(p.reserve_a) / 1e5) * priceUsd(p.asset_a) + (Number(p.reserve_b) / 1e5) * priceUsd(p.asset_b);
+  const fmtUsd = (v: number) =>
+    v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—';
+
   const isBusy = txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed';
 
   return (
@@ -266,7 +275,7 @@ export function PoolsView() {
                   <button
                     onClick={() => openUsdModal(asset)}
                     style={{
-                      background: 'var(--primary)', color: '#000', borderRadius: 'var(--radius-sm)',
+                      background: 'var(--primary)', color: 'var(--on-accent)', borderRadius: 'var(--radius-sm)',
                       fontWeight: 700, fontSize: 12, padding: '6px 0', minHeight: 32, cursor: 'pointer',
                       border: 'none', width: '100%', marginTop: 2,
                     }}
@@ -296,6 +305,7 @@ export function PoolsView() {
                 <thead>
                   <tr>
                     <th scope="col">Pool Pair</th>
+                    <th scope="col">TVL</th>
                     <th scope="col">Reserve A</th>
                     <th scope="col">Reserve B</th>
                     <th scope="col">Actions</th>
@@ -306,6 +316,7 @@ export function PoolsView() {
                 {pools.map(pool => (
                   <tr key={pool.id.toString()}>
                     <td className={styles.pair} data-label="Pool Pair">{pool.asset_a} / {pool.asset_b}</td>
+                    <td data-label="TVL">{fmtUsd(poolTvlUsd(pool))}</td>
                     <td data-label={`Reserve ${pool.asset_a}`}>{fmt(pool.reserve_a)}</td>
                     <td data-label={`Reserve ${pool.asset_b}`}>{fmt(pool.reserve_b)}</td>
                     <td data-label="Actions">
