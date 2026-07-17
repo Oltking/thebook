@@ -35,7 +35,7 @@ export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
         <>
           <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
           <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-            <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onNavigate={() => setDrawerOpen(false)} />
           </Drawer>
         </>
       )}

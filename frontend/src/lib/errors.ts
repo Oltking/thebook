@@ -3,7 +3,7 @@ export function parseContractError(e: unknown): string {
   const msg = String(e);
   if (msg.includes('InsufficientUsd')) return 'You don\'t have enough USD balance. Deposit USD to continue.';
   if (msg.includes('InsufficientAsset')) return 'You don\'t have enough balance of that asset.';
-  if (msg.includes('JoinFirst')) return 'You need to join the DEX first. Click "Join DEX" in the header — it\'s a one-time setup.';
+  if (msg.includes('JoinFirst')) return 'You need to create your agent first — click "Create Agent" to do the one-time setup.';
   if (msg.includes('NotAuthorized')) return 'You are not authorized to perform this action.';
   if (msg.includes('NotAdmin')) return 'This action is restricted to the DEX admin.';
   if (msg.includes('OrderNotFound')) return 'This order no longer exists. It may have been filled or cancelled.';

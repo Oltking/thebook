@@ -60,3 +60,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'portfolio', label: 'Portfolio', icon: User },
   { id: 'build',     label: 'For Agents', icon: Code2 },
 ];
+
+// The phone bottom bar shows only the core five so labels never cram/clip; the
+// rest (Agent, Pools, For Agents) live in the hamburger drawer.
+const MOBILE_NAV_IDS = ['home', 'trade', 'futures', 'swap', 'portfolio'];
+export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_IDS
+  .map((id) => NAV_ITEMS.find((n) => n.id === id)!)
+  .filter(Boolean);

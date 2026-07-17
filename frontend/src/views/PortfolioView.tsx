@@ -184,8 +184,12 @@ export function PortfolioView() {
             {assets.every(a => Number(a.amount) === 0) ? (
               <EmptyState
                 title="Empty Portfolio"
-                description="Claim and deposit wrapped test tokens to start trading."
-                action={{ label: 'Deposit USD', onClick: () => openDeposit('USD', 'Usd', 2) }}
+                description={TOKENS_CONFIGURED
+                  ? 'Claim and deposit wrapped test tokens to start trading.'
+                  : 'Your agent starts with testnet balances — create it to begin trading.'}
+                action={TOKENS_CONFIGURED
+                  ? { label: 'Deposit USD', onClick: () => openDeposit('USD', 'Usd', 2) }
+                  : { label: 'Create Agent', onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')) }}
               />
             ) : (
               <table className={styles.table}>
@@ -206,16 +210,20 @@ export function PortfolioView() {
                         ? `$${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button className={styles.actionBtn} title={`Deposit ${asset.name}`}
-                            onClick={() => openDeposit(asset.name, asset.kind, asset.decimals)} aria-label={`Deposit ${asset.name}`}>
-                            <ArrowDownRight size={14} />
-                          </button>
-                          <button className={styles.actionBtn} title={`Withdraw ${asset.name}`}
-                            onClick={() => openWithdraw(asset.name, asset.kind, asset.decimals)} aria-label={`Withdraw ${asset.name}`}>
-                            <ArrowUpRight size={14} />
-                          </button>
-                        </div>
+                        {TOKENS_CONFIGURED ? (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className={styles.actionBtn} title={`Deposit ${asset.name}`}
+                              onClick={() => openDeposit(asset.name, asset.kind, asset.decimals)} aria-label={`Deposit ${asset.name}`}>
+                              <ArrowDownRight size={14} />
+                            </button>
+                            <button className={styles.actionBtn} title={`Withdraw ${asset.name}`}
+                              onClick={() => openWithdraw(asset.name, asset.kind, asset.decimals)} aria-label={`Withdraw ${asset.name}`}>
+                              <ArrowUpRight size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

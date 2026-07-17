@@ -1,5 +1,5 @@
 import styles from './MobileNav.module.css';
-import { NAV_ITEMS } from '../../consts';
+import { MOBILE_NAV_ITEMS } from '../../consts';
 
 interface MobileNavProps {
   activeTab: string;
@@ -9,7 +9,7 @@ interface MobileNavProps {
 export function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
   return (
     <nav className={styles.nav} aria-label="Mobile navigation">
-      {NAV_ITEMS.map((item) => {
+      {MOBILE_NAV_ITEMS.map((item) => {
         const Icon = item.icon;
         return (
           <button

@@ -67,17 +67,19 @@ export function useTxStatus(): UseTxStatusReturn {
     onSuccess?: () => void,
   ): Promise<string | null> => {
     try {
+      // "Signing" spans until the wallet prompt is answered (signAndSend), which is
+      // when the user actually signs — not the earlier signer/gas prep.
       updateStage('signing');
       const { signer } = await web3FromSource(account.meta.source);
-
-      updateStage('broadcasting');
       const transaction = buildTx();
       // Gas safety: the node returns the *minimum* limit, which under-estimates real
       // cost and causes intermittent "ran out of gas" failures. Add the max buffer.
       await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
 
-      updateStage('confirming');
+      updateStage('broadcasting');
       const { response } = await transaction.signAndSend();
+
+      updateStage('confirming');
       const result = await response();
 
       /* Contract returned Result<T, E> → { err: E } means the method failed */

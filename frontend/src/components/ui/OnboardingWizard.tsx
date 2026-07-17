@@ -203,7 +203,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
 
               <input
                 className={styles.skipBtn}
-                style={{ width: '100%', textAlign: 'center', fontSize: 16, padding: '12px 14px', border: '1px solid var(--border, #2a2a3a)', borderRadius: 10, background: 'var(--bg-elevated, #16161f)', color: 'inherit', marginBottom: 14 }}
+                style={{ width: '100%', textAlign: 'center', fontSize: 16, padding: '12px 14px', border: '1px solid var(--border-color)', borderRadius: 10, background: 'var(--bg-elevated)', color: 'inherit', marginBottom: 14 }}
                 placeholder="Agent name (e.g. AlphaSeeker)"
                 value={agentName}
                 maxLength={24}
@@ -221,8 +221,8 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
                       style={{
                         display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
                         padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border, #2a2a3a)'}`,
-                        background: active ? 'var(--accent-soft, rgba(108,92,231,0.12))' : 'transparent',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-color)'}`,
+                        background: active ? 'var(--accent-soft)' : 'transparent',
                         color: 'inherit',
                       }}
                     >

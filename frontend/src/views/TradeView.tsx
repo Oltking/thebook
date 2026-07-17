@@ -303,7 +303,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
               padding: '3px 4px',
               borderRadius: 6,
               background: asset === a ? 'var(--primary)' : 'var(--card-bg-hover)',
-              color: asset === a ? '#000' : 'var(--text-secondary)',
+              color: asset === a ? 'var(--on-accent)' : 'var(--text-secondary)',
               fontWeight: 700,
               fontSize: 11,
               minHeight: 26,
@@ -401,7 +401,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
               <div className={styles.seedActions}>
                 {markPrice > 0 && (
                   <button className={styles.demoBtn} onClick={executeDemoTrade} disabled={demoLoading}>
-                    <Zap size={13} />{demoLoading ? 'Executing...' : 'Quick Demo Execution'}
+                    <Zap size={13} />{demoLoading ? 'Executing...' : 'Place a starter trade'}
                   </button>
                 )}
                 <button className={styles.seedBtn} onClick={tickMarket} disabled={tickLoading}>

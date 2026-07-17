@@ -6,6 +6,8 @@ import { useSails } from '../../hooks/useSails';
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  /** Called after a nav item is picked — used to close the mobile drawer. */
+  onNavigate?: () => void;
 }
 
 interface DexStatus {
@@ -15,7 +17,7 @@ interface DexStatus {
   running: boolean;
 }
 
-export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
   const { program, isReady } = useSails();
   const [status, setStatus] = useState<DexStatus | null>(null);
 
@@ -50,7 +52,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             <button
               key={item.id}
               className={`${styles.navItem} ${activeTab === item.id ? styles.active : ''}`}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
               aria-current={activeTab === item.id ? 'page' : undefined}
             >
               <Icon size={20} />
@@ -63,7 +65,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <div className={styles.marketStatus}>
           <div className={styles.label}>Market Status</div>
           <div className={styles.value} style={{ color: status?.running ? 'var(--buy-green, #26a69a)' : 'var(--text-secondary)' }}>
-            {status ? (status.running ? 'Live' : 'Idle') : 'Open'}
+            {status ? (status.running ? 'Live' : 'Idle') : '—'}
           </div>
         </div>
         {status && (
