@@ -1,4 +1,5 @@
 import { Card } from '../components/ui/Card';
+import { PageHeader } from '../components/ui/PageHeader';
 import styles from './PoolsView.module.css';
 import { useState, useEffect, useRef } from 'react';
 import { useSails } from '../hooks/useSails';
@@ -190,12 +191,13 @@ export function PoolsView() {
   return (
     <>
       <div className={styles.container}>
-        <div className={styles.header}>
-          <h1>Liquidity Pools</h1>
-          <button className={styles.createBtn} onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? 'Cancel' : '+ Create Pool'}
-          </button>
-        </div>
+        <PageHeader eyebrow="Provide liquidity" title="Pools"
+          subtitle="Earn fees by seeding orderbook spreads and AMM pools."
+          action={
+            <button className={styles.createBtn} onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? 'Cancel' : '+ Create Pool'}
+            </button>
+          } />
 
         {showCreate && (
           <Card title="Create Pool">

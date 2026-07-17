@@ -11,6 +11,7 @@ import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
 import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { EmptyState } from '../components/ui/EmptyState';
+import { PageHeader } from '../components/ui/PageHeader';
 import { ArrowUpRight, ArrowDownRight, Loader2, X } from 'lucide-react';
 
 // Display decimals per asset double as the internal-unit scale: a human amount ×
@@ -170,7 +171,8 @@ export function PortfolioView() {
   return (
     <>
       <div className={styles.container}>
-        <h1>My Portfolio</h1>
+        <PageHeader eyebrow="Your account" title="Portfolio"
+          subtitle="Your balances, open orders, and liquidity — all backed by real testnet tokens." />
 
         <div className={styles.grid}>
           <Card title="Asset Balances">
