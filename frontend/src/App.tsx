@@ -10,6 +10,7 @@ const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
+const AgentApiView = lazy(() => import('./views/AgentApiView').then(m => ({ default: m.AgentApiView })));
 
 function PageLoader() {
   return (
@@ -39,6 +40,8 @@ function App() {
         return <PoolsView />;
       case 'portfolio':
         return <PortfolioView />;
+      case 'build':
+        return <AgentApiView />;
       default:
         return <HomeView onNavigate={setActiveTab} />;
     }
