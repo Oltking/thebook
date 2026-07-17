@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSails } from './useSails';
 import { web3FromSource } from '@polkadot/extension-dapp';
+import { resolveIdentity } from '../lib/identity';
 
 export interface Portfolio {
   usd: bigint;
@@ -66,6 +67,20 @@ export function usePortfolio() {
       await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response } = await transaction.signAndSend();
       await response();
+
+      /* Don't claim success on the extrinsic landing alone — verify the identity
+         actually persisted on-chain (the read AgentView/Home depend on). Retry a
+         few times to allow for block inclusion before giving up. */
+      let confirmed = false;
+      for (let i = 0; i < 5; i++) {
+        const id = await resolveIdentity(program, account.decodedAddress);
+        if (id) { confirmed = true; break; }
+        await new Promise(r => setTimeout(r, 1500));
+      }
+      if (!confirmed) {
+        return 'The transaction went through but your agent isn\'t showing up on-chain yet. Give it a moment and refresh — if it persists, try again.';
+      }
+
       localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');
       await fetchPortfolio();
       return null;

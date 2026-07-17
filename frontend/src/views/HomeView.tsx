@@ -8,6 +8,7 @@ import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { parseContractError } from '../lib/errors';
 import { findOpportunities, type Opportunity, type StrategyName } from '../lib/opportunities';
 import { fetchAgentBrief } from '../lib/agentBrief';
+import { resolveIdentity } from '../lib/identity';
 import styles from './HomeView.module.css';
 
 interface HomeViewProps {
@@ -47,10 +48,8 @@ export function HomeView({ onNavigate }: HomeViewProps) {
     let on = true;
     (async () => {
       if (!program || !account) { setIdentity(null); return; }
-      try {
-        const r = await program.orderbook.getIdentity().withAddress(account.decodedAddress).call();
-        if (on && r && Array.isArray(r)) setIdentity({ name: String(r[0]), strategy: r[1] as StrategyName });
-      } catch { /* no identity */ }
+      const r = await resolveIdentity(program, account.decodedAddress);
+      if (on) setIdentity(r as { name: string; strategy: StrategyName } | null);
     })();
     return () => { on = false; };
   }, [program, account, portfolio]);

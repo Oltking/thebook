@@ -10,6 +10,7 @@ import { findOpportunities, type Opportunity, type StrategyName } from '../lib/o
 import { fetchAgentBrief, type BriefResult } from '../lib/agentBrief';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
+import { resolveIdentity } from '../lib/identity';
 
 const STRATEGY_META: Record<StrategyName, { label: string; icon: typeof Crosshair }> = {
   ArbitrageHunter: { label: 'Arbitrage Hunter', icon: Crosshair },
@@ -44,14 +45,8 @@ export function AgentView() {
     let active = true;
     (async () => {
       if (!program || !account) { setIdentity(null); return; }
-      try {
-        const res = await program.orderbook.getIdentity().withAddress(account.decodedAddress).call();
-        if (active && res && Array.isArray(res)) {
-          setIdentity({ name: String(res[0]), strategy: res[1] as StrategyName });
-        } else if (active) {
-          setIdentity(null);
-        }
-      } catch { if (active) setIdentity(null); }
+      const res = await resolveIdentity(program, account.decodedAddress);
+      if (active) setIdentity(res as { name: string; strategy: StrategyName } | null);
     })();
     return () => { active = false; };
   }, [program, account, portfolio]);
