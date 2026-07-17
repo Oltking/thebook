@@ -99,6 +99,15 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     return direction === 'Long' ? entryPrice * (1 - m) : entryPrice * (1 + m);
   }, [entryPrice, leverage, direction]);
 
+  /* How far the mark can move before liquidation — the risk at a glance.
+     Bigger buffer = safer; we map it to a bar and a green/amber/red level. */
+  const liqBufferPct = useMemo(() => {
+    if (!estimatedLiqPrice || !entryPrice) return 0;
+    return (Math.abs(entryPrice - estimatedLiqPrice) / entryPrice) * 100;
+  }, [estimatedLiqPrice, entryPrice]);
+  const liqRisk = liqBufferPct === 0 ? 'none' : liqBufferPct >= 20 ? 'safe' : liqBufferPct >= 8 ? 'warn' : 'danger';
+  const liqRiskColor = liqRisk === 'danger' ? 'var(--sell-red)' : liqRisk === 'warn' ? '#E8A33D' : 'var(--buy-green)';
+
   const spotAvailableBalance = useMemo(() => {
     if (!portfolio) return { value: 0n, label: '$0.00', decimals: 2 };
     if (side === 'Sell') {
@@ -519,10 +528,28 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
             <span>{fmtMark(markPrice)}</span>
           </div>
           {estimatedLiqPrice > 0 && (
-            <div className={styles.previewRow}>
-              <span>Est. Liq. Price</span>
-              <span className={styles.negative}>{fmtMark(estimatedLiqPrice)}</span>
-            </div>
+            <>
+              <div className={styles.previewRow}>
+                <span>Est. Liq. Price</span>
+                <span style={{ color: liqRiskColor, fontWeight: 700 }}>{fmtMark(estimatedLiqPrice)}</span>
+              </div>
+              <div className={styles.previewRow}>
+                <span>Margin buffer</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 74, height: 6, borderRadius: 4, background: 'var(--card-bg-hover)', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${Math.min(100, liqBufferPct * 2.2)}%`, background: liqRiskColor }} />
+                  </span>
+                  <span style={{ color: liqRiskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {liqBufferPct.toFixed(1)}%
+                  </span>
+                </span>
+              </div>
+              {liqRisk === 'danger' && (
+                <div style={{ fontSize: 12, color: 'var(--sell-red)', lineHeight: 1.4, marginTop: 2 }}>
+                  High leverage — a {liqBufferPct.toFixed(1)}% move against you triggers liquidation.
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
