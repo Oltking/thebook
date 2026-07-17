@@ -164,7 +164,7 @@ export function AgentView() {
 
         <Panel>
           <Label>P&L vs start</Label>
-          <div style={{ fontSize: 22, fontWeight: 700, color: pnl >= 0 ? '#16c784' : '#ea3943' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: pnl >= 0 ? 'var(--buy-green)' : 'var(--sell-red)' }}>
             {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
             <span style={{ fontSize: 13, marginLeft: 6, opacity: 0.85 }}>({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)</span>
           </div>
@@ -203,7 +203,7 @@ export function AgentView() {
             <span style={{ fontSize: 12, opacity: 0.6 }}>{opportunities.length} signal{opportunities.length === 1 ? '' : 's'}</span>
           </div>
           <button onClick={() => { refreshAll(); refreshPortfolio(); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid #2a2a3a', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
             <RefreshCw size={13} /> Rescan
           </button>
         </div>
@@ -215,7 +215,7 @@ export function AgentView() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {opportunities.map(opp => (
-              <div key={opp.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #232333', background: 'rgba(255,255,255,0.02)' }}>
+              <div key={opp.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--card-bg-hover)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{opp.title}</span>
@@ -224,7 +224,7 @@ export function AgentView() {
                   <div style={{ fontSize: 12, opacity: 0.7 }}>{opp.rationale}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#16c784' }}>{opp.edgePct.toFixed(2)}%</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--buy-green)' }}>{opp.edgePct.toFixed(2)}%</div>
                   <div style={{ fontSize: 10, opacity: 0.55 }}>edge</div>
                 </div>
                 <button
@@ -248,7 +248,7 @@ export function AgentView() {
 }
 
 function Panel({ children }: { children: ReactNode }) {
-  return <div style={{ padding: 16, borderRadius: 14, border: '1px solid #232333', background: 'rgba(255,255,255,0.02)' }}>{children}</div>;
+  return <div style={{ padding: 16, borderRadius: 14, border: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>{children}</div>;
 }
 function Label({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 4 }}>{children}</div>;

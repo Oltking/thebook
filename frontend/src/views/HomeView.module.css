@@ -31,14 +31,15 @@
 }
 
 .hero {
-  font-size: clamp(28px, 4.5vw, 44px);
-  line-height: 1.12;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-size: clamp(30px, 5vw, 52px);
+  line-height: 1.06;
+  font-weight: 800;
+  letter-spacing: -0.035em;
   color: var(--text-main);
-  margin-bottom: 28px;
+  margin-bottom: 30px;
+  text-wrap: balance;
 }
-.heroDim { color: var(--text-dim); }
+.heroDim { color: var(--text-dim); font-weight: 800; }
 
 /* ── Command bar ── */
 .command {
@@ -240,10 +241,15 @@
 }
 .confHigh { background: var(--accent-soft); color: var(--accent); }
 .confMed { background: rgba(243, 167, 46, 0.14); color: #f3a72e; }
-.confLow { background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); }
+.confLow { background: var(--card-bg-hover); color: var(--text-secondary); }
 .oppEdge { font-family: var(--font-mono); font-weight: 700; color: var(--accent); font-size: 15px; }
 .oppTitle { font-size: 15px; font-weight: 600; color: var(--text-main); }
 .oppRationale { font-size: 13px; color: var(--text-secondary); line-height: 1.5; flex: 1; }
+.oppRationale::before {
+  content: "Why ";
+  color: var(--accent);
+  font-weight: 700;
+}
 .oppExec {
   margin-top: 4px;
   padding: 9px;
