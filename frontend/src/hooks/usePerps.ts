@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSails } from './useSails';
+import { useVoucher } from '../providers/VoucherProvider';
 import { web3FromSource } from '@polkadot/extension-dapp';
 
 // On-chain scales: prices/margin are in USD cents, size is in asset units (1e5).
@@ -27,6 +28,7 @@ const POLL_MS = 5_000;
 
 export function usePerps() {
   const { program, account, isReady } = useSails();
+  const { apply: applyVoucher } = useVoucher();
   const [positions, setPositions] = useState<PerpPosition[]>([]);
   const [marks, setMarks] = useState<PerpMarks>({ BTC: 0, ETH: 0, VARA: 0 });
   const [reserve, setReserve] = useState(0);
@@ -78,7 +80,7 @@ export function usePerps() {
     try {
       const { signer } = await web3FromSource(account.meta.source);
       const tx = buildTx();
-      await tx.withAccount(account.address, { signer }).calculateGas(true, 100);
+      await applyVoucher(tx.withAccount(account.address, { signer })).calculateGas(true, 100);
       const { response } = await tx.signAndSend();
       const result = await response();
       if (result && typeof result === 'object' && 'err' in result) {

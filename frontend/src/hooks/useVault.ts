@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useSails } from './useSails';
 import { web3FromSource } from '@polkadot/extension-dapp';
+import { useVoucher } from '../providers/VoucherProvider';
 import { TokenProgram } from '../lib/token';
 import { TOKENS, TOKENS_CONFIGURED, PROGRAM_ID, type TokenMeta } from '../consts';
 
@@ -26,6 +27,7 @@ function tokenFor(api: any, kind: TokenKind): { meta: TokenMeta; token: TokenPro
  */
 export function useVault() {
   const { program, account, isReady } = useSails();
+  const { apply: applyVoucher } = useVoucher();
   const [step, setStep] = useState<VaultStep>('idle');
   const [busy, setBusy] = useState(false);
 
@@ -34,11 +36,11 @@ export function useVault() {
       if (!account) throw new Error('Wallet not ready');
       const { signer } = await web3FromSource(account.meta.source);
       const tx = buildTx();
-      await tx.withAccount(account.address, { signer }).calculateGas(true, 100);
+      await applyVoucher(tx.withAccount(account.address, { signer })).calculateGas(true, 100);
       const { response } = await tx.signAndSend();
       return response();
     },
-    [account],
+    [account, applyVoucher],
   );
 
   /** Claim `amount` from a token's faucet, approve the DEX, and deposit it. */

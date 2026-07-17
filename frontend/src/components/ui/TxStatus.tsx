@@ -4,6 +4,7 @@ import type { TransactionBuilder } from 'sails-js';
 import { web3FromSource } from '@polkadot/extension-dapp';
 import { Loader2, CheckCircle2, XCircle, ArrowRight, Wallet, SendHorizonal, Clock } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useVoucher } from '../../providers/VoucherProvider';
 import styles from './TxStatus.module.css';
 
 type TxStage = 'idle' | 'signing' | 'broadcasting' | 'confirming' | 'confirmed' | 'failed';
@@ -47,6 +48,7 @@ export function useTxStatus(): UseTxStatusReturn {
   });
   const stageRef = useRef<TxStage>('idle');
   const errorRef = useRef<string>('');
+  const { apply: applyVoucher } = useVoucher();
 
   const updateStage = useCallback((stage: TxStage, message?: string) => {
     stageRef.current = stage;
@@ -75,7 +77,9 @@ export function useTxStatus(): UseTxStatusReturn {
       const transaction = buildTx();
       // Gas safety: the node returns the *minimum* limit, which under-estimates real
       // cost and causes intermittent "ran out of gas" failures. Add the max buffer.
-      await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
+      // Gasless: apply a sponsor voucher when one is available (else self-paid).
+      const prepared = applyVoucher(transaction.withAccount(account.address, { signer }) as any);
+      await prepared.calculateGas(true, 100);
 
       updateStage('broadcasting');
       const { response } = await transaction.signAndSend();

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSails } from './useSails';
 import { web3FromSource } from '@polkadot/extension-dapp';
 import { resolveIdentity } from '../lib/identity';
+import { useVoucher } from '../providers/VoucherProvider';
 
 export interface Portfolio {
   usd: bigint;
@@ -15,6 +16,7 @@ const POLL_MS = 4_000;
 
 export function usePortfolio() {
   const { program, account, isReady } = useSails();
+  const { apply: applyVoucher } = useVoucher();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,7 +66,7 @@ export function usePortfolio() {
     try {
       const { signer } = await web3FromSource(account.meta.source);
       const transaction = program.orderbook.join(name, strategy);
-      await transaction.withAccount(account.address, { signer }).calculateGas(true, 100);
+      await applyVoucher(transaction.withAccount(account.address, { signer }) as any).calculateGas(true, 100);
       const { response } = await transaction.signAndSend();
       await response();
 
