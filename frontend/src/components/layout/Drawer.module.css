@@ -42,9 +42,21 @@
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: var(--font-size-xl);
   font-weight: 700;
   letter-spacing: -0.5px;
+}
+
+.logoMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border-color);
 }
 
 .accent {

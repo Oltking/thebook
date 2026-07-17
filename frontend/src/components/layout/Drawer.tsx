@@ -44,6 +44,7 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
       >
         <div className={styles.header}>
           <span className={styles.logo}>
+            <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
             <span className={styles.accent}>the</span>bookdex
           </span>
           <button onClick={onClose} className={styles.close} aria-label="Close menu">

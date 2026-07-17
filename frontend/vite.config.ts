@@ -16,7 +16,7 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon-192.svg', 'icon-512.svg'],
+      includeAssets: ['favicon.svg', 'logo.png'],
       manifest: {
         name: 'thebookdex',
         short_name: 'thebookdex',
@@ -30,16 +30,16 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: 'icon-192.svg',
+            src: 'logo.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
+            type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: 'icon-512.svg',
+            src: 'logo.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
+            type: 'image/png',
+            purpose: 'any',
           },
         ],
       },

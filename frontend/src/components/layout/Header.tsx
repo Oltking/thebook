@@ -94,6 +94,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           </button>
         )}
         <div className={styles.logo}>
+          <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
           <span className={styles.accent}>the</span>bookdex
         </div>
 

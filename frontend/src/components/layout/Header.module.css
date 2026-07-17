@@ -13,10 +13,23 @@
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: var(--font-size-xl);
   font-weight: 800;
   letter-spacing: -0.03em;
   white-space: nowrap;
+}
+
+.logoMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  object-fit: cover;
+  /* subtle ring so the black tile has an edge on the dark theme */
+  box-shadow: 0 0 0 1px var(--border-color);
 }
 
 .accent {
