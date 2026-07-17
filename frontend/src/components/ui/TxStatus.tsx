@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { TransactionBuilder } from 'sails-js';
 import { web3FromSource } from '@polkadot/extension-dapp';
 import { Loader2, CheckCircle2, XCircle, ArrowRight, Wallet, SendHorizonal, Clock } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import styles from './TxStatus.module.css';
 
 type TxStage = 'idle' | 'signing' | 'broadcasting' | 'confirming' | 'confirmed' | 'failed';
@@ -112,6 +113,8 @@ export function useTxStatus(): UseTxStatusReturn {
 export function TxStatusOverlay({ state, onClose }: { state: TxState; onClose: () => void }) {
   const confirmed = state.stage === 'confirmed';
   const failed = state.stage === 'failed';
+  const dismissable = confirmed || failed;
+  const trapRef = useFocusTrap<HTMLDivElement>(state.visible && state.stage !== 'idle', dismissable ? onClose : undefined);
 
   /* Hook must run on every render — keep it above the early return (Rules of Hooks) */
   useEffect(() => {
@@ -129,7 +132,7 @@ export function TxStatusOverlay({ state, onClose }: { state: TxState; onClose: (
   return (
     <div className={styles.overlay} onClick={failed || confirmed ? onClose : undefined}
       role="dialog" aria-modal="true" aria-label="Transaction status">
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+      <div ref={trapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()}>
         {confirmed && <div className={styles.successIcon}><CheckCircle2 size={48} /></div>}
         {failed && <div className={styles.failIcon}><XCircle size={48} /></div>}
         {!confirmed && !failed && (

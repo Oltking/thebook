@@ -9,6 +9,7 @@ import { useViewport } from '../hooks/useViewport';
 import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useMarketData } from '../providers/MarketDataProvider';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { web3FromSource } from '@polkadot/extension-dapp';
 
@@ -196,6 +197,8 @@ export function PoolsView() {
     v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—';
 
   const isBusy = txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed';
+  const manageTrapRef = useFocusTrap<HTMLDivElement>(!!managed, closeModal);
+  const usdTrapRef = useFocusTrap<HTMLDivElement>(!!usdAsset, closeUsdModal);
 
   return (
     <>
@@ -367,7 +370,7 @@ export function PoolsView() {
       {managed && (
         <div className={styles.modalOverlay} onClick={closeModal} role="dialog" aria-modal="true"
           aria-label={`Manage ${managed.pool.asset_a}/${managed.pool.asset_b} pool`}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+          <div ref={manageTrapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{managed.pool.asset_a} / {managed.pool.asset_b}</h3>
 
             <div className={styles.poolInfoBox}>
@@ -461,7 +464,7 @@ export function PoolsView() {
       {usdAsset && (
         <div className={styles.modalOverlay} onClick={closeUsdModal} role="dialog" aria-modal="true"
           aria-label={`Add ${usdAsset}/USD liquidity`}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+          <div ref={usdTrapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()}>
             <h3>{usdAsset} / USD — Add Liquidity</h3>
 
             <div className={styles.poolInfoBox}>

@@ -22,9 +22,14 @@ let nextId = 0;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const dismiss = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   const add = useCallback((message: string, type: ToastType) => {
     const id = nextId++;
-    setToasts(prev => [...prev, { id, message, type }]);
+    // Cap the stack so bursts of errors can't cover the screen.
+    setToasts(prev => [...prev.slice(-3), { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
 
@@ -35,9 +40,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       info: (msg: string) => add(msg, 'info'),
     }}>
       {children}
-      <div className={styles.container} role="alert" aria-live="polite">
+      <div className={styles.container} aria-live="polite" aria-atomic="false">
         {toasts.map(t => (
-          <div key={t.id} className={`${styles.toast} ${styles[t.type]}`}>
+          <div
+            key={t.id}
+            className={`${styles.toast} ${styles[t.type]}`}
+            role={t.type === 'error' ? 'alert' : 'status'}
+            onClick={() => dismiss(t.id)}
+            title="Dismiss"
+            style={{ cursor: 'pointer' }}
+          >
             {t.message}
           </div>
         ))}

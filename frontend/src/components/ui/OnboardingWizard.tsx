@@ -9,6 +9,7 @@ import { useToast } from './Toast';
 import { parseContractError } from '../../lib/errors';
 import { TOKENS, TOKENS_CONFIGURED } from '../../consts';
 import { Wallet, Rocket, ArrowRight, Check, X, Loader2, Crosshair, Waypoints, TrendingUp, Bot, Coins } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import styles from './OnboardingWizard.module.css';
 
 interface OnboardingWizardProps {
@@ -44,6 +45,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
   const [connecting, setConnecting] = useState(false);
   const [agentName, setAgentName] = useState('');
   const [strategy, setStrategy] = useState<AgentStrategy>('ArbitrageHunter');
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onDismiss);
 
   const funded =
     !!portfolio &&
@@ -134,7 +136,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Create your trading agent">
+      <div ref={trapRef} tabIndex={-1} className={styles.modal} role="dialog" aria-modal="true" aria-label="Create your trading agent">
         <button className={styles.closeBtn} onClick={onDismiss} aria-label="Skip onboarding">
           <X size={20} />
         </button>

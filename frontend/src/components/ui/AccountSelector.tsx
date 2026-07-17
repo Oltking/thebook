@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { web3Accounts } from '@polkadot/extension-dapp';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { Wallet, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import styles from './AccountSelector.module.css';
 
 interface AccountSelectorProps {
@@ -39,9 +40,11 @@ export function AccountSelector({ onSelect, onClose }: AccountSelectorProps) {
     onSelect(acc);
   }, [onSelect]);
 
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onClose);
+
   return (
     <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Select wallet account">
+      <div ref={trapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Select wallet account">
         <div className={styles.header}>
           <Wallet size={22} />
           <h3>Select Account</h3>
