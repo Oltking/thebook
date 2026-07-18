@@ -103,8 +103,9 @@ export function Header({ onMenuClick, onEnterHive }: HeaderProps) {
           <button role="tab" onClick={onEnterHive}>⬡ The Hive</button>
         </div>
 
-        {/* Live public price ticker - auto-updates, no wallet or tap needed */}
-        {!isMobile && (
+        {/* Live public price ticker. Hidden once connected, where the right side
+            fills with balance + account and would crowd the centered switch. */}
+        {!isMobile && !account && (
           <div className={styles.ticker}>
             {priceTicker.map(({ asset, data }) => {
               const usd = data?.price_usd_micro ? Number(data.price_usd_micro) / 1_000_000 : null;
