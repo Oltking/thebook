@@ -59,7 +59,9 @@
 .barIn { display: flex; align-items: center; justify-content: space-between; height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -0.02em; font-size: 16px; text-transform: uppercase; }
 .brand img { width: 26px; height: 26px; }
-.switch { display: flex; background: var(--panel); border: 1px solid var(--line); }
+/* Absolutely centred on the viewport so it aligns exactly with the trading
+   header's switch: toggling worlds keeps the control in the same spot. */
+.switch { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; background: var(--panel); border: 1px solid var(--line); z-index: 2; }
 .switch button {
   font-family: var(--mono); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim);
   padding: 9px 16px; border: none; background: transparent; cursor: pointer;

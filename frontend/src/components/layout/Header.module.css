@@ -40,7 +40,9 @@
    Hive's switch does. Sharp, mono, green-active to match the ecosystem. */
 .modeSwitch {
   position: absolute;
-  left: 50%;
+  /* Pin to the true viewport centre (not the header centre) so this switch lands
+     in the exact same spot as the Hive's, which has no sidebar to offset it. */
+  left: calc(50% - (var(--sidebar-width) / 2));
   top: 50%;
   transform: translate(-50%, -50%);
   display: flex;
