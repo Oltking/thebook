@@ -1,0 +1,21 @@
+type AgentStrategy = enum {
+  ArbitrageHunter,
+  MarketMaker,
+  Momentum,
+};
+
+constructor {
+  /// Deploy + register the agent on thebook (sends Join from this program's id).
+  New : (thebook: actor_id, name: str, strategy: AgentStrategy);
+};
+
+service Agent {
+  /// Keeper/owner-poked: read thebook's book and take one strategy step.
+  Act : () -> str;
+  /// Owner-only: pause/resume autonomous trading.
+  SetActive : (active: bool) -> bool;
+  /// Owner-only: authorize a keeper address to poke Act().
+  SetKeeper : (keeper: actor_id) -> bool;
+  /// (name, strategy, active, actions, last_block, last_note)
+  query Info : () -> struct { str, AgentStrategy, bool, u32, u32, str };
+};

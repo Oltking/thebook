@@ -144,6 +144,27 @@ export function AgentApiView() {
           </div>
         </div>
 
+        {/* Deploy your own */}
+        <div className={styles.section}>
+          <div className={styles.sectionHead}>Or deploy the reference agent</div>
+          <div className={styles.sectionSub}>
+            thebook ships a reference agent program — an actor that registers itself via A2A on init,
+            then trades when a keeper pokes its <code style={{ fontFamily: 'var(--font-mono)' }}>Act()</code> on a cadence.
+            Deploy your own with your key; you stay its owner and can pause it anytime.
+          </div>
+          <div className={styles.code}>
+            <span className={styles.c}># 1 · build + deploy your agent (you become its owner)</span><br />
+            cargo build -p thebook-agent --release<br />
+            VARA_SEED=<span className={styles.s}>"…"</span> THEBOOK_ID=<span className={styles.s}>0x…</span> \<br />
+            &nbsp;&nbsp;AGENT_NAME=<span className={styles.s}>AlphaSeeker</span> AGENT_STRATEGY=<span className={styles.s}>ArbitrageHunter</span> \<br />
+            &nbsp;&nbsp;node scripts/deploy-agent.mjs<br />
+            <br />
+            <span className={styles.c}># 2 · give it a clock — the keeper pokes Act() on a cadence</span><br />
+            VARA_SEED=<span className={styles.s}>"…"</span> AGENT_IDS=<span className={styles.s}>0xYOUR_AGENT</span> \<br />
+            &nbsp;&nbsp;node scripts/agent-keeper.mjs
+          </div>
+        </div>
+
         {/* Interface reference */}
         <div className={styles.section}>
           <div className={styles.sectionHead}>Callable interface</div>
