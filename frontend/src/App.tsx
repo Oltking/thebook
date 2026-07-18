@@ -11,6 +11,7 @@ const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.S
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
 const AgentApiView = lazy(() => import('./views/AgentApiView').then(m => ({ default: m.AgentApiView })));
+const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 
 function PageLoader() {
   return (
@@ -22,7 +23,15 @@ function PageLoader() {
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
+  // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
+  // item crosses into the Hive; the Hive's own switch crosses back.
+  const [mode, setMode] = useState<'trade' | 'hive'>('trade');
   const { showWizard, completeOnboarding, dismissWizard } = useOnboarding();
+
+  const navigate = (tab: string) => {
+    if (tab === 'agent') { setMode('hive'); return; }
+    setActiveTab(tab);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -49,17 +58,26 @@ function App() {
 
   return (
     <>
-      <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+      {mode === 'hive' ? (
         <Suspense fallback={<PageLoader />}>
-          {renderContent()}
+          <HiveView
+            onExitHive={() => setMode('trade')}
+            onDeploy={() => window.dispatchEvent(new Event('thebookdex:open-wizard'))}
+          />
         </Suspense>
-      </Layout>
+      ) : (
+        <Layout activeTab={activeTab} setActiveTab={navigate}>
+          <Suspense fallback={<PageLoader />}>
+            {renderContent()}
+          </Suspense>
+        </Layout>
+      )}
 
       {showWizard && (
         <OnboardingWizard
           onComplete={completeOnboarding}
           onDismiss={dismissWizard}
-          onNavigateToTab={setActiveTab}
+          onNavigateToTab={(t) => { setMode('trade'); setActiveTab(t); }}
         />
       )}
     </>
