@@ -21,7 +21,7 @@ function tokenFor(api: any, kind: TokenKind): { meta: TokenMeta; token: TokenPro
 
 /**
  * The real-token onboarding + custody flow: claim wrapped test tokens from each
- * faucet, approve the DEX, and deposit into the vault — plus per-token deposit and
+ * faucet, approve the DEX, and deposit into the vault - plus per-token deposit and
  * withdraw. Every action is a normal user-signed extrinsic; wiring a gasless
  * voucher backend here would sponsor the claim/deposit gas without changing the UI.
  */

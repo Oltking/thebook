@@ -12,7 +12,7 @@ export function toPair(v: any): [bigint, bigint] {
   return [0n, 0n];
 }
 
-/* Stable timestamp per trade ID — persisted to sessionStorage so page reloads don't reset them */
+/* Stable timestamp per trade ID - persisted to sessionStorage so page reloads don't reset them */
 const TS_KEY = 'thebookdex:trade-ts';
 
 function loadStoredTs(): Map<string, string> {

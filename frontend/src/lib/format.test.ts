@@ -19,10 +19,10 @@ describe('formatUsdPrice', () => {
   });
 
   it('returns a dash for missing / non-positive values', () => {
-    expect(formatUsdPrice(null)).toBe('—');
-    expect(formatUsdPrice(undefined)).toBe('—');
-    expect(formatUsdPrice(0)).toBe('—');
-    expect(formatUsdPrice(NaN)).toBe('—');
+    expect(formatUsdPrice(null)).toBe('-');
+    expect(formatUsdPrice(undefined)).toBe('-');
+    expect(formatUsdPrice(0)).toBe('-');
+    expect(formatUsdPrice(NaN)).toBe('-');
   });
 });
 
@@ -32,6 +32,6 @@ describe('formatUsd', () => {
     expect(formatUsd(0)).toBe('$0.00');
   });
   it('handles missing values', () => {
-    expect(formatUsd(null)).toBe('—');
+    expect(formatUsd(null)).toBe('-');
   });
 });

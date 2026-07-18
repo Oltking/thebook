@@ -15,7 +15,7 @@ function toHexAddr(id: unknown): string {
 
 /**
  * Resolve an account's agent identity robustly. Prefers the direct per-caller
- * query, but falls back to scanning the global leaderboard by address — so a
+ * query, but falls back to scanning the global leaderboard by address - so a
  * flaky/unsupported GetIdentity read can't make a real, registered agent look
  * like it doesn't exist.
  */

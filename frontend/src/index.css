@@ -40,7 +40,7 @@
   --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.7);
 
   /* ── Layout ── */
-  --announcement-height: 32px;
+  --announcement-height: 0px;
   --sidebar-width: 216px;
   --sidebar-collapsed-width: 64px;
   --header-height: 64px;

@@ -203,7 +203,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--green)' }}>{awake}</div><div className={styles.l}>Agents awake</div></div>
             <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--brown)' }}>{leaders.length}</div><div className={styles.l}>On the book</div></div>
             <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--grey)' }}>{opportunities.length}</div><div className={styles.l}>Live signals</div></div>
-            <div className={styles.hstat}><div className={styles.n}>{portfolio ? fmtUsd(myNetWorth) : '—'}</div><div className={styles.l}>Your net worth</div></div>
+            <div className={styles.hstat}><div className={styles.n}>{portfolio ? fmtUsd(myNetWorth) : '-'}</div><div className={styles.l}>Your net worth</div></div>
           </div>
         </div>
       </section>

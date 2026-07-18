@@ -6,7 +6,7 @@ import { useSails } from '../../hooks/useSails';
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  /** Called after a nav item is picked — used to close the mobile drawer. */
+  /** Called after a nav item is picked - used to close the mobile drawer. */
   onNavigate?: () => void;
 }
 
@@ -65,7 +65,7 @@ export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
         <div className={styles.marketStatus}>
           <div className={styles.label}>Market Status</div>
           <div className={styles.value} style={{ color: status?.running ? 'var(--buy-green, #26a69a)' : 'var(--text-secondary)' }}>
-            {status ? (status.running ? 'Live' : 'Idle') : '—'}
+            {status ? (status.running ? 'Live' : 'Idle') : '-'}
           </div>
         </div>
         {status && (

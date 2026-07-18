@@ -206,7 +206,7 @@ export function AgentView() {
 
         {opportunities.length === 0 ? (
           <div style={{ padding: '28px 12px', textAlign: 'center', opacity: 0.6, fontSize: 13 }}>
-            Your agent is scanning… no edge above threshold right now. Markets move — check back or seed the book.
+            Your agent is scanning… no edge above threshold right now. Markets move - check back or seed the book.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -234,7 +234,7 @@ export function AgentView() {
           </div>
         )}
         <p style={{ fontSize: 11, opacity: 0.45, marginTop: 12 }}>
-          Signals are computed from live orderbook, AMM, and spot data. You approve every trade — the agent never acts on its own. Balances are testnet simulation.
+          Signals are computed from live orderbook, AMM, and spot data. You approve every trade - the agent never acts on its own. Balances are testnet simulation.
         </p>
       </Panel>
 

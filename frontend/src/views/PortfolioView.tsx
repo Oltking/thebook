@@ -177,7 +177,7 @@ export function PortfolioView() {
     <>
       <div className={styles.container}>
         <PageHeader eyebrow="Your account" title="Portfolio"
-          subtitle="Your balances, open orders, and liquidity — all backed by real testnet tokens." />
+          subtitle="Your balances, open orders, and liquidity - all backed by real testnet tokens." />
 
         <div className={styles.grid}>
           <Card title="Asset Balances">
@@ -186,7 +186,7 @@ export function PortfolioView() {
                 title="Empty Portfolio"
                 description={TOKENS_CONFIGURED
                   ? 'Claim and deposit wrapped test tokens to start trading.'
-                  : 'Your agent starts with testnet balances — create it to begin trading.'}
+                  : 'Your agent starts with testnet balances - create it to begin trading.'}
                 action={TOKENS_CONFIGURED
                   ? { label: 'Deposit USD', onClick: () => openDeposit('USD', 'Usd', 2) }
                   : { label: 'Create Agent', onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')) }}
@@ -208,7 +208,7 @@ export function PortfolioView() {
                       <td>{formatAmount(asset.amount, asset.decimals)}</td>
                       <td>{asset.name === 'USD' || asset.value > 0
                         ? `$${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : '—'}</td>
+                        : '-'}</td>
                       <td>
                         {TOKENS_CONFIGURED ? (
                           <div style={{ display: 'flex', gap: 8 }}>
@@ -222,7 +222,7 @@ export function PortfolioView() {
                             </button>
                           </div>
                         ) : (
-                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>—</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>-</span>
                         )}
                       </td>
                     </tr>

@@ -23,11 +23,11 @@ const STRATEGY_FLAVOR: Record<StrategyName, string> = {
 export function localBrief(input: BriefInput): string {
   const { name, strategy, opportunities: opps } = input;
   if (opps.length === 0) {
-    return `${name}: the market looks efficient right now — no edge above my threshold. ${STRATEGY_FLAVOR[strategy]} I'm watching orderbook spreads and AMM pools and will surface a signal the moment one opens.`;
+    return `${name}: the market looks efficient right now - no edge above my threshold. ${STRATEGY_FLAVOR[strategy]} I'm watching orderbook spreads and AMM pools and will surface a signal the moment one opens.`;
   }
   const top = opps[0];
   const others = opps.length - 1;
-  return `${name}: I found ${opps.length} signal${opps.length === 1 ? '' : 's'}. My best pick is "${top.title}" — a ${top.edgePct.toFixed(2)}% edge. ${top.rationale}${others > 0 ? ` ${others} more on the board.` : ''} Balances are simulated, so I'll execute on your approval.`;
+  return `${name}: I found ${opps.length} signal${opps.length === 1 ? '' : 's'}. My best pick is "${top.title}" - a ${top.edgePct.toFixed(2)}% edge. ${top.rationale}${others > 0 ? ` ${others} more on the board.` : ''} Balances are simulated, so I'll execute on your approval.`;
 }
 
 export async function fetchAgentBrief(input: BriefInput): Promise<BriefResult> {

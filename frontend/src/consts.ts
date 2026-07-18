@@ -9,7 +9,7 @@ export const NODE_ADDRESS =
 export const PROGRAM_ID = (import.meta.env.VITE_PROGRAM_ID ??
   '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`;
 
-// True until a real program ID is wired in — used to surface a setup banner instead
+// True until a real program ID is wired in - used to surface a setup banner instead
 // of silently talking to the zero address.
 export const PROGRAM_ID_CONFIGURED =
   PROGRAM_ID !== '0x0000000000000000000000000000000000000000000000000000000000000000';

@@ -1,9 +1,9 @@
 /**
- * Opportunity engine — the agent's "market scanner".
+ * Opportunity engine - the agent's "market scanner".
  *
  * Pure functions that turn the live market snapshot (orderbooks, off-chain spot
  * prices, AMM pools) into a ranked list of actionable trade signals. No I/O, no
- * React — so it's trivially testable and the dashboard just renders + executes.
+ * React - so it's trivially testable and the dashboard just renders + executes.
  *
  * Scaling between human units and the contract's integer units:
  *   price : contract unit = $1000        → usd = priceContract * 1000

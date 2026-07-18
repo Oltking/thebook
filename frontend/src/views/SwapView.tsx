@@ -22,7 +22,7 @@ export function SwapView() {
   const poolTvlUsd = (p: Pool) =>
     (Number(p.reserve_a) / 1e5) * priceUsd(p.asset_a) + (Number(p.reserve_b) / 1e5) * priceUsd(p.asset_b);
   const fmtUsd = (v: number) =>
-    v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—';
+    v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-';
   const [fromAsset, setFromAsset] = useState<Asset>('VARA');
   const [toAsset, setToAsset] = useState<Asset>('ETH');
   const [amountIn, setAmountIn] = useState('');
@@ -66,7 +66,7 @@ export function SwapView() {
       return;
     }
 
-    // No pool for this pair — show an indicative estimate from live spot prices so
+    // No pool for this pair - show an indicative estimate from live spot prices so
     // the field always fills. (Executing still needs a pool; the button handles that.)
     const pf = priceUsd(fromAsset);
     const pt = priceUsd(toAsset);
@@ -83,7 +83,7 @@ export function SwapView() {
   /* Keep the estimated output in sync with both assets, the amount, and live reserves */
   useEffect(() => { calculateOut(amountIn); }, [calculateOut, amountIn]);
 
-  /* First-class quote: rate, price impact, min received, LP fee — the trust
+  /* First-class quote: rate, price impact, min received, LP fee - the trust
      surface an agent (or human) reads before confirming. */
   const quote = useMemo(() => {
     const pin = parseFloat(amountIn);
@@ -131,7 +131,7 @@ export function SwapView() {
   const handleSwap = async () => {
     if (!program || !account || !activePool || !amountIn) return;
     if (pricesStale && !pricesLoading) {
-      success('Price is stale — signing a refresh tx now. Please approve in your wallet.');
+      success('Price is stale - signing a refresh tx now. Please approve in your wallet.');
       await fetchPrices();
     }
     const parsedIn = parseFloat(amountIn);
@@ -249,7 +249,7 @@ export function SwapView() {
                 <span>1 {fromAsset} = {(priceUsd(fromAsset) / (priceUsd(toAsset) || 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toAsset}</span>
               </div>
               <div className={styles.infoRow}>
-                <span style={{ color: 'var(--text-dim)' }}>No {fromAsset}/{toAsset} pool yet — create one on Pools to swap.</span>
+                <span style={{ color: 'var(--text-dim)' }}>No {fromAsset}/{toAsset} pool yet - create one on Pools to swap.</span>
               </div>
             </div>
           )}

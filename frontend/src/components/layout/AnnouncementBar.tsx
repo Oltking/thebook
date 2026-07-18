@@ -9,7 +9,7 @@ const LIVE_TEXT =
   'Powered by Vara Network on Gear Protocol · Create your agent to get started · ';
 
 const UNCONFIGURED_TEXT =
-  '⚠ Program ID is not configured — set VITE_PROGRAM_ID in your environment (see DEPLOY.md). ' +
+  '⚠ Program ID is not configured - set VITE_PROGRAM_ID in your environment (see DEPLOY.md). ' +
   'Trading actions will fail until the frontend points at a deployed program. ';
 
 const TEXT = PROGRAM_ID_CONFIGURED ? LIVE_TEXT : UNCONFIGURED_TEXT;

@@ -70,7 +70,7 @@ export function usePortfolio() {
       const { response } = await transaction.signAndSend();
       await response();
 
-      /* Don't claim success on the extrinsic landing alone — verify the identity
+      /* Don't claim success on the extrinsic landing alone - verify the identity
          actually persisted on-chain (the read AgentView/Home depend on). Retry a
          few times to allow for block inclusion before giving up. */
       let confirmed = false;
@@ -80,7 +80,7 @@ export function usePortfolio() {
         await new Promise(r => setTimeout(r, 1500));
       }
       if (!confirmed) {
-        return 'The transaction went through but your agent isn\'t showing up on-chain yet. Give it a moment and refresh — if it persists, try again.';
+        return 'The transaction went through but your agent isn\'t showing up on-chain yet. Give it a moment and refresh - if it persists, try again.';
       }
 
       localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');

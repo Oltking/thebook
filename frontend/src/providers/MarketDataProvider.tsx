@@ -85,7 +85,7 @@ async function fetchBinanceOnly(): Promise<Partial<MarketPrices>> {
   return out;
 }
 
-/** Fast BTC/ETH path — Binance if reachable, else CoinGecko (which also has VARA). */
+/** Fast BTC/ETH path - Binance if reachable, else CoinGecko (which also has VARA). */
 async function fetchBinanceDirect(): Promise<Partial<MarketPrices>> {
   try {
     return await fetchBinanceOnly();
@@ -117,7 +117,7 @@ async function fetchCoinGeckoDirect(): Promise<Partial<MarketPrices>> {
 }
 
 /** VARA-only, resilient: CoinGecko first, CryptoCompare as a fallback so a
- *  rate-limited or slow CoinGecko never leaves the ticker showing "—". */
+ *  rate-limited or slow CoinGecko never leaves the ticker showing "-". */
 async function fetchVaraOnly(): Promise<PriceFeed | null> {
   const make = (usd: number, chg: number): PriceFeed => ({
     symbol: 'VARA',
@@ -172,7 +172,7 @@ async function loadSharedPrices(): Promise<{ prices: MarketPrices; timestamp: nu
       }
     }
   } catch {}
-  /* API completely unreachable — go direct */
+  /* API completely unreachable - go direct */
   const direct = await fetchBinanceDirect();
   return {
     prices: { BTC: null, ETH: null, VARA: null, ...direct },
@@ -267,7 +267,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  /* Live off-chain prices for all three assets — polled continuously, no wallet
+  /* Live off-chain prices for all three assets - polled continuously, no wallet
      needed. Runs while the tab is visible; catches up on return. */
   useEffect(() => {
     let active = true;
@@ -293,7 +293,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* VARA has no Binance pair, so poll it independently from CoinGecko (slower, to
-     respect its rate limit) — never blocking the fast BTC/ETH path above. */
+     respect its rate limit) - never blocking the fast BTC/ETH path above. */
   useEffect(() => {
     let active = true;
     let haveVara = false;

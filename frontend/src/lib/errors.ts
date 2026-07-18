@@ -3,7 +3,7 @@ export function parseContractError(e: unknown): string {
   const msg = String(e);
   if (msg.includes('InsufficientUsd')) return 'You don\'t have enough USD balance. Deposit USD to continue.';
   if (msg.includes('InsufficientAsset')) return 'You don\'t have enough balance of that asset.';
-  if (msg.includes('JoinFirst')) return 'You need to create your agent first — click "Create Agent" to do the one-time setup.';
+  if (msg.includes('JoinFirst')) return 'You need to create your agent first - click "Create Agent" to do the one-time setup.';
   if (msg.includes('NotAuthorized')) return 'You are not authorized to perform this action.';
   if (msg.includes('NotAdmin')) return 'This action is restricted to the DEX admin.';
   if (msg.includes('OrderNotFound')) return 'This order no longer exists. It may have been filled or cancelled.';
@@ -17,12 +17,12 @@ export function parseContractError(e: unknown): string {
   if (msg.includes('SlippageExceeded')) return 'Price moved more than your slippage tolerance. Try increasing slippage or try again.';
   if (msg.includes('ZeroAmount')) return 'Amount must be greater than zero.';
   if (msg.includes('BookFull')) return 'The order book is full right now. Try a market order or place your limit order again shortly.';
-  if (msg.includes('NoMarkPrice')) return 'No mark price is published for this market yet. The price keeper may be catching up — try again shortly.';
+  if (msg.includes('NoMarkPrice')) return 'No mark price is published for this market yet. The price keeper may be catching up - try again shortly.';
   if (msg.includes('LeverageTooHigh')) return 'That leverage is above the maximum allowed. Lower your leverage and try again.';
   if (msg.includes('PositionNotFound')) return 'You have no open position in this market.';
   if (msg.includes('WrongDirection')) return 'You already have a position the other way. Close it before opening the opposite side.';
   if (msg.includes('NotLiquidatable')) return 'This position is still above maintenance margin and cannot be liquidated.';
-  if (msg.includes('StaleMark')) return 'The mark price is stale — the price keeper is catching up. Try again in a moment.';
+  if (msg.includes('StaleMark')) return 'The mark price is stale - the price keeper is catching up. Try again in a moment.';
   if (msg.includes('AgentCallFailed')) return 'The token transfer failed. Make sure you approved the DEX and have enough balance, then try again.';
   if (msg.includes('BadParams')) return 'Invalid parameters provided. Check your inputs and try again.';
   if (msg.includes('pool') || msg.includes('Pool')) return 'Pool operation failed. Please try again.';

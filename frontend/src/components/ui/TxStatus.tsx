@@ -71,7 +71,7 @@ export function useTxStatus(): UseTxStatusReturn {
   ): Promise<string | null> => {
     try {
       // "Signing" spans until the wallet prompt is answered (signAndSend), which is
-      // when the user actually signs — not the earlier signer/gas prep.
+      // when the user actually signs - not the earlier signer/gas prep.
       updateStage('signing');
       const { signer } = await web3FromSource(account.meta.source);
       const transaction = buildTx();
@@ -120,7 +120,7 @@ export function TxStatusOverlay({ state, onClose }: { state: TxState; onClose: (
   const dismissable = confirmed || failed;
   const trapRef = useFocusTrap<HTMLDivElement>(state.visible && state.stage !== 'idle', dismissable ? onClose : undefined);
 
-  /* Hook must run on every render — keep it above the early return (Rules of Hooks) */
+  /* Hook must run on every render - keep it above the early return (Rules of Hooks) */
   useEffect(() => {
     if (confirmed || failed) {
       const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

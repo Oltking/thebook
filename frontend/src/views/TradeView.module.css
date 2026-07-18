@@ -16,7 +16,7 @@
   grid-area: chart;
   min-height: 0;
   min-width: 0;
-  /* No overflow:hidden here — it clips the chart Y-axis and right edge */
+  /* No overflow:hidden here - it clips the chart Y-axis and right edge */
 }
 .orderbookArea {
   grid-area: orderbook;
@@ -123,7 +123,7 @@
   font-weight: 600;
 }
 
-/* Panel wraps each view — overflow-y allows entry to scroll when tall */
+/* Panel wraps each view - overflow-y allows entry to scroll when tall */
 .mobilePanel {
   flex: 1;
   min-height: 0;
@@ -137,7 +137,7 @@
   height: auto;
 }
 
-/* Chart/orderbook/trades should exactly fill the panel — no scroll needed */
+/* Chart/orderbook/trades should exactly fill the panel - no scroll needed */
 .mobilePanelFill {
   overflow: hidden;
 }
@@ -348,7 +348,7 @@
   /* Stats row: all items in a single horizontal line */
   .marketStats {
     display: flex;
-    flex-direction: row;       /* explicit — no wrapping to column */
+    flex-direction: row;       /* explicit - no wrapping to column */
     flex-wrap: nowrap;
     justify-content: space-between;
     align-items: flex-start;
@@ -397,7 +397,7 @@
     padding: 0;
   }
 
-  /* Hide stale hint — no room on mobile */
+  /* Hide stale hint - no room on mobile */
   .staleHint { display: none; }
 }
 

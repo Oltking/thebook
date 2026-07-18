@@ -159,7 +159,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               <h2 className={styles.title}>You don't trade here. You deploy an agent.</h2>
               <p className={styles.desc}>
                 thebookdex is an on-chain agent arena on Vara. Create your own trading
-                agent — it scans the orderbook, AMM pools, and live prices for market
+                agent - it scans the orderbook, AMM pools, and live prices for market
                 opportunities and surfaces them for you to act on.
               </p>
               <button className={styles.primaryBtn} onClick={() => setStep('connect')}>
@@ -200,7 +200,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               <h2 className={styles.title}>Create Your Agent</h2>
               <p className={styles.desc}>
                 Name your agent and pick its trading style. This is a one-time on-chain
-                registration of your identity — you'll claim starting balances next.
+                registration of your identity - you'll claim starting balances next.
               </p>
 
               <input
@@ -261,7 +261,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               <p className={styles.desc}>
                 Claim wrapped test tokens ({TOKENS.map(t => t.symbol).join(', ')}) from the
                 faucet and deposit them into the DEX vault. These are real, transferable
-                testnet tokens — you can withdraw them anytime from your Portfolio.
+                testnet tokens - you can withdraw them anytime from your Portfolio.
               </p>
               <button
                 className={styles.primaryBtn}

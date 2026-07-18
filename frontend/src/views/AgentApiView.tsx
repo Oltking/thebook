@@ -4,7 +4,7 @@ import { PROGRAM_ID, NETWORK_NAME } from '../consts';
 import styles from './AgentApiView.module.css';
 
 /**
- * "For Agents" — the A2A surface. thebook is a Gear program on Vara; any other
+ * "For Agents" - the A2A surface. thebook is a Gear program on Vara; any other
  * program (an agent) reaches it the same way agents talk on Vara A2A: by sending
  * a typed message to its actor_id. This page documents the real callable
  * interface and shows the register → read → execute flow end to end.
@@ -25,12 +25,12 @@ const SERVICES: Svc[] = [
     name: 'Orderbook',
     tag: 'orderbook',
     methods: [
-      { sig: 'Join(name, strategy)', desc: 'Register the calling agent and fund its starting balances. Idempotent — re-joining returns the existing identity.' },
+      { sig: 'Join(name, strategy)', desc: 'Register the calling agent and fund its starting balances. Idempotent - re-joining returns the existing identity.' },
       { sig: 'MarketBuy(asset, qty)', desc: 'Take liquidity from the book immediately at the best available price.' },
       { sig: 'MarketSell(asset, qty)', desc: 'Sell into the book at the best bid.' },
       { sig: 'PlaceLimit(side, asset, price, qty)', desc: 'Rest an order on the book at a chosen price; returns the order id.' },
       { sig: 'CancelOrder(oid)', desc: 'Cancel one of the agent’s resting orders.' },
-      { sig: 'CallAgentService(target, payload, gas)', desc: 'The A2A primitive — forward a typed call to another agent program by actor_id.' },
+      { sig: 'CallAgentService(target, payload, gas)', desc: 'The A2A primitive - forward a typed call to another agent program by actor_id.' },
       { sig: 'query GetPortfolio()', desc: 'Read the agent’s USD / BTC / ETH / VARA balances.' },
       { sig: 'query GetOrderbook(asset)', desc: 'Read live bids and asks for a market.' },
     ],
@@ -60,12 +60,12 @@ const SERVICES: Svc[] = [
 const STEPS = [
   { n: '01', t: 'Register the agent', b: 'Deploy your agent program on Vara and call Join(name, strategy) once. It gets an identity and balances on thebook.' },
   { n: '02', t: 'Read the market', b: 'Query GetOrderbook, ListPools or GetMarkPrice to size a trade. Everything an agent needs to decide is on-chain and deterministic.' },
-  { n: '03', t: 'Execute & settle', b: 'Send the typed intent (MarketBuy, Swap, OpenPosition…). It settles on the same vault as human trades — no privileged path.' },
+  { n: '03', t: 'Execute & settle', b: 'Send the typed intent (MarketBuy, Swap, OpenPosition…). It settles on the same vault as human trades - no privileged path.' },
 ];
 
 const SAMPLE = `import { Sails } from 'sails-js';
 
-// thebook is just an actor on Vara — reach it by program id.
+// thebook is just an actor on Vara - reach it by program id.
 const book = await Sails.connect({
   endpoint: '${'wss://testnet.vara.network'}',
   programId: '${'0xTHEBOOK…'}',
@@ -78,7 +78,7 @@ await book.orderbook.join('my-agent', 'ArbitrageHunter');
 const { bids, asks } = await book.orderbook.getOrderbook('BTC');
 const mark = await book.perps.getMarkPrice('ETH');
 
-// 3 · act on it — same typed intent the UI uses
+// 3 · act on it - same typed intent the UI uses
 if (bids[0].price > mark * 1.002) {
   await book.orderbook.marketSell('BTC', qty);
 }
@@ -117,7 +117,7 @@ export function AgentApiView() {
           <h1 className={styles.title}>Trade thebook from <span className={styles.g}>any agent</span>.</h1>
           <p className={styles.lede}>
             thebook is a program on {NETWORK_NAME}. Another agent reaches it exactly how agents talk on
-            Vara A2A — a typed message to its actor id. Same intents the app uses, same on-chain
+            Vara A2A - a typed message to its actor id. Same intents the app uses, same on-chain
             settlement, no special SDK and no privileged path.
           </p>
         </div>
@@ -148,7 +148,7 @@ export function AgentApiView() {
         <div className={styles.section}>
           <div className={styles.sectionHead}>Or deploy the reference agent</div>
           <div className={styles.sectionSub}>
-            thebook ships a reference agent program — an actor that registers itself via A2A on init,
+            thebook ships a reference agent program - an actor that registers itself via A2A on init,
             then trades when a keeper pokes its <code style={{ fontFamily: 'var(--font-mono)' }}>Act()</code> on a cadence.
             Deploy your own with your key; you stay its owner and can pause it anytime.
           </div>
@@ -159,7 +159,7 @@ export function AgentApiView() {
             &nbsp;&nbsp;AGENT_NAME=<span className={styles.s}>AlphaSeeker</span> AGENT_STRATEGY=<span className={styles.s}>ArbitrageHunter</span> \<br />
             &nbsp;&nbsp;node scripts/deploy-agent.mjs<br />
             <br />
-            <span className={styles.c}># 2 · give it a clock — the keeper pokes Act() on a cadence</span><br />
+            <span className={styles.c}># 2 · give it a clock - the keeper pokes Act() on a cadence</span><br />
             VARA_SEED=<span className={styles.s}>"…"</span> AGENT_IDS=<span className={styles.s}>0xYOUR_AGENT</span> \<br />
             &nbsp;&nbsp;node scripts/agent-keeper.mjs
           </div>
@@ -193,7 +193,7 @@ export function AgentApiView() {
           <div>
             <div className={styles.calloutTitle}>The A2A primitive: CallAgentService</div>
             <div className={styles.calloutBody}>
-              Agents don’t just call thebook — they call each other through it. <code>CallAgentService(target, payload, gas)</code> forwards
+              Agents don’t just call thebook - they call each other through it. <code>CallAgentService(target, payload, gas)</code> forwards
               a typed message to another agent program by <code>actor_id</code>, so strategies can compose, delegate, or negotiate
               on-chain. thebook’s program id on {NETWORK_NAME} is <code>{short}</code>.
             </div>

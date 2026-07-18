@@ -62,7 +62,7 @@ export function PoolsView() {
     });
   }, [program, account, isReady, pools]);
 
-  /* The USD Spot-Pair "Add Liquidity" places resting bid/ask orders — that IS the
+  /* The USD Spot-Pair "Add Liquidity" places resting bid/ask orders - that IS the
      user's orderbook liquidity, so surface it here (not just AMM LP positions). */
   const fetchMyOrders = useCallback(() => {
     if (!program || !account || !isReady) return;
@@ -194,14 +194,14 @@ export function PoolsView() {
     try {
       const { signer } = await web3FromSource(account.meta.source);
 
-      /* Bid: resting buy below mark — provides USD-side liquidity */
+      /* Bid: resting buy below mark - provides USD-side liquidity */
       const bt = program.orderbook.placeLimit('Buy', usdAsset, BigInt(usdQuote.bidTick), bidQty);
       await bt.withAccount(account.address, { signer }).calculateGas(true, 100);
       const { response: br } = await bt.signAndSend();
       const bres = await br();
       if (bres && typeof bres === 'object' && 'err' in bres) throw new Error(JSON.stringify((bres as any).err));
 
-      /* Ask: resting sell above mark — provides asset-side liquidity (only if held) */
+      /* Ask: resting sell above mark - provides asset-side liquidity (only if held) */
       if (sellQty > 0n) {
         const st = program.orderbook.placeLimit('Sell', usdAsset, BigInt(usdQuote.askTick), sellQty);
         await st.withAccount(account.address, { signer }).calculateGas(true, 100);
@@ -233,7 +233,7 @@ export function PoolsView() {
   const poolTvlUsd = (p: Pool) =>
     (Number(p.reserve_a) / 1e5) * priceUsd(p.asset_a) + (Number(p.reserve_b) / 1e5) * priceUsd(p.asset_b);
   const fmtUsd = (v: number) =>
-    v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—';
+    v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-';
 
   const isBusy = txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed';
   const manageTrapRef = useFocusTrap<HTMLDivElement>(!!managed, closeModal);
@@ -268,7 +268,7 @@ export function PoolsView() {
         )}
 
         {/* ── USD Spot Pairs ── */}
-        <Card title="USD Spot Pairs — Orderbook Liquidity">
+        <Card title="USD Spot Pairs - Orderbook Liquidity">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, padding: '4px 0' }}>
             {(['BTC', 'ETH', 'VARA'] as Asset[]).map(asset => {
               const feed    = prices[asset];
@@ -329,7 +329,7 @@ export function PoolsView() {
             })}
           </div>
           <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(0,178,114,0.08)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            USD pairs are orderbook markets. Adding liquidity places a resting Buy bid and Sell ask around the current price — you earn the spread whenever either side is matched.
+            USD pairs are orderbook markets. Adding liquidity places a resting Buy bid and Sell ask around the current price - you earn the spread whenever either side is matched.
           </div>
         </Card>
 
@@ -555,7 +555,7 @@ export function PoolsView() {
         <div className={styles.modalOverlay} onClick={closeUsdModal} role="dialog" aria-modal="true"
           aria-label={`Add ${usdAsset}/USD liquidity`}>
           <div ref={usdTrapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>{usdAsset} / USD — Add Liquidity</h3>
+            <h3>{usdAsset} / USD - Add Liquidity</h3>
 
             <div className={styles.poolInfoBox}>
               <span>Mark price: {usdMark > 0 ? `$${usdMark.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '---'}</span>
@@ -604,7 +604,7 @@ export function PoolsView() {
                     </span>
                   ) : (
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      Ask: skipped (no {usdAsset} balance) — bid-only liquidity
+                      Ask: skipped (no {usdAsset} balance) - bid-only liquidity
                     </span>
                   )}
                 </div>

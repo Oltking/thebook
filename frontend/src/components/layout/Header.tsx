@@ -97,13 +97,13 @@ export function Header({ onMenuClick, onEnterHive }: HeaderProps) {
           <span className={styles.accent}>the</span>bookdex
         </div>
 
-        {/* Trade / Hive world switch — centered, same position as the Hive's. */}
+        {/* Trade / Hive world switch - centered, same position as the Hive's. */}
         <div className={styles.modeSwitch} role="tablist" aria-label="Mode">
           <button role="tab" className={styles.modeOn} aria-selected="true">Trade</button>
           <button role="tab" onClick={onEnterHive}>⬡ The Hive</button>
         </div>
 
-        {/* Live public price ticker — auto-updates, no wallet or tap needed */}
+        {/* Live public price ticker - auto-updates, no wallet or tap needed */}
         {!isMobile && (
           <div className={styles.ticker}>
             {priceTicker.map(({ asset, data }) => {

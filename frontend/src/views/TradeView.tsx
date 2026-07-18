@@ -28,7 +28,7 @@ interface TradeViewProps {
 
 export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const [asset, setAsset]         = useState<Asset>('BTC');
-  /* Futures defaults to Limit — market orders need the book seeded first */
+  /* Futures defaults to Limit - market orders need the book seeded first */
   const [orderType, setOrderType] = useState<'Limit' | 'Market'>(mode === 'futures' ? 'Limit' : 'Market');
   const [direction, setDirection] = useState<'Long' | 'Short'>('Long');
   const [leverage, setLeverage]   = useState(1);
@@ -82,13 +82,13 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     return isNaN(p) || p <= 0 ? markPrice : p;
   }, [orderType, price, markPrice]);
 
-  /* Actual USD to spend — what the contract deducts from balance */
+  /* Actual USD to spend - what the contract deducts from balance */
   const actualCost = useMemo(() => {
     const a = parseFloat(usdAmount);
     return isNaN(a) || a <= 0 ? 0 : a;
   }, [usdAmount]);
 
-  /* Leverage only scales how the position is labelled and the liq price — not the real cost */
+  /* Leverage only scales how the position is labelled and the liq price - not the real cost */
   const displayNotional = actualCost * leverage;
 
   const assetQty = entryPrice > 0 ? actualCost / entryPrice : 0;
@@ -99,7 +99,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     return direction === 'Long' ? entryPrice * (1 - m) : entryPrice * (1 + m);
   }, [entryPrice, leverage, direction]);
 
-  /* How far the mark can move before liquidation — the risk at a glance.
+  /* How far the mark can move before liquidation - the risk at a glance.
      Bigger buffer = safer; we map it to a bar and a green/amber/red level. */
   const liqBufferPct = useMemo(() => {
     if (!estimatedLiqPrice || !entryPrice) return 0;
@@ -128,10 +128,10 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     const maxNumber = Number(spotAvailableBalance.value) / 10 ** spotAvailableBalance.decimals;
     const preset = (maxNumber * pct) / 100;
     if (side === 'Buy') {
-      /* Buy balance is denominated in USD — convert to an asset quantity using
+      /* Buy balance is denominated in USD - convert to an asset quantity using
          the limit price (Limit) or the mark price (Market). qty is always asset units. */
       const px = orderType === 'Limit' ? parseFloat(price) : markPrice;
-      if (!px || px <= 0) { error(orderType === 'Limit' ? 'Enter a price first' : 'Price unavailable — refresh and retry'); return; }
+      if (!px || px <= 0) { error(orderType === 'Limit' ? 'Enter a price first' : 'Price unavailable - refresh and retry'); return; }
       /* Small buffer on market buys so book slippage doesn't trip InsufficientUsd */
       const usable = orderType === 'Market' ? preset * 0.98 : preset;
       const assetQty = usable / px;
@@ -221,7 +221,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       error(`Insufficient balance. You have $${fmt(availableUsd)} available.`);
       return;
     }
-    if (markPrice <= 0) { error('No mark price yet — the keeper has not published one for this market.'); return; }
+    if (markPrice <= 0) { error('No mark price yet - the keeper has not published one for this market.'); return; }
 
     const err = await openPosition(asset, direction === 'Long', actualCost, leverage);
     if (err) { error(parseContractError(err)); return; }
@@ -546,7 +546,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
               </div>
               {liqRisk === 'danger' && (
                 <div style={{ fontSize: 12, color: 'var(--sell-red)', lineHeight: 1.4, marginTop: 2 }}>
-                  High leverage — a {liqBufferPct.toFixed(1)}% move against you triggers liquidation.
+                  High leverage - a {liqBufferPct.toFixed(1)}% move against you triggers liquidation.
                 </div>
               )}
             </>
@@ -689,7 +689,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
                 <div className={styles.positionGrid}>
                   <div><span className={styles.posLabel}>Entry</span><span>${fmt(pos.entry)}</span></div>
                   <div><span className={styles.posLabel}>Mark</span><span>{fmtMark(perpMarks[pos.asset] || markPrice)}</span></div>
-                  <div><span className={styles.posLabel}>Liq.</span><span className={styles.negative}>{pos.liqPrice > 0 ? `$${fmt(pos.liqPrice)}` : '—'}</span></div>
+                  <div><span className={styles.posLabel}>Liq.</span><span className={styles.negative}>{pos.liqPrice > 0 ? `$${fmt(pos.liqPrice)}` : '-'}</span></div>
                   <div><span className={styles.posLabel}>Size</span><span>{pos.size.toFixed(5)} {pos.asset}</span></div>
                   <div><span className={styles.posLabel}>Margin</span><span>${fmt(pos.margin)}</span></div>
                   <div><span className={styles.posLabel}>PnL</span>
@@ -738,23 +738,23 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     <Card title={`${asset}/USD Market`}>
       <div className={styles.mkStat}>
         <span>Mark price</span>
-        <span className={styles.mkVal}>{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</span>
+        <span className={styles.mkVal}>{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '-'}</span>
       </div>
       <div className={styles.mkStat}>
         <span>24h change</span>
         <span className={styles.mkVal} style={{ color: change24 == null ? 'var(--text-secondary)' : change24 >= 0 ? 'var(--buy-green)' : 'var(--sell-red)' }}>
-          {change24 == null ? '—' : `${change24 >= 0 ? '+' : ''}${change24.toFixed(2)}%`}
+          {change24 == null ? '-' : `${change24 >= 0 ? '+' : ''}${change24.toFixed(2)}%`}
         </span>
       </div>
       <div className={styles.mkStat}>
         <span>Best bid / ask</span>
         <span className={styles.mkVal}>
-          {bestBid > 0 ? `$${bestBid.toLocaleString()}` : '—'} <span style={{ color: 'var(--text-dim)' }}>/</span> {bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '—'}
+          {bestBid > 0 ? `$${bestBid.toLocaleString()}` : '-'} <span style={{ color: 'var(--text-dim)' }}>/</span> {bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '-'}
         </span>
       </div>
       <div className={styles.mkStat}>
         <span>Spread</span>
-        <span className={styles.mkVal}>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</span>
+        <span className={styles.mkVal}>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '-'}</span>
       </div>
       {account && portfolio && (
         <div className={styles.mkDivider}>
@@ -804,7 +804,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           fontSize: 12, fontWeight: 600,
           background: 'rgba(14,203,129,0.1)', border: '1px solid rgba(14,203,129,0.35)', color: 'var(--buy-green)',
         }}>
-          ● Live perpetuals — isolated margin, settled on-chain at the keeper mark price. Positions can be liquidated at maintenance margin.
+          ● Live perpetuals - isolated margin, settled on-chain at the keeper mark price. Positions can be liquidated at maintenance margin.
         </div>
       )}
       <div className={styles.chartArea}>{chartPanel}</div>

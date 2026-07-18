@@ -15,7 +15,7 @@ const Ctx = createContext<VoucherCtx>({ voucherId: null, enabled: false, apply: 
 /**
  * Requests a gasless voucher for the connected account from /api/voucher and
  * makes it available app-wide. Degrades silently to self-paid gas when the
- * backend is absent (dev) or unconfigured — the UI never blocks on it.
+ * backend is absent (dev) or unconfigured - the UI never blocks on it.
  */
 export function VoucherProvider({ children }: { children: ReactNode }) {
   const { account } = useAccount();
@@ -42,7 +42,7 @@ export function VoucherProvider({ children }: { children: ReactNode }) {
         setEnabled(!!data.enabled);
         setVoucherId(data.voucherId ?? null);
       } catch {
-        /* no backend in dev / offline — self-paid gas */
+        /* no backend in dev / offline - self-paid gas */
       }
     })();
     return () => { active = false; };

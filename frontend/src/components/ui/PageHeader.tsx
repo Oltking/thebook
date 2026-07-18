@@ -8,7 +8,7 @@ interface PageHeaderProps {
   action?: ReactNode;
 }
 
-/** Consistent modern page header — eyebrow, large title, optional subtitle + action. */
+/** Consistent modern page header - eyebrow, large title, optional subtitle + action. */
 export function PageHeader({ eyebrow, title, subtitle, action }: PageHeaderProps) {
   return (
     <header className={styles.header}>

@@ -169,7 +169,7 @@
   text-align: right;
 }
 
-/* price-impact severity — separate from the brand accent */
+/* price-impact severity - separate from the brand accent */
 .impactLow { color: var(--buy-green) !important; }
 .impactMed { color: #E8A33D !important; }
 .impactHigh { color: var(--sell-red) !important; }

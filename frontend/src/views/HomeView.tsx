@@ -203,7 +203,7 @@ export function HomeView({ onNavigate }: HomeViewProps) {
           </div>
           {opportunities.length === 0 ? (
             <div className={styles.empty}>
-              The market looks efficient right now — no edge above threshold. Your agent will surface a signal the moment one opens.
+              The market looks efficient right now - no edge above threshold. Your agent will surface a signal the moment one opens.
             </div>
           ) : (
             <div className={styles.oppGrid}>
