@@ -342,4 +342,10 @@
 /* Keep the centered mode switch clear: drop the ticker on mid widths, and hide
    the switch on phones (the drawer's Agent entry crosses into the Hive there). */
 @media (max-width: 1400px) { .ticker { display: none; } }
-@media (max-width: 767px) { .modeSwitch { display: none; } }
+@media (max-width: 767px) {
+  /* No sidebar on mobile, so centre on the header (= viewport centre). Compact,
+     and drop the logo wordmark to the mark alone to make room. */
+  .modeSwitch { left: 50%; }
+  .modeSwitch button { padding: 7px 10px; font-size: 11px; letter-spacing: 0.05em; }
+  .logo { font-size: 0; gap: 0; }
+}
