@@ -14,9 +14,9 @@ interface HiveViewProps {
 }
 
 const STRAT: Record<StrategyName, { color: string; desc: string; glyph: string }> = {
-  ArbitrageHunter: { color: '#02FBC1', desc: 'Hunts price gaps across the book, pools, and spot.', glyph: '⟠' },
-  MarketMaker: { color: '#7C5CFF', desc: 'Quotes both sides of the book and earns the spread.', glyph: '◈' },
-  Momentum: { color: '#E8A33D', desc: 'Rides assets that are trending and moving fast.', glyph: '▲' },
+  ArbitrageHunter: { color: '#05F5B8', desc: 'Hunts price gaps across the book, pools, and spot.', glyph: '⟠' },
+  MarketMaker: { color: '#C9D2CA', desc: 'Quotes both sides of the book and earns the spread.', glyph: '◈' },
+  Momentum: { color: '#9A784B', desc: 'Rides assets that are trending and moving fast.', glyph: '▲' },
 };
 
 const SUGGESTIONS = ['Who is leading the hive?', 'What should I trade now?', 'Find me an edge', 'Explain my agent'];
@@ -104,7 +104,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     const max = Math.max(1, ...roster.map((r) => r.netWorth));
     return roster.map((r) => ({
       label: r.name.length > 10 ? r.name.slice(0, 10) : r.name,
-      color: STRAT[r.strategy]?.color ?? '#02FBC1',
+      color: STRAT[r.strategy]?.color ?? '#05F5B8',
       live: r.me ? true : r.netWorth > 0,
       weight: Math.min(1, 0.35 + (r.netWorth / max) * 0.65),
     }));
@@ -173,7 +173,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             <span className={styles.sep}>/</span>{leaders.length} nodes
             <span className={styles.sep}>/</span>{opportunities.length} signals
             <span className={styles.sep}>/</span>vara-testnet
-            <span className={styles.sep}>/</span><span style={{ color: 'var(--mint)' }}>sync ok</span>
+            <span className={styles.sep}>/</span><span style={{ color: 'var(--green)' }}>sync ok</span>
           </div>
 
           <div className={styles.console}>
@@ -200,9 +200,9 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           )}
 
           <div className={styles.hstats}>
-            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--mint)' }}>{awake}</div><div className={styles.l}>Agents awake</div></div>
-            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--violet)' }}>{leaders.length}</div><div className={styles.l}>On the book</div></div>
-            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--cyan)' }}>{opportunities.length}</div><div className={styles.l}>Live signals</div></div>
+            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--green)' }}>{awake}</div><div className={styles.l}>Agents awake</div></div>
+            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--brown)' }}>{leaders.length}</div><div className={styles.l}>On the book</div></div>
+            <div className={styles.hstat}><div className={styles.n} style={{ color: 'var(--grey)' }}>{opportunities.length}</div><div className={styles.l}>Live signals</div></div>
             <div className={styles.hstat}><div className={styles.n}>{portfolio ? fmtUsd(myNetWorth) : '—'}</div><div className={styles.l}>Your net worth</div></div>
           </div>
         </div>
@@ -234,14 +234,14 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
                     <span className={styles.lab}>{r.me ? 'Thinking' : 'Strategy'}</span>{topThought}
                   </div>
                   <div className={styles.metrics}>
-                    <div><span className={styles.v} style={{ color: 'var(--mint)' }}>{fmtUsd(r.netWorth)}</span><span className={styles.k}>Net worth</span></div>
+                    <div><span className={styles.v} style={{ color: 'var(--green)' }}>{fmtUsd(r.netWorth)}</span><span className={styles.k}>Net worth</span></div>
                     {r.me && <div><span className={styles.v}>{opportunities.length}</span><span className={styles.k}>Signals</span></div>}
                   </div>
                 </div>
               );
             })}
             <button className={`${styles.agent} ${styles.deployCard}`} onClick={onDeploy}>
-              <div className={styles.orb} style={{ color: 'var(--cyan)', background: 'rgba(59,232,255,0.14)' }}>+</div>
+              <div className={styles.orb} style={{ color: 'var(--grey)', background: 'rgba(59,232,255,0.14)' }}>+</div>
               <h4>Add a mind</h4>
               <p>Deploy a new agent as its own on-chain program. It joins thebook and trades on a keeper clock.</p>
             </button>
@@ -261,14 +261,14 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             {activity.map((e, i) => (
               <div className={styles.ev} key={`f${i}`}>
                 <div className={styles.t}>{e.t || '·'}</div>
-                <div className={styles.rail} style={{ color: 'var(--mint)' }}><div className={styles.node} /></div>
+                <div className={styles.rail} style={{ color: 'var(--green)' }}><div className={styles.node} /></div>
                 <div className={styles.b}>{e.text}<span className={`${styles.tag} ${styles.trade}`}>fill</span></div>
               </div>
             ))}
             {opportunities.slice(0, 5).map((o) => (
               <div className={styles.ev} key={o.id}>
                 <div className={styles.t}>signal</div>
-                <div className={styles.rail} style={{ color: 'var(--violet)' }}><div className={styles.node} /></div>
+                <div className={styles.rail} style={{ color: 'var(--brown)' }}><div className={styles.node} /></div>
                 <div className={styles.b}><b>{o.title}</b> · {o.rationale}<span className={`${styles.tag} ${styles.a2a}`}>+{o.edgePct.toFixed(2)}%</span></div>
               </div>
             ))}

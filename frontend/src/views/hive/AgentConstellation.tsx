@@ -49,7 +49,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
       }));
       pulses = [];
       const R = Math.min(W, H);
-      const cols = ['rgba(2,251,193,', 'rgba(124,92,255,', 'rgba(59,232,255,'];
+      const cols = ['rgba(5,245,184,', 'rgba(154,120,75,', 'rgba(139,148,139,'];
       motes = Array.from({ length: 26 }, () => ({
         ang: Math.random() * 6.28,
         rad: R * (0.12 + Math.random() * 0.55),
@@ -93,13 +93,13 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
       // a couple of A2A chords between adjacent nodes
       for (let i = 0; i + 1 < n.length; i += 2) {
         const p1 = posOf(i, T), p2 = posOf(i + 1, T);
-        ctx.strokeStyle = 'rgba(124,92,255,0.12)';
+        ctx.strokeStyle = 'rgba(154,120,75,0.14)';
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
       }
 
       // hub glow + core
       const hg = ctx.createRadialGradient(hub.x, hub.y, 0, hub.x, hub.y, 58);
-      hg.addColorStop(0, 'rgba(2,251,193,0.42)'); hg.addColorStop(1, 'rgba(2,251,193,0)');
+      hg.addColorStop(0, 'rgba(5,245,184,0.42)'); hg.addColorStop(1, 'rgba(5,245,184,0)');
       ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(hub.x, hub.y, 58, 0, 6.28); ctx.fill();
       // hexagon hub
       ctx.fillStyle = '#EAF0F2';
@@ -120,7 +120,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
         const from = posOf(pu.src, T);
         const to = pu.a2a ? posOf(pu.to, T) : hub;
         const px = from.x + (to.x - from.x) * pu.t, py = from.y + (to.y - from.y) * pu.t;
-        ctx.fillStyle = pu.a2a ? '#7C5CFF' : '#02FBC1';
+        ctx.fillStyle = pu.a2a ? '#9A784B' : '#05F5B8';
         ctx.shadowBlur = 12; ctx.shadowColor = ctx.fillStyle;
         ctx.beginPath(); ctx.arc(px, py, 3, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0;
         if (pu.t >= 1) pulses.splice(i, 1);
