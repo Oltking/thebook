@@ -1,44 +1,43 @@
 :root {
-  /* ── Vara brand system · light-first, mint accent, wavy grounds ──
-     Palette lifted from the Vara press kit: signature mint #02FBC1, deep
-     teal-ink #031720, off-white grounds. Flat panels, one confident accent.
-     Every color token is redefined per theme below (media + data-theme). */
+  /* ── thebook ecosystem · one committed dark world ──
+     Fixed palette only: green, white, black, grey, brown. Sharp corners, sharp
+     mono display. Industrial terminal feel across the whole app. There is no
+     light mode; this is the single visual world. */
 
-  /* LIGHT (default) — white/off-white Vara grounds */
-  --bg-color: #F7FBFA;
-  --bg-elevated: #FFFFFF;
-  --card-bg: #FFFFFF;
-  --card-bg-hover: #F3F5F7;
-  --card-solid: #FFFFFF;
-  --border-color: #E4EAEC;
-  --border-strong: #D3DCDF;
-  --glass-border: rgba(2, 251, 193, 0.5);
-  --text-main: #031720;
-  --text-secondary: #58696E;
-  --text-dim: #9CACB1;
+  --bg-color: #050705;
+  --bg-elevated: #0A0E0A;
+  --card-bg: #0A0E0A;
+  --card-bg-hover: #0D120D;
+  --card-solid: #0A0E0A;
+  --border-color: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --glass-border: rgba(5, 245, 184, 0.4);
+  --text-main: #EBF2EC;
+  --text-secondary: #8B948B;   /* grey */
+  --text-dim: #565E56;
 
-  /* Accent: --accent is the readable interactive color (works as text AND as a
-     button ground with --on-accent text). --accent-bright is the vivid Vara
-     mint reserved for fills, waves and decorative brand moments. */
-  --accent: #009E77;
-  --accent-2: #02FBC1;
-  --accent-bright: #02FBC1;
-  --primary: #009E77;
-  --accent-hover: #007D5D;
-  --on-accent: #FFFFFF;
-  /* Light: readable green gradient so white button text keeps contrast.
-     (Dark mode overrides this back to bright mint with dark --on-accent.) */
-  --accent-gradient: linear-gradient(180deg, #00B489 0%, #008E68 100%);
-  --accent-soft: rgba(2, 251, 193, 0.16);
+  /* Green is the one confident accent; brown is the warm second signal. */
+  --accent: #05F5B8;
+  --accent-2: #05F5B8;
+  --accent-bright: #05F5B8;
+  --primary: #05F5B8;
+  --accent-hover: #3BFFCC;
+  --on-accent: #04140d;
+  --accent-gradient: linear-gradient(180deg, #05F5B8 0%, #04D9A2 100%);
+  --accent-soft: rgba(5, 245, 184, 0.12);
 
-  --buy-green: #009E77;
-  --sell-red: #E24339;
-  --sell-soft: rgba(226, 67, 57, 0.12);
+  --brown: #9A784B;
+  --brown-soft: rgba(154, 120, 75, 0.16);
 
-  /* ── Elevation (subtle, neutral — no color glow) ── */
+  /* Up = green, down = brown (the palette carries no red). */
+  --buy-green: #05F5B8;
+  --sell-red: #9A784B;
+  --sell-soft: rgba(154, 120, 75, 0.16);
+
+  /* ── Elevation ── */
   --glow-accent: none;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 12px 30px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.7);
 
   /* ── Layout ── */
   --announcement-height: 32px;
@@ -66,11 +65,11 @@
   --font-size-xl: clamp(20px, 1.25rem + 0.3vw, 24px);
   --font-size-2xl: clamp(24px, 1.5rem + 0.5vw, 32px);
 
-  /* ── Border Radius (sharp, terminal-like) ── */
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* ── Border Radius: sharp. Rectangles have hard corners in this world. ── */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 
   /* ── Transitions ── */
   --transition-fast: 150ms ease;
@@ -84,64 +83,10 @@
   /* --bp-xl: 1280px; */
 }
 
-/* ── DARK theme (Vara deep teal-ink) ──
-   Applied when the OS prefers dark AND the user hasn't forced a theme, or when
-   the user explicitly picks dark via [data-theme="dark"]. Mint reads great on
-   this ground, so --accent becomes the bright mint here. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg-color: #04121A;
-    --bg-elevated: #071E28;
-    --card-bg: #071E28;
-    --card-bg-hover: #0A2530;
-    --card-solid: #071E28;
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --glass-border: rgba(2, 251, 193, 0.35);
-    --text-main: #F3F5F7;
-    --text-secondary: #9CACB1;
-    --text-dim: #5F757E;
-
-    --accent: #02FBC1;
-    --primary: #02FBC1;
-    --accent-hover: #05EAB1;
-    --on-accent: #031720;
-    --accent-soft: rgba(2, 251, 193, 0.13);
-    --accent-gradient: linear-gradient(180deg, #02FBC1 0%, #05EAB1 100%);
-
-    --buy-green: #14E0A1;
-    --sell-red: #FF5A67;
-    --sell-soft: rgba(255, 90, 103, 0.14);
-
-    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45);
-    --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
-  }
-}
-
-/* Explicit user choice always wins over the OS preference, both directions. */
-:root[data-theme="dark"] {
-  --bg-color: #04121A;
-  --bg-elevated: #071E28;
-  --card-bg: #071E28;
-  --card-bg-hover: #0A2530;
-  --card-solid: #071E28;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --glass-border: rgba(2, 251, 193, 0.35);
-  --text-main: #F3F5F7;
-  --text-secondary: #9CACB1;
-  --text-dim: #5F757E;
-  --accent: #02FBC1;
-  --primary: #02FBC1;
-  --accent-hover: #05EAB1;
-  --on-accent: #031720;
-  --accent-soft: rgba(2, 251, 193, 0.13);
-  --accent-gradient: linear-gradient(180deg, #02FBC1 0%, #05EAB1 100%);
-  --buy-green: #14E0A1;
-  --sell-red: #FF5A67;
-  --sell-soft: rgba(255, 90, 103, 0.14);
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);
+/* Sharp mono display: headings carry the industrial, terminal character. */
+h1, h2, h3, h4 {
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
 }
 
 *,
@@ -172,23 +117,29 @@ body {
   max-width: 100vw;
 }
 
-/* ── Signature Vara wavy contour lines — a faint fixed brand backdrop ──
-   Inline SVG data URI of flowing bezier waves in mint; sits behind everything
-   at low opacity so it reads on both white and deep-teal grounds. */
+/* ── Liquid black-green glass gradient, drifting slowly behind everything ── */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -20%;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.5;
-  background-repeat: no-repeat;
-  background-position: center top;
-  background-size: cover;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='900' viewBox='0 0 1440 900'%3E%3Cg fill='none' stroke='%2302FBC1' stroke-opacity='0.22' stroke-width='1.4'%3E%3Cpath d='M-40 160 C 300 60 560 280 820 170 S 1280 60 1520 200'/%3E%3Cpath d='M-40 260 C 300 160 560 380 820 270 S 1280 160 1520 300'/%3E%3Cpath d='M-40 360 C 300 260 560 480 820 370 S 1280 260 1520 400'/%3E%3Cpath d='M-40 470 C 320 360 580 590 840 470 S 1300 350 1520 510'/%3E%3Cpath d='M-40 590 C 300 490 560 700 820 600 S 1280 480 1520 620'/%3E%3Cpath d='M-40 710 C 320 610 580 820 840 710 S 1300 600 1520 750'/%3E%3C/g%3E%3C/svg%3E");
+  background:
+    radial-gradient(40% 50% at 18% 18%, rgba(5, 245, 184, 0.14), transparent 60%),
+    radial-gradient(46% 56% at 84% 28%, rgba(5, 245, 184, 0.09), transparent 62%),
+    radial-gradient(52% 60% at 58% 104%, rgba(5, 245, 184, 0.11), transparent 60%),
+    radial-gradient(40% 50% at 8% 92%, rgba(154, 120, 75, 0.09), transparent 60%);
+  filter: blur(34px) saturate(1.1);
+  animation: bgdrift 26s ease-in-out infinite alternate;
 }
+@keyframes bgdrift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(1.5%, -1.5%, 0) scale(1.06); }
+  100% { transform: translate3d(-1.5%, 1.5%, 0) scale(1.03); }
+}
+@media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
 
-/* Keep app content above the wave backdrop. */
+/* Keep app content above the backdrop. */
 #root { position: relative; z-index: 1; }
 
 a {
@@ -253,7 +204,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(2, 251, 193, 0.6);
+  background: rgba(5, 245, 184, 0.6);
   background-clip: padding-box;
 }
 
@@ -263,7 +214,7 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Brand text selection ── */
 ::selection {
-  background: rgba(2, 251, 193, 0.35);
+  background: rgba(5, 245, 184, 0.35);
   color: var(--text-main);
 }
 

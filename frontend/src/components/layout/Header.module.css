@@ -1,4 +1,5 @@
 .header {
+  position: relative;
   height: var(--header-height);
   padding: 0 var(--space-md);
   display: flex;
@@ -25,10 +26,8 @@
 .logoMark {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
   flex-shrink: 0;
   object-fit: cover;
-  /* subtle ring so the black tile has an edge on the dark theme */
   box-shadow: 0 0 0 1px var(--border-color);
 }
 
@@ -37,13 +36,40 @@
 }
 
 /* ── Market ticker (the row of live price pills) ── */
+/* Trade / Hive switch: absolutely centered so it sits in the exact spot the
+   Hive's switch does. Sharp, mono, green-active to match the ecosystem. */
+.modeSwitch {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  z-index: 2;
+}
+.modeSwitch button {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  padding: 8px 15px;
+  min-height: 0;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.modeSwitch button:not(.modeOn):hover { color: var(--text-main); }
+.modeOn { color: var(--on-accent) !important; background: var(--accent); }
+@media (max-width: 900px) { .modeSwitch button { padding: 8px 11px; } }
+
 .ticker {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: nowrap;
   overflow: hidden;
-  margin: 0 auto;
+  margin-left: auto;
 }
 
 .tickerItem {
@@ -310,3 +336,8 @@
     font-size: 12px;
   }
 }
+
+/* Keep the centered mode switch clear: drop the ticker on mid widths, and hide
+   the switch on phones (the drawer's Agent entry crosses into the Hive there). */
+@media (max-width: 1400px) { .ticker { display: none; } }
+@media (max-width: 767px) { .modeSwitch { display: none; } }

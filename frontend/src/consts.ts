@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowLeftRight, Droplets, User, BarChart2, Bot, Sparkles, Code2 } from 'lucide-react';
+import { TrendingUp, ArrowLeftRight, Droplets, User, BarChart2, Bot, Code2 } from 'lucide-react';
 
 // Network + program are environment-driven so the same build can target testnet,
 // mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
@@ -51,19 +51,18 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'home',      label: 'Home',      icon: Sparkles },
-  { id: 'agent',     label: 'Agent',     icon: Bot },
   { id: 'trade',     label: 'Trade',     icon: BarChart2 },
   { id: 'futures',   label: 'Futures',   icon: TrendingUp },
   { id: 'swap',      label: 'Swap',      icon: ArrowLeftRight },
   { id: 'pools',     label: 'Pools',     icon: Droplets },
   { id: 'portfolio', label: 'Portfolio', icon: User },
+  { id: 'agent',     label: 'Agent',     icon: Bot },
   { id: 'build',     label: 'For Agents', icon: Code2 },
 ];
 
 // The phone bottom bar shows only the core five so labels never cram/clip; the
-// rest (Agent, Pools, For Agents) live in the hamburger drawer.
-const MOBILE_NAV_IDS = ['home', 'trade', 'futures', 'swap', 'portfolio'];
+// rest (Agent, For Agents) live in the hamburger drawer.
+const MOBILE_NAV_IDS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
 export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_IDS
   .map((id) => NAV_ITEMS.find((n) => n.id === id)!)
   .filter(Boolean);

@@ -4,8 +4,6 @@ import { SkeletonCard } from './components/ui/Skeleton';
 import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
-const HomeView = lazy(() => import('./views/HomeView').then(m => ({ default: m.HomeView })));
-const AgentView = lazy(() => import('./views/AgentView').then(m => ({ default: m.AgentView })));
 const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m.TradeView })));
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
@@ -22,7 +20,7 @@ function PageLoader() {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('trade');
   // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
   // item crosses into the Hive; the Hive's own switch crosses back.
   const [mode, setMode] = useState<'trade' | 'hive'>('trade');
@@ -35,10 +33,6 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home':
-        return <HomeView onNavigate={setActiveTab} />;
-      case 'agent':
-        return <AgentView />;
       case 'trade':
         return <TradeView mode="spot" />;
       case 'futures':
@@ -52,7 +46,7 @@ function App() {
       case 'build':
         return <AgentApiView />;
       default:
-        return <HomeView onNavigate={setActiveTab} />;
+        return <TradeView mode="spot" />;
     }
   };
 
@@ -66,7 +60,7 @@ function App() {
           />
         </Suspense>
       ) : (
-        <Layout activeTab={activeTab} setActiveTab={navigate}>
+        <Layout activeTab={activeTab} setActiveTab={navigate} onEnterHive={() => setMode('hive')}>
           <Suspense fallback={<PageLoader />}>
             {renderContent()}
           </Suspense>
