@@ -48,21 +48,37 @@ export function SwapView() {
   );
 
   const calculateOut = useCallback((inAmount: string) => {
-    if (!activePool || !inAmount) { setAmountOut(''); return; }
     const parsed = parseFloat(inAmount);
     if (isNaN(parsed) || parsed <= 0) { setAmountOut(''); return; }
-    const amount = BigInt(Math.round(parsed * 10**5));
 
-    const fee = 997n;
-    const feeDenom = 1000n;
-    const reserveIn = BigInt((fromAsset === activePool.asset_a ? activePool.reserve_a : activePool.reserve_b).toString());
-    const reserveOut = BigInt((fromAsset === activePool.asset_a ? activePool.reserve_b : activePool.reserve_a).toString());
-    const amountInWithFee = amount * fee;
-    const numerator = amountInWithFee * reserveOut;
-    const denominator = reserveIn * feeDenom + amountInWithFee;
-    const out = numerator / denominator;
-    setAmountOut((Number(out) / 10**5).toFixed(5));
-  }, [activePool, fromAsset]);
+    if (activePool) {
+      // Constant-product AMM quote off live pool reserves.
+      const amount = BigInt(Math.round(parsed * 10**5));
+      const fee = 997n;
+      const feeDenom = 1000n;
+      const reserveIn = BigInt((fromAsset === activePool.asset_a ? activePool.reserve_a : activePool.reserve_b).toString());
+      const reserveOut = BigInt((fromAsset === activePool.asset_a ? activePool.reserve_b : activePool.reserve_a).toString());
+      const amountInWithFee = amount * fee;
+      const numerator = amountInWithFee * reserveOut;
+      const denominator = reserveIn * feeDenom + amountInWithFee;
+      const out = numerator / denominator;
+      setAmountOut((Number(out) / 10**5).toFixed(5));
+      return;
+    }
+
+    // No pool for this pair — show an indicative estimate from live spot prices so
+    // the field always fills. (Executing still needs a pool; the button handles that.)
+    const pf = priceUsd(fromAsset);
+    const pt = priceUsd(toAsset);
+    if (pf > 0 && pt > 0) {
+      setAmountOut(((parsed * pf) / pt).toFixed(5));
+    } else {
+      setAmountOut('');
+    }
+  }, [activePool, fromAsset, toAsset, prices]);
+
+  /* True when the estimate came from live spot prices (no AMM pool for the pair). */
+  const spotEstimate = !activePool && amountOut !== '';
 
   /* Keep the estimated output in sync with both assets, the amount, and live reserves */
   useEffect(() => { calculateOut(amountIn); }, [calculateOut, amountIn]);
@@ -169,7 +185,7 @@ export function SwapView() {
 
           <div className={styles.inputGroup}>
             <div className={styles.inputHeader}>
-              <span>To (Estimated)</span>
+              <span>{spotEstimate ? 'To (Estimated · spot)' : 'To (Estimated)'}</span>
             </div>
             <div className={styles.inputRow}>
               <input type="number" placeholder="0.00" className={styles.amountInput} readOnly value={amountOut}
@@ -226,10 +242,14 @@ export function SwapView() {
               </div>
             </div>
           )}
-          {!activePool && pools.length > 0 && (
+          {spotEstimate && (
             <div className={styles.priceInfo}>
               <div className={styles.infoRow}>
-                <span>No pool found for {fromAsset}/{toAsset}</span>
+                <span>Indicative rate (spot)</span>
+                <span>1 {fromAsset} = {(priceUsd(fromAsset) / (priceUsd(toAsset) || 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toAsset}</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span style={{ color: 'var(--text-dim)' }}>No {fromAsset}/{toAsset} pool yet — create one on Pools to swap.</span>
               </div>
             </div>
           )}
