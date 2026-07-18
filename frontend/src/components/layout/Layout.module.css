@@ -26,6 +26,13 @@
   overflow-x: hidden;
 }
 
+/* Make room for the fixed sidebar on desktop (it's out of flow now). */
+@media (min-width: 768px) {
+  .main {
+    margin-left: var(--sidebar-width);
+  }
+}
+
 .content {
   flex: 1;
   padding: var(--space-md);

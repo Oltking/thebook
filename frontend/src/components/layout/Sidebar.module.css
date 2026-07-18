@@ -6,10 +6,19 @@
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  position: sticky;
-  top: var(--announcement-height, 34px);
   flex-shrink: 0;
-  transition: width var(--transition-base);
+}
+
+/* Desktop: pin the nav to the viewport so it never scrolls with the page.
+   (On mobile this same component lives inside the slide-out drawer, so the
+   fixed positioning is scoped to desktop only.) */
+@media (min-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 50;
+  }
 }
 
 .nav {
