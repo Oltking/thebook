@@ -92,6 +92,13 @@ export function PoolsView() {
     setCancellingOid(null);
   }, [program, account, executeTx, success, error, refreshPortfolio, refreshAll, fetchMyOrders]);
 
+  /* Remove all resting orders for a pair (both bid and ask) in one action. */
+  const cancelLiquidityGroup = useCallback(async (oids: (number | string | bigint)[]) => {
+    for (const oid of oids) {
+      await cancelLiquidityOrder(oid);
+    }
+  }, [cancelLiquidityOrder]);
+
   const handleCreatePool = async () => {
     if (!program || !account) return;
     if (newA === newB) { error('Cannot create a pool with the same asset.'); return; }
@@ -377,40 +384,52 @@ export function PoolsView() {
                 />
               );
             }
-            return resting.length > 0 ? (
+            if (resting.length === 0) return null;
+
+            // Combine all resting orders for the same pair into one position.
+            const groups = new Map<string, any[]>();
+            for (const o of resting) {
+              const asset = o[2] as string;
+              if (!groups.has(asset)) groups.set(asset, []);
+              groups.get(asset)!.push(o);
+            }
+
+            return (
               <div>
-                {resting.map((o: any) => {
-                  const oid = o[0];
-                  const side = o[1] as string;
-                  const asset = o[2] as string;
-                  const priceUsdVal = Number(o[3]) * 1000;
-                  const qtyRemaining = (Number(o[4]) - Number(o[5])) / 1e5;
+                {[...groups.entries()].map(([asset, orders]) => {
+                  let bidQty = 0, askQty = 0, totalUsd = 0;
+                  const oids = orders.map((o: any) => o[0]);
+                  for (const o of orders) {
+                    const price = Number(o[3]) * 1000;
+                    const remaining = (Number(o[4]) - Number(o[5])) / 1e5;
+                    if ((o[1] as string) === 'Buy') bidQty += remaining; else askQty += remaining;
+                    totalUsd += remaining * price;
+                  }
+                  const busy = oids.some((id: any) => cancellingOid === Number(id));
                   return (
-                    <div key={`ord-${oid}`} className={styles.lpRow}>
+                    <div key={`grp-${asset}`} className={styles.lpRow}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                         <div>
                           <span style={{ fontWeight: 600 }}>{asset} / USD</span>
-                          <span style={{
-                            marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                            color: side === 'Buy' ? 'var(--buy-green)' : 'var(--sell-red)',
-                          }}>
-                            {side === 'Buy' ? 'Bid' : 'Ask'}
+                          <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {orders.length} order{orders.length === 1 ? '' : 's'} · ${totalUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </span>
-                          <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
-                            {qtyRemaining.toLocaleString(undefined, { maximumFractionDigits: 5 })} {asset} @ ${priceUsdVal.toLocaleString()}
+                          <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2, display: 'flex', gap: 12 }}>
+                            {bidQty > 0 && <span><span style={{ color: 'var(--buy-green)', fontWeight: 600 }}>Bid</span> {bidQty.toLocaleString(undefined, { maximumFractionDigits: 5 })} {asset}</span>}
+                            {askQty > 0 && <span><span style={{ color: 'var(--sell-red)', fontWeight: 600 }}>Ask</span> {askQty.toLocaleString(undefined, { maximumFractionDigits: 5 })} {asset}</span>}
                           </div>
                         </div>
                         <button className={styles.manageBtn}
-                          onClick={() => cancelLiquidityOrder(oid)}
-                          disabled={cancellingOid === Number(oid)}>
-                          {cancellingOid === Number(oid) ? '…' : 'Remove'}
+                          onClick={() => cancelLiquidityGroup(oids)}
+                          disabled={busy}>
+                          {busy ? '…' : 'Remove'}
                         </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            ) : null;
+            );
           })()}
           {myLp.map((pos: any) => {
             const pool = pools.find(p => Number(p.id) === Number(pos.pool_id));
