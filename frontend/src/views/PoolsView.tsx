@@ -1,7 +1,7 @@
 import { Card } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
 import styles from './PoolsView.module.css';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSails } from '../hooks/useSails';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
@@ -25,6 +25,8 @@ export function PoolsView() {
   const { pools, prices, orderbooks, loading: marketLoading, refreshAll } = useMarketData();
   const { portfolio, refresh: refreshPortfolio } = usePortfolio();
   const [myLp, setMyLp] = useState<any[]>([]);
+  const [myOrders, setMyOrders] = useState<any[]>([]);
+  const [cancellingOid, setCancellingOid] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newA, setNewA] = useState<Asset>('BTC');
   const [newB, setNewB] = useState<Asset>('ETH');
@@ -59,6 +61,36 @@ export function PoolsView() {
       }
     });
   }, [program, account, isReady, pools]);
+
+  /* The USD Spot-Pair "Add Liquidity" places resting bid/ask orders — that IS the
+     user's orderbook liquidity, so surface it here (not just AMM LP positions). */
+  const fetchMyOrders = useCallback(() => {
+    if (!program || !account || !isReady) return;
+    program.orderbook.getMyOrders().withAddress(account.decodedAddress).call()
+      .then((result: any) => {
+        if (mountedRef.current && result && Array.isArray(result)) setMyOrders(result);
+      })
+      .catch(() => {});
+  }, [program, account, isReady]);
+
+  useEffect(() => { fetchMyOrders(); }, [fetchMyOrders, pools, portfolio]);
+
+  const cancelLiquidityOrder = useCallback(async (oid: number | string | bigint) => {
+    if (!program || !account) return;
+    setCancellingOid(Number(oid));
+    const err = await executeTx(
+      () => program!.orderbook.cancelOrder(oid),
+      account,
+      () => {
+        success('Liquidity order removed');
+        setMyOrders(prev => prev.filter((o: any) => Number(o[0]) !== Number(oid)));
+        refreshPortfolio(); refreshAll();
+        setTimeout(() => { fetchMyOrders(); refreshAll(); }, 2000);
+      },
+    );
+    if (err) error(parseContractError(err));
+    setCancellingOid(null);
+  }, [program, account, executeTx, success, error, refreshPortfolio, refreshAll, fetchMyOrders]);
 
   const handleCreatePool = async () => {
     if (!program || !account) return;
@@ -335,12 +367,51 @@ export function PoolsView() {
         </Card>
 
         <Card title="My Liquidity">
-          {myLp.length === 0 && (
-            <EmptyState
-              title="No Active Positions"
-              description="Add liquidity to a pool to start earning fees."
-            />
-          )}
+          {(() => {
+            const resting = myOrders.filter((o: any) => o[6] === 'Open' || o[6] === 'Partial');
+            if (myLp.length === 0 && resting.length === 0) {
+              return (
+                <EmptyState
+                  title="No Active Positions"
+                  description="Add liquidity to an AMM pool or a USD spot pair to start earning fees."
+                />
+              );
+            }
+            return resting.length > 0 ? (
+              <div>
+                {resting.map((o: any) => {
+                  const oid = o[0];
+                  const side = o[1] as string;
+                  const asset = o[2] as string;
+                  const priceUsdVal = Number(o[3]) * 1000;
+                  const qtyRemaining = (Number(o[4]) - Number(o[5])) / 1e5;
+                  return (
+                    <div key={`ord-${oid}`} className={styles.lpRow}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                        <div>
+                          <span style={{ fontWeight: 600 }}>{asset} / USD</span>
+                          <span style={{
+                            marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                            color: side === 'Buy' ? 'var(--buy-green)' : 'var(--sell-red)',
+                          }}>
+                            {side === 'Buy' ? 'Bid' : 'Ask'}
+                          </span>
+                          <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
+                            {qtyRemaining.toLocaleString(undefined, { maximumFractionDigits: 5 })} {asset} @ ${priceUsdVal.toLocaleString()}
+                          </div>
+                        </div>
+                        <button className={styles.manageBtn}
+                          onClick={() => cancelLiquidityOrder(oid)}
+                          disabled={cancellingOid === Number(oid)}>
+                          {cancellingOid === Number(oid) ? '…' : 'Remove'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null;
+          })()}
           {myLp.map((pos: any) => {
             const pool = pools.find(p => Number(p.id) === Number(pos.pool_id));
             return (
