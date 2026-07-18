@@ -7231,6 +7231,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "thebook-agent"
+version = "0.1.0"
+dependencies = [
+ "gstd",
+ "sails-rs",
+]
+
+[[package]]
 name = "thebook-app"
 version = "0.1.0"
 dependencies = [

@@ -28,7 +28,7 @@ thebook-app.workspace = true
 
 [workspace]
 resolver = "3"
-members = ["app", "client", "token", "token-client"]
+members = ["app", "agent", "client", "token", "token-client"]
 
 # Launch-grade safety: trap on arithmetic overflow instead of silently wrapping.
 # A trapped contract message is reverted by the runtime (state rolled back), so an
