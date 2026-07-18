@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 
+// (implementation below keeps onEscape in a ref so the trap only (re)initializes
+//  when `active` flips — not on every parent re-render.)
+
 const FOCUSABLE = [
   'a[href]', 'button:not([disabled])', 'input:not([disabled])',
   'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
@@ -14,6 +17,11 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
   onEscape?: () => void,
 ) {
   const ref = useRef<T>(null);
+  // Hold the latest onEscape without making it an effect dependency — otherwise a
+  // parent that recreates the callback each render would re-run the trap (and
+  // re-steal focus to the first element) on every keystroke.
+  const escapeRef = useRef(onEscape);
+  escapeRef.current = onEscape;
 
   useEffect(() => {
     if (!active) return;
@@ -26,7 +34,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     (first ?? node)?.focus?.();
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onEscape) { onEscape(); return; }
+      if (e.key === 'Escape' && escapeRef.current) { escapeRef.current(); return; }
       if (e.key !== 'Tab') return;
       const items = focusables();
       if (items.length === 0) return;
@@ -44,7 +52,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
       node?.removeEventListener('keydown', onKeyDown);
       prevFocus?.focus?.();
     };
-  }, [active, onEscape]);
+  }, [active]);
 
   return ref;
 }
