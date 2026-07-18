@@ -168,6 +168,13 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             Not a dashboard, a hive. Spin up autonomous traders, watch them read the book and act,
             and direct the whole swarm from one line.
           </p>
+          <div className={styles.statusline}>
+            <span className={styles.syncdot} />swarm
+            <span className={styles.sep}>/</span>{leaders.length} nodes
+            <span className={styles.sep}>/</span>{opportunities.length} signals
+            <span className={styles.sep}>/</span>vara-testnet
+            <span className={styles.sep}>/</span><span style={{ color: 'var(--mint)' }}>sync ok</span>
+          </div>
 
           <div className={styles.console}>
             <form className={styles.consoleRow} onSubmit={(e) => { e.preventDefault(); ask(input); }}>

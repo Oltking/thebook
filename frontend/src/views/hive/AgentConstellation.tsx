@@ -28,6 +28,9 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
     let hub = { x: 0, y: 0, r: 15 };
     let orbits: { base: number; d: number; ph: number; speed: number; r: number }[] = [];
     let pulses: { src: number; to: number; t: number; a2a: boolean }[] = [];
+    // Ambient energy: faint drifting motes so the field feels alive even with no
+    // agents yet. Not labelled entities, just the hum of the hive.
+    let motes: { ang: number; rad: number; sp: number; sz: number; c: string }[] = [];
 
     const rebuild = () => {
       DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -45,6 +48,15 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
         r: 4 + node.weight * 5,
       }));
       pulses = [];
+      const R = Math.min(W, H);
+      const cols = ['rgba(2,251,193,', 'rgba(124,92,255,', 'rgba(59,232,255,'];
+      motes = Array.from({ length: 26 }, () => ({
+        ang: Math.random() * 6.28,
+        rad: R * (0.12 + Math.random() * 0.55),
+        sp: (reduce ? 0 : 1) * (0.02 + Math.random() * 0.06) * (Math.random() < 0.5 ? 1 : -1),
+        sz: 0.6 + Math.random() * 1.6,
+        c: cols[Math.floor(Math.random() * cols.length)],
+      }));
     };
 
     const posOf = (i: number, t: number) => {
@@ -60,6 +72,16 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
       const dt = Math.min((ts - last) / 1000 || 0, 0.05); last = ts; T += dt;
       const n = nodesRef.current;
       ctx.clearRect(0, 0, W, H);
+
+      // ambient motes drifting around the hub
+      for (const m of motes) {
+        m.ang += m.sp * dt;
+        const mx = hub.x + Math.cos(m.ang) * m.rad;
+        const my = hub.y + Math.sin(m.ang) * m.rad * 0.82;
+        const tw = 0.25 + (Math.sin(T * 1.5 + m.rad) * 0.5 + 0.5) * 0.4;
+        ctx.fillStyle = m.c + tw.toFixed(2) + ')';
+        ctx.beginPath(); ctx.arc(mx, my, m.sz, 0, 6.28); ctx.fill();
+      }
 
       // spokes hub -> node
       for (let i = 0; i < n.length; i++) {
