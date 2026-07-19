@@ -24,8 +24,6 @@
   color: var(--txt);
   background: var(--void);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* Clear the fixed header (rendered inside, out of flow). */
-  padding-top: var(--header-height);
 }
 /* liquid black-green glass gradient, drifting slowly, background only */
 .world::before {
@@ -80,7 +78,8 @@
 @media (max-width: 720px) { .brand span { display: none; } }
 
 /* hero */
-.hive { position: relative; min-height: 74vh; padding: 44px 0 20px; overflow: hidden; }
+/* Clear the fixed header (which spans the top of the viewport). */
+.hive { position: relative; min-height: 74vh; padding: calc(var(--header-height) + 40px) 0 20px; overflow: hidden; }
 .hive .wrap { position: relative; z-index: 2; }
 .eyebrow { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 .eyebrow::before { content: ''; width: 7px; height: 7px; background: var(--green); box-shadow: 0 0 12px var(--green); animation: beat 1.9s infinite; }
