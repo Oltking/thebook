@@ -6,7 +6,7 @@
   --panel-2: #0D120D;
   --line: rgba(255, 255, 255, 0.09);
   --line-2: rgba(255, 255, 255, 0.16);
-  --green: #05F5B8;
+  --green: #1DB954;
   --green-deep: #04140d;
   --brown: #9A784B;
   --brown-soft: rgba(154, 120, 75, 0.16);
@@ -24,6 +24,8 @@
   color: var(--txt);
   background: var(--void);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Clear the fixed header (rendered inside, out of flow). */
+  padding-top: var(--header-height);
 }
 /* liquid black-green glass gradient, drifting slowly, background only */
 .world::before {
@@ -33,9 +35,9 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(40% 50% at 20% 20%, rgba(5, 245, 184, 0.16), transparent 60%),
-    radial-gradient(45% 55% at 82% 30%, rgba(5, 245, 184, 0.10), transparent 62%),
-    radial-gradient(50% 60% at 60% 100%, rgba(5, 245, 184, 0.12), transparent 60%),
+    radial-gradient(40% 50% at 20% 20%, rgba(29, 185, 84, 0.16), transparent 60%),
+    radial-gradient(45% 55% at 82% 30%, rgba(29, 185, 84, 0.10), transparent 62%),
+    radial-gradient(50% 60% at 60% 100%, rgba(29, 185, 84, 0.12), transparent 60%),
     radial-gradient(40% 50% at 10% 90%, rgba(154, 120, 75, 0.10), transparent 60%);
   filter: blur(30px) saturate(1.1);
   animation: drift 22s ease-in-out infinite alternate;
@@ -87,8 +89,10 @@
   font-family: var(--mono); font-size: clamp(34px, 5.4vw, 62px); font-weight: 700;
   letter-spacing: -0.02em; line-height: 1.02; margin: 22px 0 0; max-width: 15ch; text-transform: uppercase;
 }
-.title em { font-style: normal; color: var(--green); text-shadow: 0 0 26px rgba(5, 245, 184, 0.5); animation: glow 3.2s ease-in-out infinite; }
-@keyframes glow { 0%, 100% { text-shadow: 0 0 20px rgba(5, 245, 184, 0.32); } 50% { text-shadow: 0 0 34px rgba(5, 245, 184, 0.66); } }
+.title em { font-style: normal; color: var(--green); text-shadow: 0 0 26px rgba(29, 185, 84, 0.5); animation: glow 3.2s ease-in-out infinite; }
+.caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 5px; background: var(--green); box-shadow: 0 0 10px var(--green); vertical-align: -0.06em; animation: caretblink 1s steps(1) infinite; }
+@keyframes caretblink { 50% { opacity: 0; } }
+@keyframes glow { 0%, 100% { text-shadow: 0 0 20px rgba(29, 185, 84, 0.32); } 50% { text-shadow: 0 0 34px rgba(29, 185, 84, 0.66); } }
 .lede { margin-top: 18px; color: var(--dim); font-size: clamp(16px, 2vw, 19px); max-width: 42ch; }
 .statusline { margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-transform: uppercase; }
 .statusline .sep { color: rgba(255, 255, 255, 0.16); }
@@ -97,7 +101,7 @@
 /* console (glassy, sharp) */
 .console { margin-top: 30px; max-width: 620px; background: color-mix(in srgb, var(--panel) 70%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--line-2); padding: 8px; }
 .consoleRow { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--line); }
-.glyph { width: 24px; height: 24px; flex: none; background: var(--green); box-shadow: 0 0 14px rgba(5, 245, 184, 0.5); }
+.glyph { width: 24px; height: 24px; flex: none; background: var(--green); box-shadow: 0 0 14px rgba(29, 185, 84, 0.5); }
 .console input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--txt); font-size: 15px; font-family: var(--mono); }
 .console input::placeholder { color: var(--faint); }
 .send { width: 38px; height: 38px; border: none; background: var(--green); color: var(--green-deep); cursor: pointer; flex: none; display: grid; place-items: center; min-height: 0; font-weight: 700; }
@@ -131,7 +135,7 @@
 .aName { font-weight: 700; font-size: 15px; }
 .aStrat { font-family: var(--mono); font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
 .status { margin-left: auto; font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 9px; }
-.status.live { color: var(--green); background: rgba(5, 245, 184, 0.1); }
+.status.live { color: var(--green); background: rgba(29, 185, 84, 0.1); }
 .status.idle { color: var(--brown); background: var(--brown-soft); }
 .thought { margin-top: 16px; font-size: 13px; color: var(--txt); line-height: 1.5; background: rgba(255, 255, 255, 0.03); border-left: 2px solid var(--brown); padding: 10px 12px; }
 .thought .lab { font-family: var(--mono); font-size: 10px; color: var(--brown); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
@@ -151,12 +155,12 @@
 .ev .node { width: 9px; height: 9px; margin-top: 5px; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent); }
 .ev .b { font-size: 14px; }
 .tag { font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; margin-left: 8px; text-transform: uppercase; }
-.tag.trade { color: var(--green); background: rgba(5, 245, 184, 0.1); }
+.tag.trade { color: var(--green); background: rgba(29, 185, 84, 0.1); }
 .tag.a2a { color: var(--brown); background: var(--brown-soft); }
 .emptyStream { color: var(--dim); font-size: 14px; padding: 20px 0; }
 
 /* bottom deploy strip */
-.deploy { position: relative; border: 1px solid var(--line-2); padding: 32px; background: linear-gradient(115deg, rgba(5, 245, 184, 0.1), rgba(154, 120, 75, 0.06)); overflow: hidden; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+.deploy { position: relative; border: 1px solid var(--line-2); padding: 32px; background: linear-gradient(115deg, rgba(29, 185, 84, 0.1), rgba(154, 120, 75, 0.06)); overflow: hidden; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
 .deploy h3 { font-family: var(--mono); font-size: clamp(21px, 3vw, 28px); font-weight: 700; letter-spacing: -0.01em; margin: 0; text-transform: uppercase; }
 .deploy p { color: var(--dim); margin: 10px 0 0; max-width: 46ch; font-size: 14.5px; }
 .deploy .go { font-family: var(--mono); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px 24px; border: none; cursor: pointer; background: var(--green); color: var(--green-deep); }

@@ -21,6 +21,46 @@
   }
 }
 
+/* ── Network switch: a sleek diagonal toggle. Testnet is live; Mainnet is a
+   blurred coming-soon placeholder. The whole control is skewed so the divider
+   reads as a diagonal, and the labels are counter-skewed to stay upright. ── */
+.netWrap {
+  padding: 16px 14px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.netSwitch {
+  display: flex;
+  transform: skewX(-13deg);
+  border: 1px solid var(--border-strong);
+  background: var(--card-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+.netSwitch button {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.netSwitch button > span { display: inline-block; transform: skewX(13deg); }
+.netActive {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.15);
+}
+.netSoon {
+  filter: blur(1.4px);
+  opacity: 0.5;
+  color: var(--text-dim);
+  cursor: not-allowed;
+  border-left: 1px solid var(--border-strong);
+}
+
 .nav {
   flex: 1;
   padding: var(--space-md) var(--space-sm);

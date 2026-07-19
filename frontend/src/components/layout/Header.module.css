@@ -1,5 +1,8 @@
 .header {
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width);
+  right: 0;
   height: var(--header-height);
   padding: 0 var(--space-md);
   display: flex;
@@ -7,11 +10,35 @@
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-elevated);
-  position: sticky;
-  top: var(--announcement-height, 0px);
   z-index: 100;
   gap: var(--space-sm);
 }
+
+/* No sidebar on mobile, so the fixed header spans the full width. */
+@media (max-width: 767px) {
+  .header { left: 0; }
+}
+
+/* The Hive has no sidebar, so its header spans full width and the switch
+   centres on the whole viewport (still aligned with the trade side's switch). */
+.headerFull { left: 0; }
+.headerFull .modeSwitch { left: 50%; }
+
+.deployHeaderBtn {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 14px;
+  min-height: 0;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.deployHeaderBtn:hover { background: var(--accent); color: var(--on-accent); }
 
 .logo {
   display: flex;
@@ -19,7 +46,8 @@
   gap: 10px;
   font-size: var(--font-size-xl);
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -31,6 +59,7 @@
   box-shadow: 0 0 0 1px var(--border-color);
 }
 
+.logoText { white-space: nowrap; }
 .accent {
   color: var(--accent);
 }
@@ -341,7 +370,7 @@
 
 /* Keep the centered mode switch clear: drop the ticker on mid widths, and hide
    the switch on phones (the drawer's Agent entry crosses into the Hive there). */
-@media (max-width: 1400px) { .ticker { display: none; } }
+@media (max-width: 1520px) { .ticker { display: none; } }
 @media (max-width: 767px) {
   /* No sidebar on mobile, so centre on the header (= viewport centre). Compact,
      and drop the logo wordmark to the mark alone to make room. */

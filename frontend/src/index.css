@@ -11,26 +11,26 @@
   --card-solid: #0A0E0A;
   --border-color: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --glass-border: rgba(5, 245, 184, 0.4);
+  --glass-border: rgba(29, 185, 84, 0.4);
   --text-main: #EBF2EC;
   --text-secondary: #8B948B;   /* grey */
   --text-dim: #565E56;
 
   /* Green is the one confident accent; brown is the warm second signal. */
-  --accent: #05F5B8;
-  --accent-2: #05F5B8;
-  --accent-bright: #05F5B8;
-  --primary: #05F5B8;
-  --accent-hover: #3BFFCC;
+  --accent: #1DB954;
+  --accent-2: #1DB954;
+  --accent-bright: #1DB954;
+  --primary: #1DB954;
+  --accent-hover: #2CCB6B;
   --on-accent: #04140d;
-  --accent-gradient: linear-gradient(180deg, #05F5B8 0%, #04D9A2 100%);
-  --accent-soft: rgba(5, 245, 184, 0.12);
+  --accent-gradient: linear-gradient(180deg, #1DB954 0%, #15904A 100%);
+  --accent-soft: rgba(29, 185, 84, 0.12);
 
   --brown: #9A784B;
   --brown-soft: rgba(154, 120, 75, 0.16);
 
   /* Up = green, down = brown (the palette carries no red). */
-  --buy-green: #05F5B8;
+  --buy-green: #1DB954;
   --sell-red: #9A784B;
   --sell-soft: rgba(154, 120, 75, 0.16);
 
@@ -125,9 +125,9 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(40% 50% at 18% 18%, rgba(5, 245, 184, 0.14), transparent 60%),
-    radial-gradient(46% 56% at 84% 28%, rgba(5, 245, 184, 0.09), transparent 62%),
-    radial-gradient(52% 60% at 58% 104%, rgba(5, 245, 184, 0.11), transparent 60%),
+    radial-gradient(40% 50% at 18% 18%, rgba(29, 185, 84, 0.14), transparent 60%),
+    radial-gradient(46% 56% at 84% 28%, rgba(29, 185, 84, 0.09), transparent 62%),
+    radial-gradient(52% 60% at 58% 104%, rgba(29, 185, 84, 0.11), transparent 60%),
     radial-gradient(40% 50% at 8% 92%, rgba(154, 120, 75, 0.09), transparent 60%);
   filter: blur(34px) saturate(1.1);
   animation: bgdrift 26s ease-in-out infinite alternate;
@@ -204,7 +204,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(5, 245, 184, 0.6);
+  background: rgba(29, 185, 84, 0.6);
   background-clip: padding-box;
 }
 
@@ -214,7 +214,7 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Brand text selection ── */
 ::selection {
-  background: rgba(5, 245, 184, 0.35);
+  background: rgba(29, 185, 84, 0.35);
   color: var(--text-main);
 }
 

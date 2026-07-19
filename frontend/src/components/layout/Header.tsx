@@ -16,10 +16,14 @@ import { formatUsdPrice } from '../../lib/format';
 interface HeaderProps {
   onMenuClick: () => void;
   onEnterHive: () => void;
+  /** Which world this header sits in. Drives the active switch side + extras. */
+  world?: 'trade' | 'hive';
+  onExitHive?: () => void;
+  onDeploy?: () => void;
 }
 
 
-export function Header({ onMenuClick, onEnterHive }: HeaderProps) {
+export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, onDeploy }: HeaderProps) {
   const { account, login, logout } = useAccount();
   const { portfolio, loading } = usePortfolio();
   const { error } = useToast();
@@ -84,23 +88,27 @@ export function Header({ onMenuClick, onEnterHive }: HeaderProps) {
     { asset: 'VARA', data: prices.VARA },
   ];
 
+  const isHive = world === 'hive';
+
   return (
     <>
-      <header className={styles.header}>
-        {isMobile && (
+      <header className={`${styles.header} ${isHive ? styles.headerFull : ''}`}>
+        {isMobile && !isHive && (
           <button onClick={onMenuClick} className={styles.menuBtn} aria-label="Open menu">
             <Menu size={22} />
           </button>
         )}
         <div className={styles.logo}>
           <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
-          <span className={styles.accent}>the</span>bookdex
+          <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
         </div>
 
         {/* Trade / Hive world switch - centered, same position as the Hive's. */}
         <div className={styles.modeSwitch} role="tablist" aria-label="Mode">
-          <button role="tab" className={styles.modeOn} aria-selected="true">Trade</button>
-          <button role="tab" onClick={onEnterHive}>⬡ The Hive</button>
+          <button role="tab" className={!isHive ? styles.modeOn : ''} aria-selected={!isHive}
+            onClick={isHive ? onExitHive : undefined}>Trade</button>
+          <button role="tab" className={isHive ? styles.modeOn : ''} aria-selected={isHive}
+            onClick={!isHive ? onEnterHive : undefined}>⬡ The Hive</button>
         </div>
 
         {/* Live public price ticker. Hidden once connected, where the right side
@@ -126,6 +134,11 @@ export function Header({ onMenuClick, onEnterHive }: HeaderProps) {
         )}
 
         <div className={styles.actions}>
+          {isHive && onDeploy && (
+            <button className={styles.deployHeaderBtn} onClick={onDeploy}>
+              {isMobile ? '+ Agent' : '+ Deploy agent'}
+            </button>
+          )}
           {account && !isMobile && (
             <div className={styles.balanceInfo}>
               <span className={styles.balanceLabel}>Balance:</span>

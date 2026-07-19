@@ -6,6 +6,7 @@ import { findOpportunities, type Opportunity, type StrategyName } from '../../li
 import { fetchAgentBrief } from '../../lib/agentBrief';
 import { resolveIdentity } from '../../lib/identity';
 import { AgentConstellation, type HiveNode } from './AgentConstellation';
+import { Header } from '../../components/layout/Header';
 import styles from './HiveView.module.css';
 
 interface HiveViewProps {
@@ -14,12 +15,15 @@ interface HiveViewProps {
 }
 
 const STRAT: Record<StrategyName, { color: string; desc: string; glyph: string }> = {
-  ArbitrageHunter: { color: '#05F5B8', desc: 'Hunts price gaps across the book, pools, and spot.', glyph: '⟠' },
+  ArbitrageHunter: { color: '#1DB954', desc: 'Hunts price gaps across the book, pools, and spot.', glyph: '⟠' },
   MarketMaker: { color: '#C9D2CA', desc: 'Quotes both sides of the book and earns the spread.', glyph: '◈' },
   Momentum: { color: '#9A784B', desc: 'Rides assets that are trending and moving fast.', glyph: '▲' },
 };
 
 const SUGGESTIONS = ['Who is leading the hive?', 'What should I trade now?', 'Find me an edge', 'Explain my agent'];
+
+// The looping word in the headline: type it, hold, delete, move to the next.
+const HEADLINE_WORDS = ['awake', 'active', 'trading', 'earning'];
 
 function hexOf(id: unknown): string {
   if (typeof id === 'string') return id.toLowerCase();
@@ -39,6 +43,32 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
+  const [typed, setTyped] = useState('awake');
+
+  // Typewriter loop for the headline word.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let wordIdx = 0;
+    let charIdx = HEADLINE_WORDS[0].length;
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const word = HEADLINE_WORDS[wordIdx];
+      if (!deleting) {
+        charIdx += 1;
+        setTyped(word.slice(0, charIdx));
+        if (charIdx >= word.length) { deleting = true; timer = setTimeout(tick, 1500); return; }
+        timer = setTimeout(tick, 95);
+      } else {
+        charIdx -= 1;
+        setTyped(word.slice(0, Math.max(0, charIdx)));
+        if (charIdx <= 0) { deleting = false; wordIdx = (wordIdx + 1) % HEADLINE_WORDS.length; timer = setTimeout(tick, 350); return; }
+        timer = setTimeout(tick, 48);
+      }
+    };
+    timer = setTimeout(tick, 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const myAddr = account?.decodedAddress?.toLowerCase() ?? '';
 
@@ -104,7 +134,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     const max = Math.max(1, ...roster.map((r) => r.netWorth));
     return roster.map((r) => ({
       label: r.name.length > 10 ? r.name.slice(0, 10) : r.name,
-      color: STRAT[r.strategy]?.color ?? '#05F5B8',
+      color: STRAT[r.strategy]?.color ?? '#1DB954',
       live: r.me ? true : r.netWorth > 0,
       weight: Math.min(1, 0.35 + (r.netWorth / max) * 0.65),
     }));
@@ -148,22 +178,16 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
 
   return (
     <div className={styles.world}>
-      <header className={styles.bar}>
-        <div className={`${styles.wrap} ${styles.barIn}`}>
-          <div className={styles.brand}><img src="/logo.png" alt="" /><span>thebook</span></div>
-          <div className={styles.switch} role="tablist" aria-label="Mode">
-            <button role="tab" onClick={onExitHive}>Trade</button>
-            <button role="tab" className={styles.on} aria-selected="true">⬡ The Hive</button>
-          </div>
-          <button className={styles.deployBtn} onClick={onDeploy}>+ Deploy agent</button>
-        </div>
-      </header>
+      {/* Same header as the trading side (uniform), with the Hive active and a
+          Deploy button added. */}
+      <Header world="hive" onMenuClick={() => {}} onEnterHive={() => {}}
+        onExitHive={onExitHive} onDeploy={onDeploy} />
 
       <section className={styles.hive}>
         <AgentConstellation nodes={nodes} />
         <div className={styles.wrap}>
           <span className={styles.eyebrow}>Agent ecosystem · live on Vara A2A</span>
-          <h1 className={styles.title}>Your agents are <em>awake</em>.</h1>
+          <h1 className={styles.title}>Your agents are <em>{typed}<span className={styles.caret} /></em></h1>
           <p className={styles.lede}>
             Not a dashboard, a hive. Spin up autonomous traders, watch them read the book and act,
             and direct the whole swarm from one line.

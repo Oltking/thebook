@@ -24,6 +24,8 @@
   flex-direction: column;
   min-width: 0;
   overflow-x: hidden;
+  /* The header is fixed (out of flow); reserve its height so content clears it. */
+  padding-top: var(--header-height);
 }
 
 /* Make room for the fixed sidebar on desktop (it's out of flow now). */

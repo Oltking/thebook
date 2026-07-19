@@ -49,7 +49,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
       }));
       pulses = [];
       const R = Math.min(W, H);
-      const cols = ['rgba(5,245,184,', 'rgba(154,120,75,', 'rgba(139,148,139,'];
+      const cols = ['rgba(29,185,84,', 'rgba(154,120,75,', 'rgba(139,148,139,'];
       motes = Array.from({ length: 26 }, () => ({
         ang: Math.random() * 6.28,
         rad: R * (0.12 + Math.random() * 0.55),
@@ -99,7 +99,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
 
       // hub glow + core
       const hg = ctx.createRadialGradient(hub.x, hub.y, 0, hub.x, hub.y, 58);
-      hg.addColorStop(0, 'rgba(5,245,184,0.42)'); hg.addColorStop(1, 'rgba(5,245,184,0)');
+      hg.addColorStop(0, 'rgba(29,185,84,0.42)'); hg.addColorStop(1, 'rgba(29,185,84,0)');
       ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(hub.x, hub.y, 58, 0, 6.28); ctx.fill();
       // hexagon hub
       ctx.fillStyle = '#EAF0F2';
@@ -120,7 +120,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
         const from = posOf(pu.src, T);
         const to = pu.a2a ? posOf(pu.to, T) : hub;
         const px = from.x + (to.x - from.x) * pu.t, py = from.y + (to.y - from.y) * pu.t;
-        ctx.fillStyle = pu.a2a ? '#9A784B' : '#05F5B8';
+        ctx.fillStyle = pu.a2a ? '#9A784B' : '#1DB954';
         ctx.shadowBlur = 12; ctx.shadowColor = ctx.fillStyle;
         ctx.beginPath(); ctx.arc(px, py, 3, 0, 6.28); ctx.fill(); ctx.shadowBlur = 0;
         if (pu.t >= 1) pulses.splice(i, 1);
