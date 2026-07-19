@@ -13,7 +13,8 @@
 //
 // Optional env:
 //   INTERVAL_MS  push cadence in ms (default 15000)
-//   IDL_PATH     path to the generated .idl (default: ../thebook.idl)
+//   IDL_PATH     path to an .idl that includes the Perps service
+//                (default: ../../client/thebook_client.idl)
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +38,9 @@ for (const f of [resolve(__dirname, '..', '.env.deploy'), resolve(__dirname, '..
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
 const SEED = process.env.VARA_SEED;
 const PROGRAM_ID = process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
-const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'thebook.idl');
+// The root thebook.idl is stale (Orderbook + Amm only). The generated client IDL
+// includes the Perps service that publishes mark prices, so default to it.
+const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
 // On-chain marks can only change once per block (~3s on Vara), so we push at block
 // cadence. The UI ticker/chart keep updating in real-time from the off-chain feed.
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 2_500);
