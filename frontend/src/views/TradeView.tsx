@@ -222,6 +222,13 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       return;
     }
     if (markPrice <= 0) { error('No mark price yet - the keeper has not published one for this market.'); return; }
+    // Perps settle against the ON-CHAIN keeper mark, not the off-chain feed. If the
+    // keeper has not published one, the contract reverts, so stop here with a clear
+    // message rather than sending a doomed transaction.
+    if (!perpMarks[asset] || perpMarks[asset] <= 0) {
+      error('No on-chain mark price for this market yet. Perps need the price keeper running to trade.');
+      return;
+    }
 
     const err = await openPosition(asset, direction === 'Long', actualCost, leverage);
     if (err) { error(parseContractError(err)); return; }
