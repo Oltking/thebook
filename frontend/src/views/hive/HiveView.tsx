@@ -74,10 +74,10 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
 
   useEffect(() => {
     let on = true;
-    (async () => {
+    const fetchBoard = async () => {
       if (!program) return;
       try {
-        const board = await program.orderbook.getLeaderboard(12).call();
+        const board = await program.orderbook.getLeaderboard(50).call();
         if (on && Array.isArray(board)) {
           setLeaders(board.map((e: any) => ({
             addr: hexOf(e.id),
@@ -87,8 +87,11 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           })));
         }
       } catch { /* leaderboard unavailable */ }
-    })();
-    return () => { on = false; };
+    };
+    fetchBoard();
+    // Poll so a freshly deployed agent shows up without a manual refresh.
+    const iv = setInterval(() => { if (!document.hidden) fetchBoard(); }, 8000);
+    return () => { on = false; clearInterval(iv); };
   }, [program, portfolio]);
 
   useEffect(() => {
@@ -123,12 +126,21 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
   // first (and given a live thought) if they've joined.
   const roster = useMemo(() => {
     const rows = leaders.map((l) => ({ ...l, me: l.addr === myAddr }));
-    if (identity && myAddr && !rows.some((r) => r.me)) {
-      rows.unshift({ addr: myAddr, name: identity.name, strategy: identity.strategy, netWorth: myNetWorth, me: true });
+    // Surface the connected user's agent as soon as they've joined, even if the
+    // per-caller identity read is lagging (a portfolio means they registered).
+    const joined = !!identity || !!portfolio;
+    if (joined && myAddr && !rows.some((r) => r.me)) {
+      rows.unshift({
+        addr: myAddr,
+        name: identity?.name || 'Your agent',
+        strategy: identity?.strategy || 'ArbitrageHunter',
+        netWorth: myNetWorth,
+        me: true,
+      });
     }
     rows.sort((a, b) => (a.me ? -1 : b.me ? 1 : b.netWorth - a.netWorth));
-    return rows.slice(0, 5);
-  }, [leaders, identity, myAddr, myNetWorth]);
+    return rows.slice(0, 6);
+  }, [leaders, identity, portfolio, myAddr, myNetWorth]);
 
   const nodes: HiveNode[] = useMemo(() => {
     const max = Math.max(1, ...roster.map((r) => r.netWorth));
