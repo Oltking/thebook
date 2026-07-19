@@ -71,7 +71,7 @@ function App() {
         <OnboardingWizard
           onComplete={completeOnboarding}
           onDismiss={dismissWizard}
-          onNavigateToTab={(t) => { setMode('trade'); setActiveTab(t); }}
+          onNavigateToTab={(t) => { if (t === 'agent') { setMode('hive'); } else { setMode('trade'); setActiveTab(t); } }}
         />
       )}
     </>

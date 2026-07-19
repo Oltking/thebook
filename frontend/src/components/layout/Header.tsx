@@ -98,9 +98,16 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
             <Menu size={22} />
           </button>
         )}
-        <div className={styles.logo}>
-          <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
-          <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
+        <div className={styles.leftGroup}>
+          <div className={styles.logo}>
+            <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
+            <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
+          </div>
+          {/* Network switch: Testnet is live, Mainnet is a blurred coming-soon. */}
+          <div className={styles.netSwitch} role="group" aria-label="Network">
+            <button className={styles.netActive} aria-pressed="true"><span>Testnet</span></button>
+            <button className={styles.netSoon} disabled aria-disabled="true" title="Mainnet is coming soon"><span>Mainnet</span></button>
+          </div>
         </div>
 
         {/* Trade / Hive world switch - centered, same position as the Hive's. */}

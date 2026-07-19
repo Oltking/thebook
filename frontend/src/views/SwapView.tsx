@@ -1,7 +1,7 @@
 import { Card } from '../components/ui/Card';
 import { ArrowDown } from 'lucide-react';
 import styles from './SwapView.module.css';
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSails } from '../hooks/useSails';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
@@ -31,13 +31,9 @@ export function SwapView() {
   const { success, error } = useToast();
   const { txState, executeTx, resetTx } = useTxStatus();
 
-  // The token pickers always offer every asset so they never render empty; whether
-  // a route actually exists is handled separately by `activePool`.
+  // The token pickers always offer every asset; whether a route actually exists
+  // is handled separately by `activePool` (with a spot-price fallback estimate).
   const ALL_ASSETS: Asset[] = ['BTC', 'ETH', 'VARA'];
-  const availAssets = useMemo(
-    () => [...new Set(pools.flatMap(p => [p.asset_a, p.asset_b]))],
-    [pools]
-  );
 
   const activePool = useMemo(
     () => pools.find(p =>
@@ -111,22 +107,15 @@ export function SwapView() {
     return !isNaN(v) && v > 0 && priceUsd(asset) > 0 ? `≈ $${(v * priceUsd(asset)).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '';
   };
 
-  /* Default to a real pool on first load, then keep the pair valid (never From == To) */
-  const initRef = useRef(false);
+  /* Keep the pair valid: if From ends up equal to To, nudge To to another asset.
+     (The dropdown options already exclude the other side, so this is a safety net
+     and never fights a deliberate user selection.) */
   useEffect(() => {
-    if (pools.length === 0) return;
-    if (!initRef.current) {
-      initRef.current = true;
-      setFromAsset(pools[0].asset_a);
-      setToAsset(pools[0].asset_b);
-      return;
-    }
-    if (!availAssets.includes(fromAsset)) { setFromAsset(availAssets[0]); return; }
-    if (toAsset === fromAsset || !availAssets.includes(toAsset)) {
-      const other = availAssets.find(a => a !== fromAsset);
+    if (fromAsset === toAsset) {
+      const other = ALL_ASSETS.find(a => a !== fromAsset);
       if (other) setToAsset(other);
     }
-  }, [pools, availAssets, fromAsset, toAsset]);
+  }, [fromAsset, toAsset]);
 
   const handleSwap = async () => {
     if (!program || !account || !activePool || !amountIn) return;

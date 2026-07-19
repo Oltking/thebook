@@ -59,10 +59,35 @@
   box-shadow: 0 0 0 1px var(--border-color);
 }
 
+.leftGroup { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .logoText { white-space: nowrap; }
 .accent {
   color: var(--accent);
 }
+
+/* ── Network switch: sleek diagonal toggle, Testnet live / Mainnet coming soon ── */
+.netSwitch {
+  display: flex;
+  flex-shrink: 0;
+  transform: skewX(-13deg);
+  border: 1px solid var(--border-strong);
+  background: var(--card-bg);
+}
+.netSwitch button {
+  min-height: 32px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.netSwitch button > span { display: inline-block; transform: skewX(13deg); }
+.netActive { background: var(--accent); color: var(--on-accent); }
+.netSoon { filter: blur(1.4px); opacity: 0.5; color: var(--text-dim); cursor: not-allowed; border-left: 1px solid var(--border-strong); }
+@media (max-width: 1180px) { .netSwitch { display: none; } }
 
 /* ── Market ticker (the row of live price pills) ── */
 /* Trade / Hive switch: absolutely centered so it sits in the exact spot the

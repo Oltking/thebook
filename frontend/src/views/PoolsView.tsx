@@ -100,8 +100,9 @@ export function PoolsView() {
   }, [cancelLiquidityOrder]);
 
   const handleCreatePool = async () => {
-    if (!program || !account) return;
-    if (newA === newB) { error('Cannot create a pool with the same asset.'); return; }
+    if (!account) { error('Connect your wallet to create a pool.'); return; }
+    if (!program) { error('Still connecting to the network. Try again in a moment.'); return; }
+    if (newA === newB) { error('Pick two different assets for the pool.'); return; }
     const err = await executeTx(
       () => program!.amm.createPool(newA, newB),
       account,
@@ -498,6 +499,9 @@ export function PoolsView() {
                     placeholder="0.00000000"
                     min="0"
                   />
+                  <div className={styles.balanceTag} onClick={() => setAmountA(String(assetBal(managed.pool.asset_a)))}>
+                    Balance: {assetBal(managed.pool.asset_a).toLocaleString(undefined, { maximumFractionDigits: 5 })} {managed.pool.asset_a}
+                  </div>
                 </div>
                 <div className={styles.formGroup}>
                   <label>Amount {managed.pool.asset_b}</label>
@@ -508,6 +512,9 @@ export function PoolsView() {
                     placeholder="0.00000000"
                     min="0"
                   />
+                  <div className={styles.balanceTag} onClick={() => setAmountB(String(assetBal(managed.pool.asset_b)))}>
+                    Balance: {assetBal(managed.pool.asset_b).toLocaleString(undefined, { maximumFractionDigits: 5 })} {managed.pool.asset_b}
+                  </div>
                 </div>
                 <div className={styles.modalActions}>
                   <button className={styles.btnSecondary} onClick={closeModal}>Cancel</button>

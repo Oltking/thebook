@@ -318,3 +318,13 @@
   min-height: 36px;
   font-weight: 600;
 }
+
+/* Balance hint under a liquidity input; click to fill the max. */
+.balanceTag {
+  margin-top: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+.balanceTag:hover { color: var(--accent); }
