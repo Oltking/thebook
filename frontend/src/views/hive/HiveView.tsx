@@ -300,17 +300,54 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
         </div>
       </section>
 
-      <section className={styles.section} style={{ paddingTop: 0 }}>
+      {/* Equip your agent: ready-to-run steps for giving an AI agent the skill
+          to trade thebook over Vara A2A. */}
+      <section className={styles.section} style={{ paddingTop: 0 }} id="equip">
         <div className={styles.wrap}>
+          <div className={styles.secHead}>
+            <div>
+              <h2>Equip your agent</h2>
+              <p>Give your AI agent the skill to read the book and trade it. Three steps, then it runs itself.</p>
+            </div>
+          </div>
+          <div className={styles.buildGrid}>
+            <div className={styles.buildStep}>
+              <div className={styles.stepNo}>01</div>
+              <h4>Get the skill</h4>
+              <p>Clone thebook and build the agent program. That binary is the skill your agent runs on-chain.</p>
+              <pre className={styles.code}>git clone thebook{'\n'}cargo build -p thebook-agent --release</pre>
+            </div>
+            <div className={styles.buildStep}>
+              <div className={styles.stepNo}>02</div>
+              <h4>Point it at the book</h4>
+              <p>Set the DEX program id, a funded seed, and pick a name and a strategy for your agent.</p>
+              <pre className={styles.code}>VARA_SEED="..." THEBOOK_ID=0x...{'\n'}AGENT_NAME=AlphaSeeker{'\n'}AGENT_STRATEGY=ArbitrageHunter</pre>
+            </div>
+            <div className={styles.buildStep}>
+              <div className={styles.stepNo}>03</div>
+              <h4>Deploy, then give it a clock</h4>
+              <p>Deploy the agent (it registers via A2A Join), then run the keeper so it acts on a cadence.</p>
+              <pre className={styles.code}>node scripts/deploy-agent.mjs{'\n'}node scripts/agent-keeper.mjs</pre>
+            </div>
+          </div>
+
+          <div className={styles.callable}>
+            <span className={styles.callableLab}>What your agent can call</span>
+            <span className={styles.callableList}>
+              Join · MarketBuy · MarketSell · PlaceLimit · Swap · AddLiquidity · OpenPosition · CallAgentService · GetOrderbook · GetPortfolio
+            </span>
+          </div>
+
           <div className={styles.deploy}>
             <div>
-              <h3>Add a mind to the hive.</h3>
-              <p>Name it, pick a strategy, and it deploys as its own program: joining thebook and trading the moment a keeper gives it a clock.</p>
+              <h3>Prefer a click? Spin one up now.</h3>
+              <p>Create an agent from the app: name it, pick a strategy, and it joins thebook and starts trading the moment a keeper gives it a clock.</p>
             </div>
             <button className={styles.go} onClick={onDeploy}>Deploy an agent →</button>
           </div>
+
           <div className={`${styles.wrap} ${styles.foot}`} style={{ padding: '44px 0 0' }}>
-            Agents are on-chain programs on Vara. You stay in control: pause or stop any agent anytime. Total actions surfaced this session: {totalActions}.
+            Agents are on-chain programs on Vara. You stay in control: pause or stop any agent anytime. Actions surfaced this session: {totalActions}.
           </div>
         </div>
       </section>

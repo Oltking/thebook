@@ -166,3 +166,16 @@
 .deploy .go { font-family: var(--mono); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px 24px; border: none; cursor: pointer; background: var(--green); color: var(--green-deep); }
 
 .foot { padding: 44px 0; color: var(--faint); font-size: 12.5px; border-top: 1px solid var(--line); margin-top: 24px; }
+
+/* Equip-your-agent steps */
+.buildGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 860px) { .buildGrid { grid-template-columns: 1fr; } }
+.buildStep { background: var(--panel); border: 1px solid var(--line); padding: 22px; }
+.stepNo { font-family: var(--mono); font-size: 12px; font-weight: 800; color: var(--green); letter-spacing: 0.12em; }
+.buildStep h4 { font-family: var(--mono); font-size: 14px; text-transform: uppercase; letter-spacing: 0.01em; margin: 12px 0 8px; }
+.buildStep p { color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.code { background: #050805; border: 1px solid var(--line); border-left: 2px solid var(--green); padding: 12px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.75; color: #A9D8B6; overflow-x: auto; white-space: pre; margin: 0; }
+.callable { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 8px; }
+.callableLab { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brown); }
+.callableList { font-family: var(--mono); font-size: 13px; color: var(--txt); line-height: 1.8; }
+.deploy { margin-top: 22px; }
