@@ -79,7 +79,10 @@ async function deployToken(t) {
   // Gas estimation wants the 32-byte account id in hex, NOT the SS58 string.
   const sourceId = u8aToHex(admin.addressRaw);
   const gas = await api.program.calculateGas.initUpload(sourceId, code, payload, 0, true);
-  const limit = gas.min_limit.toBigInt() * 3n;
+  // Buffer the estimate, but never exceed the block gas limit.
+  const blockMax = api.blockGasLimit.toBigInt();
+  let limit = gas.min_limit.toBigInt() * 3n;
+  if (limit > blockMax) limit = blockMax;
   const { programId, extrinsic } = api.program.upload({ code, gasLimit: limit, value: 0, initPayload: payload });
   await new Promise((res, rej) => {
     extrinsic.signAndSend(admin, ({ status, events, dispatchError }) => {
