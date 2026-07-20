@@ -28,8 +28,8 @@ import { SailsIdlParser } from 'sails-js-parser';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
 
-for (const f of [resolve(__dirname, '..', '.env.deploy'), resolve(__dirname, '..', '.env')]) {
-  if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } break; }
+for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.env.deploy')]) {
+  if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
@@ -87,7 +87,7 @@ console.log(`\n  ✓ agent deployed`);
 console.log(`  agent id: ${programId}`);
 console.log(`  init msg: ${msgId}`);
 console.log(`  block:    ${blockHash}\n`);
-console.log(`  Next: add it to the keeper —`);
+console.log(`  Next: add it to the keeper:`);
 console.log(`    AGENT_IDS=${programId} node scripts/agent-keeper.mjs\n`);
 
 await api.disconnect();

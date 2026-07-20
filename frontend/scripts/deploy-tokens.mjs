@@ -28,8 +28,9 @@ import { SailsIdlParser } from 'sails-js-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
-for (const f of [resolve(__dirname, '..', '.env.deploy'), resolve(__dirname, '..', '.env')]) {
-  if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } break; }
+// Load BOTH env files: .env.deploy has the admin seed, .env has VITE_PROGRAM_ID.
+for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.env.deploy')]) {
+  if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
