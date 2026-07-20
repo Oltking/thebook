@@ -172,3 +172,28 @@ If you later need deep historical analytics (full trade history, per-user PnL ov
 time), add an off-chain indexer (e.g. Subsquid) that ingests the same events into a
 database and serve it alongside the on-chain queries — the event shapes above are
 the ingestion contract.
+
+## §4 · One-shot redeploy (deploy-all)
+
+If the on-chain program is an older build (missing Perps / token vault), redeploy
+the current source in one command. This deploys thebook, deploys + wires the four
+wrapped tokens, registers the admin, and prints every env value.
+
+```
+cargo build --release                       # DEX + token wasm
+cd frontend
+VARA_SEED="<admin seed>" node scripts/deploy-all.mjs
+```
+
+Put the printed VITE_PROGRAM_ID and VITE_TOKEN_* into frontend/.env, redeploy the
+frontend, then start the mark-price keeper (required for futures):
+
+```
+node scripts/keeper.mjs
+```
+
+Optional: fund the perps house reserve (claims wUSDC, deposits, FundReserve):
+
+```
+node scripts/fund-reserve.mjs
+```
