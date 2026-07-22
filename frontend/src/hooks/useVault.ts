@@ -3,6 +3,7 @@ import { useSails } from './useSails';
 import { web3FromSource } from '@polkadot/extension-dapp';
 import { useVoucher } from '../providers/VoucherProvider';
 import { TokenProgram } from '../lib/token';
+import { parseContractError } from '../lib/errors';
 import { TOKENS, TOKENS_CONFIGURED, PROGRAM_ID, type TokenMeta } from '../consts';
 
 export type VaultStep =
@@ -38,7 +39,13 @@ export function useVault() {
       const tx = buildTx();
       await applyVoucher(tx.withAccount(account.address, { signer })).calculateGas(true, 100);
       const { response } = await tx.signAndSend();
-      return response();
+      const result = await response();
+      // A method returning Result<T,E> resolves to { err } on failure rather than
+      // throwing. Surface it so a failed claim/approve/deposit isn't silently lost.
+      if (result && typeof result === 'object' && 'err' in (result as object)) {
+        throw new Error(parseContractError((result as any).err));
+      }
+      return result;
     },
     [account, applyVoucher],
   );
@@ -76,7 +83,7 @@ export function useVault() {
       } catch (e: any) {
         console.error('claimAndDeposit failed:', e);
         setStep('idle');
-        return e?.message || String(e);
+        return parseContractError(e);
       } finally {
         setBusy(false);
       }
@@ -108,7 +115,7 @@ export function useVault() {
       } catch (e: any) {
         console.error('deposit failed:', e);
         setStep('idle');
-        return e?.message || String(e);
+        return parseContractError(e);
       } finally {
         setBusy(false);
       }
@@ -128,7 +135,7 @@ export function useVault() {
       } catch (e: any) {
         console.error('withdraw failed:', e);
         setStep('idle');
-        return e?.message || String(e);
+        return parseContractError(e);
       } finally {
         setBusy(false);
       }
