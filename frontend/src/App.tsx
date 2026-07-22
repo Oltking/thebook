@@ -10,6 +10,7 @@ const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
 const AgentApiView = lazy(() => import('./views/AgentApiView').then(m => ({ default: m.AgentApiView })));
 const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
+const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
 
 function PageLoader() {
   return (
@@ -24,6 +25,16 @@ function App() {
   // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
   // item crosses into the Hive; the Hive's own switch crosses back.
   const [mode, setMode] = useState<'trade' | 'hive'>('trade');
+  // Public landing is the front door. Once someone enters the app we remember it
+  // so returning visitors go straight in.
+  const [entered, setEntered] = useState(() => {
+    try { return localStorage.getItem('thebook-entered') === '1'; } catch { return false; }
+  });
+  const enterApp = (toHive = false) => {
+    try { localStorage.setItem('thebook-entered', '1'); } catch { /* ignore */ }
+    setMode(toHive ? 'hive' : 'trade');
+    setEntered(true);
+  };
   const { showWizard, completeOnboarding, dismissWizard } = useOnboarding();
 
   const navigate = (tab: string) => {
@@ -49,6 +60,14 @@ function App() {
         return <TradeView mode="spot" />;
     }
   };
+
+  if (!entered) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LandingView onLaunch={() => enterApp(false)} onEnterHive={() => enterApp(true)} />
+      </Suspense>
+    );
+  }
 
   return (
     <>
