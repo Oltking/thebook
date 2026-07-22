@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { SkeletonCard } from './components/ui/Skeleton';
 import { OnboardingWizard } from './components/ui/OnboardingWizard';
@@ -58,30 +59,47 @@ function App() {
     }
   };
 
-  if (!entered) {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <LandingView onLaunch={() => enterApp(false)} onEnterHive={() => enterApp(true)} />
-      </Suspense>
-    );
-  }
+  // Which world is on screen, for the crossfade between landing / trade / hive.
+  // NOTE: animate OPACITY ONLY. transform/filter would create a containing block
+  // and break the fixed header, sidebar and Hive positioning.
+  const world = !entered ? 'landing' : mode === 'hive' ? 'hive' : 'trade';
+  const fade = {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const },
+  };
 
   return (
     <>
-      {mode === 'hive' ? (
-        <Suspense fallback={<PageLoader />}>
-          <HiveView
-            onExitHive={() => setMode('trade')}
-            onDeploy={() => window.dispatchEvent(new Event('thebookdex:open-wizard'))}
-          />
-        </Suspense>
-      ) : (
-        <Layout activeTab={activeTab} setActiveTab={navigate} onEnterHive={() => setMode('hive')}>
-          <Suspense fallback={<PageLoader />}>
-            {renderContent()}
-          </Suspense>
-        </Layout>
-      )}
+      <AnimatePresence mode="wait">
+        {world === 'landing' && (
+          <motion.div key="landing" {...fade}>
+            <Suspense fallback={<PageLoader />}>
+              <LandingView onLaunch={() => enterApp(false)} onEnterHive={() => enterApp(true)} />
+            </Suspense>
+          </motion.div>
+        )}
+        {world === 'hive' && (
+          <motion.div key="hive" {...fade}>
+            <Suspense fallback={<PageLoader />}>
+              <HiveView
+                onExitHive={() => setMode('trade')}
+                onDeploy={() => window.dispatchEvent(new Event('thebookdex:open-wizard'))}
+              />
+            </Suspense>
+          </motion.div>
+        )}
+        {world === 'trade' && (
+          <motion.div key="trade" {...fade}>
+            <Layout activeTab={activeTab} setActiveTab={navigate} onEnterHive={() => setMode('hive')}>
+              <Suspense fallback={<PageLoader />}>
+                {renderContent()}
+              </Suspense>
+            </Layout>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {showWizard && (
         <OnboardingWizard
