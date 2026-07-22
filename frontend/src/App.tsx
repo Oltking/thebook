@@ -25,13 +25,10 @@ function App() {
   // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
   // item crosses into the Hive; the Hive's own switch crosses back.
   const [mode, setMode] = useState<'trade' | 'hive'>('trade');
-  // Public landing is the front door. Once someone enters the app we remember it
-  // so returning visitors go straight in.
-  const [entered, setEntered] = useState(() => {
-    try { return localStorage.getItem('thebook-entered') === '1'; } catch { return false; }
-  });
+  // Public landing is the front door: every fresh load opens here, and "Launch
+  // app" enters the platform for that session.
+  const [entered, setEntered] = useState(false);
   const enterApp = (toHive = false) => {
-    try { localStorage.setItem('thebook-entered', '1'); } catch { /* ignore */ }
     setMode(toHive ? 'hive' : 'trade');
     setEntered(true);
   };
