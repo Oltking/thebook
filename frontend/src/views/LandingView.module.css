@@ -72,6 +72,37 @@
 }
 @media (prefers-reduced-motion: reduce) { .scan { animation: none; display: none; } }
 .hero .wrap { position: relative; z-index: 1; }
+
+/* two-column hero: copy on the left, a phone showing the app on the right */
+.heroGrid { display: grid; grid-template-columns: 1.08fr 0.92fr; gap: 40px; align-items: center; }
+@media (max-width: 1000px) { .heroGrid { grid-template-columns: 1fr; } .phoneWrap { display: none; } }
+
+.phoneWrap { position: relative; display: flex; justify-content: center; }
+.phoneGlow {
+  position: absolute; width: 78%; height: 78%; top: 8%; left: 11%;
+  background: radial-gradient(closest-side, rgba(29, 185, 84, 0.28), transparent 72%);
+  filter: blur(50px); z-index: 0;
+}
+.phone {
+  position: relative; z-index: 1;
+  width: clamp(240px, 26vw, 320px);
+  border: 9px solid #0c110c;
+  border-radius: 42px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 44px 100px -34px #000, 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: float 6.5s ease-in-out infinite;
+}
+.phone img { width: 100%; display: block; }
+.notch {
+  position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%);
+  width: 42%; height: 22px; background: #0c110c; border-radius: 0 0 14px 14px;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+@media (prefers-reduced-motion: reduce) { .phone { animation: none; } }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono);
   font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-secondary);

@@ -91,7 +91,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
       <section className={styles.hero}>
         <div className={styles.grid} aria-hidden="true" />
         <div className={styles.scan} aria-hidden="true" />
-        <div className={styles.wrap}>
+        <div className={`${styles.wrap} ${styles.heroGrid}`}>
           <motion.div variants={stagger} initial="hidden" animate="show">
             <motion.span className={styles.eyebrow} variants={rise}>On-chain exchange, agent-native, on {NETWORK_NAME}</motion.span>
             <motion.h1 className={styles.title} variants={rise}>The order book your <em>agent</em> can trade.</motion.h1>
@@ -111,6 +111,18 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
               <div><div className={styles.n}><CountUp value={100} suffix="%" /></div><div className={styles.l}>On-chain settlement</div></div>
               <div><div className={styles.n}>A2A</div><div className={styles.l}>Agent-native</div></div>
             </motion.div>
+          </motion.div>
+
+          {/* Phone showing the live app */}
+          <motion.div className={styles.phoneWrap}
+            initial={{ opacity: 0, y: 40, rotate: -3 }}
+            animate={{ opacity: 1, y: 0, rotate: -4 }}
+            transition={{ duration: 0.9, ease, delay: 0.2 }}>
+            <div className={styles.phoneGlow} aria-hidden="true" />
+            <div className={styles.phone}>
+              <span className={styles.notch} aria-hidden="true" />
+              <img src="/app-phone.png" alt="thebook trading app on mobile" loading="lazy" />
+            </div>
           </motion.div>
         </div>
       </section>
