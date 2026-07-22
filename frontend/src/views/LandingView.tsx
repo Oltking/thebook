@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import { motion, useInView, type Variants } from 'framer-motion';
 import { useMarketData } from '../providers/MarketDataProvider';
 import { NETWORK_NAME } from '../consts';
 import styles from './LandingView.module.css';
@@ -18,6 +20,50 @@ const AGENT_STEPS = [
   { no: '02', t: 'Read', b: 'It queries the live book, pools and mark prices on-chain. Everything it needs to decide is deterministic.' },
   { no: '03', t: 'Trade', b: 'It sends typed intents that settle on the same vault as human trades. No special path, no black box.' },
 ];
+
+// Motion presets.
+const ease = [0.22, 1, 0.36, 1] as const;
+const stagger: Variants = { show: { transition: { staggerChildren: 0.09 } } };
+const rise: Variants = {
+  hidden: { opacity: 0, y: 22 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease } },
+};
+
+/** Count up to a numeric target when it scrolls into view. */
+function CountUp({ value, prefix = '', suffix = '', decimals = 0 }: { value: number; prefix?: string; suffix?: string; decimals?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    let raf = 0;
+    const start = performance.now();
+    const dur = 1100;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setN(value * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, value]);
+  return <span ref={ref}>{prefix}{n.toLocaleString(undefined, { maximumFractionDigits: decimals, minimumFractionDigits: decimals })}{suffix}</span>;
+}
+
+function Reveal({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y: 26 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.7, ease, delay }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
   const { prices } = useMarketData();
@@ -43,40 +89,53 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
 
       {/* Hero */}
       <section className={styles.hero}>
+        <div className={styles.grid} aria-hidden="true" />
+        <div className={styles.scan} aria-hidden="true" />
         <div className={styles.wrap}>
-          <span className={styles.eyebrow}>On-chain exchange, agent-native, on {NETWORK_NAME}</span>
-          <h1 className={styles.title}>The order book your <em>agent</em> can trade.</h1>
-          <p className={styles.lede}>
-            On-chain spot, liquidity and real perpetuals on Vara. Built for humans and the autonomous
-            agents that trade for them, through one shared order book.
-          </p>
-          <div className={styles.heroActions}>
-            <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}>Launch app</button>
-            <button className={`${styles.btn} ${styles.btnGhost} ${styles.btnLg}`} onClick={onEnterHive}>Enter the hive</button>
-          </div>
-          <div className={styles.heroStats}>
-            <div><div className={styles.n}>{btc ? `$${btc.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'LIVE'}</div><div className={styles.l}>BTC on the book</div></div>
-            <div><div className={styles.n}>20x</div><div className={styles.l}>Max leverage</div></div>
-            <div><div className={styles.n}>100%</div><div className={styles.l}>On-chain settlement</div></div>
-            <div><div className={styles.n}>A2A</div><div className={styles.l}>Agent-native</div></div>
-          </div>
+          <motion.div variants={stagger} initial="hidden" animate="show">
+            <motion.span className={styles.eyebrow} variants={rise}>On-chain exchange, agent-native, on {NETWORK_NAME}</motion.span>
+            <motion.h1 className={styles.title} variants={rise}>The order book your <em>agent</em> can trade.</motion.h1>
+            <motion.p className={styles.lede} variants={rise}>
+              On-chain spot, liquidity and real perpetuals on Vara. Built for humans and the autonomous
+              agents that trade for them, through one shared order book.
+            </motion.p>
+            <motion.div className={styles.heroActions} variants={rise}>
+              <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
+                whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Launch app</motion.button>
+              <motion.button className={`${styles.btn} ${styles.btnGhost} ${styles.btnLg}`} onClick={onEnterHive}
+                whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Enter the hive</motion.button>
+            </motion.div>
+            <motion.div className={styles.heroStats} variants={rise}>
+              <div><div className={styles.n}>{btc ? <CountUp value={btc} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>BTC on the book</div></div>
+              <div><div className={styles.n}><CountUp value={20} suffix="x" /></div><div className={styles.l}>Max leverage</div></div>
+              <div><div className={styles.n}><CountUp value={100} suffix="%" /></div><div className={styles.l}>On-chain settlement</div></div>
+              <div><div className={styles.n}>A2A</div><div className={styles.l}>Agent-native</div></div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
       {/* Primitives */}
       <section className={styles.section}>
         <div className={styles.wrap}>
-          <span className={styles.kicker}>Three primitives, one book</span>
-          <h2 className={styles.h2}>Everything a market needs</h2>
-          <p className={styles.sub}>Spot, liquidity and leverage, all on-chain and all callable the same way, whether a person clicks or an agent posts.</p>
+          <Reveal>
+            <span className={styles.kicker}>Three primitives, one book</span>
+            <h2 className={styles.h2}>Everything a market needs</h2>
+            <p className={styles.sub}>Spot, liquidity and leverage, all on-chain and all callable the same way, whether a person clicks or an agent posts.</p>
+          </Reveal>
           <div className={styles.cards}>
-            {PRIMITIVES.map((p) => (
-              <div className={styles.card} key={p.no}>
+            {PRIMITIVES.map((p, i) => (
+              <motion.div className={styles.card} key={p.no}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-60px' }}
+                transition={{ duration: 0.6, ease, delay: i * 0.1 }}
+                whileHover={{ y: -6 }}>
                 <div className={styles.cardNo}>{p.no}</div>
                 <h3>{p.name}</h3>
                 <p>{p.body}</p>
                 <div className={styles.meta}>{p.meta}</div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -86,7 +145,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
       <section className={styles.section}>
         <div className={styles.wrap}>
           <div className={styles.agentBand}>
-            <div>
+            <Reveal>
               <span className={styles.kicker}>Agent-native, Vara A2A</span>
               <h2 className={styles.h2}>Any agent can trade it</h2>
               <p className={styles.sub}>
@@ -101,8 +160,9 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className={styles.code}>
+            </Reveal>
+            <Reveal delay={0.12}>
+              <div className={styles.code}>
 {`// any agent, over Vara A2A
 const book = connect('thebook.vara');
 
@@ -113,17 +173,22 @@ await book.orderbook.join('my-agent', 'ArbitrageHunter');
 const { bids, asks } = await book.getOrderbook('BTC');
 if (bids[0].price > mark * 1.002)
   await book.marketSell('BTC', qty);`}
-            </div>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
       {/* Final CTA */}
       <section className={styles.finalCta}>
+        <div className={styles.scan} aria-hidden="true" />
         <div className={styles.wrap}>
-          <h2>Give your agent a market to <em>trade</em>.</h2>
-          <p>Live on {NETWORK_NAME}. Real book, real prices, real perps, and an intent layer any agent can call.</p>
-          <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}>Launch app</button>
+          <Reveal>
+            <h2>Give your agent a market to <em>trade</em>.</h2>
+            <p>Live on {NETWORK_NAME}. Real book, real prices, real perps, and an intent layer any agent can call.</p>
+            <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
+              whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Launch app</motion.button>
+          </Reveal>
         </div>
       </section>
 

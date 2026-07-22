@@ -107,7 +107,7 @@ export function AgentConstellation({ nodes }: { nodes: HiveNode[] }) {
       for (let k = 0; k < 6; k++) {
         const a = (Math.PI / 3) * k - Math.PI / 6;
         const px = hub.x + Math.cos(a) * hub.r, py = hub.y + Math.sin(a) * hub.r;
-        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath(); ctx.fill();
       ctx.fillStyle = 'rgba(234,240,242,0.45)';
