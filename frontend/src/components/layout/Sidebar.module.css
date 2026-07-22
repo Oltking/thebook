@@ -157,6 +157,11 @@
     width: var(--sidebar-collapsed-width);
   }
 
+  /* The diagonal Testnet/Mainnet tag doesn't fit the icon-only rail. */
+  .netWrap {
+    display: none;
+  }
+
   .nav {
     padding: var(--space-lg) var(--space-sm);
     align-items: center;

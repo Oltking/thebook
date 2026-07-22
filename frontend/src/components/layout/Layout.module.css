@@ -28,11 +28,9 @@
   padding-top: var(--header-height);
 }
 
-/* Make room for the fixed sidebar on desktop (it's out of flow now). */
-@media (min-width: 768px) {
-  .main {
-    margin-left: var(--sidebar-width);
-  }
+/* Make room for the fixed sidebar (0 on mobile, collapsed on tablet, full on desktop). */
+.main {
+  margin-left: var(--sidebar-cur);
 }
 
 .content {

@@ -43,6 +43,10 @@
   --announcement-height: 0px;
   --sidebar-width: 216px;
   --sidebar-collapsed-width: 64px;
+  /* The effective sidebar width right now: 0 on mobile (drawer), collapsed on
+     tablet, full on desktop. Header offset, content margin and the centered mode
+     switch all read this so they stay in sync with the actual sidebar. */
+  --sidebar-cur: 0px;
   --header-height: 64px;
   --bottom-nav-height: 64px;
 
@@ -88,6 +92,10 @@ h1, h2, h3, h4 {
   font-family: var(--font-mono);
   letter-spacing: -0.01em;
 }
+
+/* Effective sidebar width per breakpoint (tablet = collapsed rail, desktop = full). */
+@media (min-width: 768px) { :root { --sidebar-cur: var(--sidebar-collapsed-width); } }
+@media (min-width: 1024px) { :root { --sidebar-cur: var(--sidebar-width); } }
 
 *,
 *::before,

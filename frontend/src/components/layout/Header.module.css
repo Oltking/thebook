@@ -1,7 +1,7 @@
 .header {
   position: fixed;
   top: 0;
-  left: var(--sidebar-width);
+  left: var(--sidebar-cur);
   right: 0;
   height: var(--header-height);
   padding: 0 var(--space-md);
@@ -14,10 +14,6 @@
   gap: var(--space-sm);
 }
 
-/* No sidebar on mobile, so the fixed header spans the full width. */
-@media (max-width: 767px) {
-  .header { left: 0; }
-}
 
 /* The Hive has no sidebar, so its header spans full width and the switch
    centres on the whole viewport (still aligned with the trade side's switch). */
@@ -96,7 +92,7 @@
   position: absolute;
   /* Pin to the true viewport centre (not the header centre) so this switch lands
      in the exact same spot as the Hive's, which has no sidebar to offset it. */
-  left: calc(50% - (var(--sidebar-width) / 2));
+  left: calc(50% - (var(--sidebar-cur) / 2));
   top: 50%;
   transform: translate(-50%, -50%);
   display: flex;
