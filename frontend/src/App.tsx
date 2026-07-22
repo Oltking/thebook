@@ -101,7 +101,8 @@ function App() {
         )}
       </AnimatePresence>
 
-      {showWizard && (
+      {/* Onboarding only belongs inside the app, never over the public landing. */}
+      {entered && showWizard && (
         <OnboardingWizard
           onComplete={completeOnboarding}
           onDismiss={dismissWizard}
