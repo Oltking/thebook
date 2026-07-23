@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { usePerps } from '../hooks/usePerps';
 import { useSails } from '../hooks/useSails';
-import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers, ArrowUpRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
 import { useViewport } from '../hooks/useViewport';
@@ -40,6 +40,8 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const [demoLoading, setDemoLoading] = useState(false);
   const [side, setSide]           = useState<Side>('Buy');
   const [qty, setQty]             = useState('');
+  // Simple by default; the full chart/depth terminal is opt-in ("Pro view").
+  const [pro, setPro]             = useState(false);
   const { isMobile } = useViewport();
 
   const isSpot    = mode === 'spot';
@@ -772,9 +774,61 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     </Card>
   );
 
+  /* ── SIMPLE VIEW (default): order-first, calm, mobile-friendly. The full
+     chart/depth terminal is one tap away via "Pro view". ── */
+  if (!pro) {
+    const chg = change24 ?? 0;
+    return (
+      <div className={styles.simpleWrap}>
+        <div className={styles.simpleCard}>
+          <div className={styles.simpleTop}>
+            <div className={styles.assetTabs}>
+              {(['BTC', 'ETH', 'VARA'] as Asset[]).map(a => (
+                <button key={a} onClick={() => setAsset(a)}
+                  className={`${styles.assetTab} ${asset === a ? styles.assetTabOn : ''}`}>
+                  {isSpot ? a : `${a}-P`}
+                </button>
+              ))}
+            </div>
+            <button className={styles.proToggle} onClick={() => setPro(true)}>
+              Pro view <ArrowUpRight size={13} />
+            </button>
+          </div>
+
+          <div className={styles.priceRow}>
+            <span className={styles.bigPrice}>{fmtMark(markPrice)}</span>
+            <span className={styles.chg} style={{ color: chg >= 0 ? 'var(--buy-green)' : 'var(--sell-red)' }}>
+              {chg >= 0 ? '▲' : '▼'} {Math.abs(chg).toFixed(2)}%
+            </span>
+          </div>
+
+          <Sparkline
+            data={priceHistory.map(pp => pp[asset]).filter((v): v is number => v != null)}
+            up={chg >= 0}
+          />
+
+          <div className={styles.simpleEntry}>{entryPanel}</div>
+
+          <div className={styles.marketLine}>
+            <span>Bid <b>{bestBid > 0 ? `$${bestBid.toLocaleString()}` : '—'}</b></span>
+            <span>Ask <b>{bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '—'}</b></span>
+            <span>Spread <b>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString()}` : '—'}</b></span>
+          </div>
+        </div>
+        {isFutures && positions.length > 0 && (
+          <div className={styles.simpleCard} style={{ marginTop: 12 }}>{positionsPanel}</div>
+        )}
+        <TxStatusOverlay state={txState} onClose={resetTx} />
+      </div>
+    );
+  }
+
   if (isMobile) {
     return (
       <div className={styles.mobileContainer}>
+        <button className={styles.backSimple} onClick={() => setPro(false)}>
+          <ArrowLeft size={14} /> Simple view
+        </button>
         <div className={styles.mobileTabs}>
           {mobilePanels.map(p => {
             const Icon = p.icon;
@@ -804,6 +858,11 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   return (
     <div className={styles.grid}>
+      <div style={{ gridColumn: '1 / -1', marginBottom: 'var(--space-sm)' }}>
+        <button className={styles.backSimple} onClick={() => setPro(false)}>
+          <ArrowLeft size={14} /> Simple view
+        </button>
+      </div>
       {isFutures && (
         <div style={{
           gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8,
@@ -825,5 +884,28 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       <div className={styles.tradesArea}>{executionsPanel}</div>
       <TxStatusOverlay state={txState} onClose={resetTx} />
     </div>
+  );
+}
+
+/** Lightweight SVG sparkline for the simple view (no full charting engine). */
+function Sparkline({ data, up }: { data: number[]; up: boolean }) {
+  const pts = data.slice(-60);
+  if (pts.length < 2) {
+    return <div className={styles.sparkEmpty}>building price history…</div>;
+  }
+  const w = 100, h = 34;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const range = max - min || 1;
+  const d = pts.map((v, i) => {
+    const x = (i / (pts.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  const color = up ? 'var(--buy-green)' : 'var(--sell-red)';
+  return (
+    <svg className={styles.spark} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
+      <path d={`${d} L${w},${h} L0,${h} Z`} fill={color} opacity="0.1" />
+      <path d={d} fill="none" stroke={color} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }
