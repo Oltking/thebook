@@ -19,20 +19,30 @@ export function usePortfolio() {
   const { apply: applyVoucher } = useVoucher();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(false);
+  // Whether this account already has an on-chain agent identity. `null` = not yet
+  // known (still checking). This is the source of truth for "have you joined",
+  // NOT balances or a localStorage flag, so a returning account with zero balance
+  // isn't wrongly funnelled back through create/claim.
+  const [hasJoined, setHasJoined] = useState<boolean | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchPortfolio = useCallback(async () => {
     if (!program || !account) return;
     try {
+      // Identity check first: the on-chain identity is authoritative.
+      const identity = await resolveIdentity(program, account.decodedAddress).catch(() => null);
+      const joined = !!identity;
+      setHasJoined(joined);
+      if (joined) localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');
+
       const result = await program.orderbook.getPortfolio().withAddress(account.decodedAddress).call();
       if (result && Array.isArray(result)) {
         const usd  = BigInt(result[0]?.toString() || '0');
         const btc  = BigInt(result[1]?.toString() || '0');
         const eth  = BigInt(result[2]?.toString() || '0');
         const vara = BigInt(result[3]?.toString() || '0');
+        const prevJoined = joined || localStorage.getItem(`${JOINED_KEY}:${account.address}`) === '1';
         if (usd === 0n && btc === 0n && eth === 0n && vara === 0n) {
-          /* Only show "Join DEX" if they've never joined this account before */
-          const prevJoined = localStorage.getItem(`${JOINED_KEY}:${account.address}`) === '1';
           setPortfolio(prevJoined ? { usd, btc, eth, vara } : null);
         } else {
           localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');
@@ -47,6 +57,7 @@ export function usePortfolio() {
   useEffect(() => {
     if (!isReady || !account) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setHasJoined(account ? null : false);
       return;
     }
     fetchPortfolio();
@@ -84,6 +95,7 @@ export function usePortfolio() {
       }
 
       localStorage.setItem(`${JOINED_KEY}:${account.address}`, '1');
+      setHasJoined(true);
       await fetchPortfolio();
       return null;
     } catch (e: any) {
@@ -94,5 +106,5 @@ export function usePortfolio() {
     }
   };
 
-  return { portfolio, join, loading, refresh: fetchPortfolio };
+  return { portfolio, hasJoined, join, loading, refresh: fetchPortfolio };
 }

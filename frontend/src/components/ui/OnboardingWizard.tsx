@@ -37,7 +37,7 @@ const STRATEGIES: { id: AgentStrategy; label: string; desc: string; icon: typeof
 
 export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: OnboardingWizardProps) {
   const { account, login } = useAccount();
-  const { portfolio, join, loading, refresh } = usePortfolio();
+  const { portfolio, hasJoined, join, loading, refresh } = usePortfolio();
   const { claimAndDeposit, step: vaultStep, busy: funding } = useVault();
   const { success, error } = useToast();
   const [step, setStep] = useState<Step>('welcome');
@@ -53,7 +53,12 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
 
   const currentStep = (): Step => {
     if (!account) return step === 'welcome' ? 'welcome' : 'connect';
-    if (!portfolio) return 'create';
+    // Still confirming whether this account already has an agent: hold on the
+    // create step's spot but let the button show a checking state, so we never
+    // flash "Create Agent" at someone who already deployed one.
+    if (hasJoined === null && !portfolio) return 'create';
+    // Only ask to create if there is genuinely no on-chain identity yet.
+    if (!hasJoined && !portfolio) return 'create';
     if (!funded && TOKENS_CONFIGURED) return 'fund';
     return 'done';
   };
@@ -88,6 +93,10 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
   }, [login, error]);
 
   const handleCreate = async () => {
+    // Already have an agent on-chain? Don't re-register (Join is idempotent and
+    // keeps the original identity, so a second "deploy" would silently do
+    // nothing). Just move the wizard forward.
+    if (hasJoined) { await refresh(); return; }
     const name = agentName.trim();
     if (!name) { error('Give your agent a name.'); return; }
     setJoining(true);
@@ -241,10 +250,10 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               <button
                 className={styles.primaryBtn}
                 onClick={handleCreate}
-                disabled={joining || loading || !agentName.trim()}
+                disabled={joining || loading || hasJoined === null || !agentName.trim()}
               >
-                {joining || loading ? 'Deploying agent...' : 'Deploy Agent'}
-                {!joining && !loading && <ArrowRight size={18} />}
+                {hasJoined === null ? 'Checking your account...' : joining || loading ? 'Deploying agent...' : 'Deploy Agent'}
+                {!joining && !loading && hasJoined !== null && <ArrowRight size={18} />}
               </button>
               <button className={styles.skipBtn} onClick={onDismiss}>
                 Skip for now

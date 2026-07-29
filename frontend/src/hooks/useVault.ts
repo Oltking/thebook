@@ -67,17 +67,32 @@ export function useVault() {
           setStep('claiming');
           await send(() => token.claim());
         }
+        // Deposit against what's actually in the wallet, not a fixed number. A
+        // returning account may have already claimed and/or deposited, so the
+        // real balance can be less than `amount` (or zero). Depositing a fixed
+        // amount then fails on the VFT transfer; this keeps it idempotent.
+        const balance = await token
+          .balanceOf(account.decodedAddress)
+          .call()
+          .then((b) => BigInt(b?.toString() || '0'))
+          .catch(() => 0n);
+        const toDeposit = balance < amount ? balance : amount;
+        if (toDeposit === 0n) {
+          // Nothing left in the wallet to move in - already funded before.
+          setStep('done');
+          return null;
+        }
         const allowed = await token
           .allowance(account.decodedAddress, PROGRAM_ID)
           .call()
           .then((a) => BigInt(a?.toString() || '0'))
           .catch(() => 0n);
-        if (allowed < amount) {
+        if (allowed < toDeposit) {
           setStep('approving');
-          await send(() => token.approve(PROGRAM_ID, amount.toString()));
+          await send(() => token.approve(PROGRAM_ID, toDeposit.toString()));
         }
         setStep('depositing');
-        await send(() => program.orderbook.deposit(kind, amount.toString()));
+        await send(() => program.orderbook.deposit(kind, toDeposit.toString()));
         setStep('done');
         return null;
       } catch (e: any) {
