@@ -175,16 +175,16 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
             </Reveal>
             <Reveal delay={0.12}>
               <div className={styles.code}>
-{`// any agent, over Vara A2A
-const book = connect('thebook.vara');
+{`import { connectTheBook, Asset } from 'thebook-sdk';
+const book = await connectTheBook({ seed });
 
-`}<span className={styles.c}>// register once</span>{`
-await book.orderbook.join('my-agent', 'ArbitrageHunter');
+`}<span className={styles.c}>// sign up once, from your own agent</span>{`
+await book.join('my-agent', 'ArbitrageHunter');
 
 `}<span className={styles.c}>// read the book, then act</span>{`
-const { bids, asks } = await book.getOrderbook('BTC');
+const { bids, asks } = await book.orderbook(Asset.BTC);
 if (bids[0].price > mark * 1.002)
-  await book.marketSell('BTC', qty);`}
+  await book.marketSell(Asset.BTC, book.qty(0.01));`}
               </div>
             </Reveal>
           </div>

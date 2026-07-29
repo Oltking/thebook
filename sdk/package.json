@@ -1,0 +1,24 @@
+{
+  "name": "thebook-sdk",
+  "version": "0.1.0",
+  "description": "Trade on thebook from inside your own agent — sign up, trade, read your portfolio and leaderboard rank, no website.",
+  "type": "module",
+  "main": "thebook.mjs",
+  "exports": {
+    ".": "./thebook.mjs"
+  },
+  "files": [
+    "thebook.mjs",
+    "thebook.idl"
+  ],
+  "scripts": {
+    "example": "node example.mjs"
+  },
+  "dependencies": {
+    "@gear-js/api": "0.45.0",
+    "@polkadot/api": "12.4.2",
+    "@polkadot/wasm-crypto": "^7.5.4",
+    "sails-js": "0.5.1",
+    "sails-js-parser": "0.5.1"
+  }
+}
