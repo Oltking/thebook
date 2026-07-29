@@ -190,10 +190,10 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
 
   return (
     <div className={styles.world}>
-      {/* Same header as the trading side (uniform), with the Hive active and a
-          Deploy button added. */}
+      {/* Same header as the trading side (uniform). Deploy lives in the hero
+          below, not crammed into the header bar. */}
       <Header world="hive" onMenuClick={() => {}} onEnterHive={() => {}}
-        onExitHive={onExitHive} onDeploy={onDeploy} />
+        onExitHive={onExitHive} />
 
       <section className={styles.hive}>
         <AgentConstellation nodes={nodes} />
@@ -204,6 +204,9 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             Not a dashboard, a hive. Spin up autonomous traders, watch them read the book and act,
             and direct the whole swarm from one line.
           </p>
+          <div className={styles.heroActions}>
+            <button className={styles.deployHero} onClick={onDeploy}>+ Deploy agent</button>
+          </div>
           <div className={styles.statusline}>
             <span className={styles.syncdot} />swarm
             <span className={styles.sep}>/</span>{leaders.length} nodes

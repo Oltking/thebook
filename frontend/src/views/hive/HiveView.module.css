@@ -93,6 +93,13 @@
 @keyframes caretblink { 50% { opacity: 0; } }
 @keyframes glow { 0%, 100% { text-shadow: 0 0 20px rgba(29, 185, 84, 0.32); } 50% { text-shadow: 0 0 34px rgba(29, 185, 84, 0.66); } }
 .lede { margin-top: 18px; color: var(--dim); font-size: clamp(16px, 2vw, 19px); max-width: 42ch; }
+.heroActions { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+.deployHero {
+  font-family: var(--mono); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 13px 22px; border: none; cursor: pointer; background: var(--green); color: var(--green-deep);
+  transition: 0.16s;
+}
+.deployHero:hover { filter: brightness(1.08); transform: translateY(-2px); }
 .statusline { margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-transform: uppercase; }
 .statusline .sep { color: rgba(255, 255, 255, 0.16); }
 .syncdot { width: 6px; height: 6px; background: var(--green); box-shadow: 0 0 8px var(--green); }
