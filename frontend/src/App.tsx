@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { SkeletonCard } from './components/ui/Skeleton';
@@ -21,14 +21,44 @@ function PageLoader() {
   );
 }
 
+const TABS = ['trade', 'futures', 'swap', 'pools', 'portfolio', 'build'];
+
+// The app has its own address so a refresh keeps you inside it. The public
+// landing is the root ("/"); the app lives under "/app". An "app." subdomain
+// (app.thesite) counts as being in the app too, so you can point DNS at the
+// same deploy and land straight in.
+function readLocation(): { entered: boolean; mode: 'trade' | 'hive'; tab: string } {
+  const host = window.location.hostname;
+  const onAppHost = host === 'app' || host.startsWith('app.');
+  const path = window.location.pathname.replace(/\/+$/, '');
+  const seg = path.split('/').filter(Boolean); // e.g. ['app','futures']
+  const inApp = onAppHost || seg[0] === 'app';
+  if (!inApp) return { entered: false, mode: 'trade', tab: 'trade' };
+  // On an app host the app segments start at 0; on a path they start after 'app'.
+  const rest = onAppHost ? seg : seg.slice(1);
+  if (rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
+  const tab = rest[0] && TABS.includes(rest[0]) ? rest[0] : 'trade';
+  return { entered: true, mode: 'trade', tab };
+}
+
+// Build the URL that reflects the current world, respecting an app.* host.
+function urlFor(entered: boolean, mode: 'trade' | 'hive', tab: string): string {
+  const onAppHost = window.location.hostname.startsWith('app.') || window.location.hostname === 'app';
+  const base = onAppHost ? '' : '/app';
+  if (!entered) return '/';
+  if (mode === 'hive') return `${base}/hive`;
+  return `${base}/${tab}`;
+}
+
 function App() {
-  const [activeTab, setActiveTab] = useState('trade');
+  const initial = readLocation();
+  const [activeTab, setActiveTab] = useState(initial.tab);
   // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
   // item crosses into the Hive; the Hive's own switch crosses back.
-  const [mode, setMode] = useState<'trade' | 'hive'>('trade');
-  // Public landing is the front door: every fresh load opens here, and "Launch
-  // app" enters the platform for that session.
-  const [entered, setEntered] = useState(false);
+  const [mode, setMode] = useState<'trade' | 'hive'>(initial.mode);
+  // Public landing is the front door; entering the app moves the URL to /app so
+  // a refresh stays put.
+  const [entered, setEntered] = useState(initial.entered);
   const enterApp = (toHive = false) => {
     setMode(toHive ? 'hive' : 'trade');
     setEntered(true);
@@ -39,6 +69,26 @@ function App() {
     if (tab === 'agent') { setMode('hive'); return; }
     setActiveTab(tab);
   };
+
+  // Keep the URL in sync with the world so refresh / back / forward work.
+  useEffect(() => {
+    const target = urlFor(entered, mode, activeTab);
+    if (window.location.pathname !== target) {
+      window.history.pushState(null, '', target);
+    }
+  }, [entered, mode, activeTab]);
+
+  // Respond to browser back/forward.
+  useEffect(() => {
+    const onPop = () => {
+      const loc = readLocation();
+      setEntered(loc.entered);
+      setMode(loc.mode);
+      setActiveTab(loc.tab);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
