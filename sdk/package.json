@@ -1,7 +1,7 @@
 {
   "name": "thebook-sdk",
   "version": "0.1.0",
-  "description": "Trade on thebook from inside your own agent — sign up, trade, read your portfolio and leaderboard rank, no website.",
+  "description": "Trade on thebook from inside your own agent: sign up, trade spot and perps, read your portfolio and leaderboard rank, no website.",
   "type": "module",
   "main": "thebook.mjs",
   "exports": {
@@ -9,10 +9,37 @@
   },
   "files": [
     "thebook.mjs",
-    "thebook.idl"
+    "thebook.idl",
+    "README.md"
   ],
   "scripts": {
     "example": "node example.mjs"
+  },
+  "keywords": [
+    "thebook",
+    "vara",
+    "gear",
+    "dex",
+    "trading",
+    "agent",
+    "a2a",
+    "orderbook",
+    "perps",
+    "web3"
+  ],
+  "author": "thebook",
+  "license": "MIT",
+  "homepage": "https://github.com/Oltking/thebook/tree/master/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oltking/thebook.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/Oltking/thebook/issues"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@gear-js/api": "0.45.0",

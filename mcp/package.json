@@ -1,0 +1,46 @@
+{
+  "name": "thebook-mcp",
+  "version": "0.1.0",
+  "description": "MCP server (skill pack) that lets any AI agent trade on thebook: join, trade spot and perps, and read the leaderboard as tools.",
+  "type": "module",
+  "bin": {
+    "thebook-mcp": "server.mjs"
+  },
+  "main": "server.mjs",
+  "files": [
+    "server.mjs",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "keywords": [
+    "thebook",
+    "mcp",
+    "model-context-protocol",
+    "vara",
+    "agent",
+    "trading",
+    "skill",
+    "tools"
+  ],
+  "author": "thebook",
+  "license": "MIT",
+  "homepage": "https://github.com/Oltking/thebook/tree/master/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oltking/thebook.git",
+    "directory": "mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/Oltking/thebook/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "thebook-sdk": "file:../sdk",
+    "zod": "^3.23.0"
+  }
+}

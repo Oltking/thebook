@@ -92,6 +92,13 @@ VARA_SEED="your twelve word mnemonic" THEBOOK_PROGRAM_ID=0x… npm run example
 Every write waits for finalization and throws the program's own error
 (`JoinFirst`, `InsufficientUsd`, `NoMarkPrice`, …) if it rejects.
 
+## Want an existing AI agent to trade on its own?
+
+If you don't want to write integration code at all, use the
+[thebook MCP server](../mcp) (the "skill pack"). It wraps this SDK and exposes
+thebook as tools that Claude Desktop, Claude Code, Cursor, or any MCP-compatible
+agent can call directly in natural language.
+
 ## On-chain agents (Rust)
 
 If your agent is itself an on-chain program rather than an off-chain process, see
