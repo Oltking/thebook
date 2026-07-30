@@ -4,11 +4,9 @@ import { web3Enable, web3Accounts } from '@polkadot/extension-dapp';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import { usePortfolio } from '../../hooks/usePortfolio';
-import { useVault } from '../../hooks/useVault';
 import { useToast } from './Toast';
 import { parseContractError } from '../../lib/errors';
-import { TOKENS, TOKENS_CONFIGURED } from '../../consts';
-import { Wallet, Rocket, ArrowRight, Check, X, Loader2, Crosshair, Waypoints, TrendingUp, Bot, Coins } from 'lucide-react';
+import { Wallet, Rocket, ArrowRight, Check, X, Loader2, Crosshair, Waypoints, TrendingUp, Bot } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import styles from './OnboardingWizard.module.css';
 
@@ -18,16 +16,9 @@ interface OnboardingWizardProps {
   onNavigateToTab: (tab: string) => void;
 }
 
-type Step = 'welcome' | 'connect' | 'create' | 'fund' | 'done';
-
-// Starting balances handed out at the faucet, one deposit per wrapped token. These
-// match each token program's per-account faucet amount (see token deploy).
-const FUND_AMOUNTS: Record<TokenKind, bigint> = {
-  Usd: 100_000n,
-  Btc: 100_000n,
-  Eth: 1_000_000n,
-  Vara: 1_000_000_000n,
-};
+// Virtual-balance model: joining an agent grants its starting balances on-chain,
+// so there is no separate claim/deposit step. Deploy an agent, it's funded.
+type Step = 'welcome' | 'connect' | 'create' | 'done';
 
 const STRATEGIES: { id: AgentStrategy; label: string; desc: string; icon: typeof Crosshair }[] = [
   { id: 'ArbitrageHunter', label: 'Arbitrage Hunter', desc: 'Hunts price gaps between the orderbook, AMM pools, and spot.', icon: Crosshair },
@@ -38,7 +29,6 @@ const STRATEGIES: { id: AgentStrategy; label: string; desc: string; icon: typeof
 export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: OnboardingWizardProps) {
   const { account, login } = useAccount();
   const { portfolio, hasJoined, join, loading, refresh } = usePortfolio();
-  const { claimAndDeposit, step: vaultStep, busy: funding } = useVault();
   const { success, error } = useToast();
   const [step, setStep] = useState<Step>('welcome');
   const [joining, setJoining] = useState(false);
@@ -47,19 +37,15 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
   const [strategy, setStrategy] = useState<AgentStrategy>('ArbitrageHunter');
   const trapRef = useFocusTrap<HTMLDivElement>(true, onDismiss);
 
-  const funded =
-    !!portfolio &&
-    (portfolio.usd > 0n || portfolio.btc > 0n || portfolio.eth > 0n || portfolio.vara > 0n);
-
   const currentStep = (): Step => {
     if (!account) return step === 'welcome' ? 'welcome' : 'connect';
     // Still confirming whether this account already has an agent: hold on the
     // create step's spot but let the button show a checking state, so we never
     // flash "Create Agent" at someone who already deployed one.
     if (hasJoined === null && !portfolio) return 'create';
-    // Only ask to create if there is genuinely no on-chain identity yet.
+    // Only ask to create if there is genuinely no on-chain identity yet. Joining
+    // funds the agent, so there is nothing else to do afterward.
     if (!hasJoined && !portfolio) return 'create';
-    if (!funded && TOKENS_CONFIGURED) return 'fund';
     return 'done';
   };
 
@@ -105,28 +91,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
     if (err) {
       error(parseContractError(err));
     } else {
-      success(`Agent "${name}" deployed. It's hunting the market for you.`);
-    }
-  };
-
-  const handleFund = async () => {
-    for (const t of TOKENS) {
-      const err = await claimAndDeposit(t.kind, FUND_AMOUNTS[t.kind]);
-      if (err) {
-        error(parseContractError(err));
-        return;
-      }
-    }
-    await refresh();
-    success('Starting balances claimed and deposited. You are ready to trade.');
-  };
-
-  const fundLabel = (): string => {
-    switch (vaultStep) {
-      case 'claiming': return 'Claiming test tokens...';
-      case 'approving': return 'Approving the DEX...';
-      case 'depositing': return 'Depositing to vault...';
-      default: return 'Claim starting balances';
+      success(`Agent "${name}" deployed and funded. It's hunting the market for you.`);
     }
   };
 
@@ -139,7 +104,6 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
     { key: 'welcome', label: 'Welcome', done: effectiveStep !== 'welcome' },
     { key: 'connect', label: 'Connect Wallet', done: !!account },
     { key: 'create', label: 'Create Agent', done: !!portfolio },
-    { key: 'fund', label: 'Fund', done: funded },
     { key: 'done', label: 'Deploy', done: false },
   ];
 
@@ -208,8 +172,8 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               </div>
               <h2 className={styles.title}>Create Your Agent</h2>
               <p className={styles.desc}>
-                Name your agent and pick its trading style. This is a one-time on-chain
-                registration of your identity - you'll claim starting balances next.
+                Name your agent and pick its trading style. This one on-chain step
+                registers your identity and funds it with starting balances, ready to trade.
               </p>
 
               <input
@@ -257,34 +221,6 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               </button>
               <button className={styles.skipBtn} onClick={onDismiss}>
                 Skip for now
-              </button>
-            </>
-          )}
-
-          {effectiveStep === 'fund' && (
-            <>
-              <div className={styles.iconWrap}>
-                <Coins size={48} className={styles.iconAccent} />
-              </div>
-              <h2 className={styles.title}>Claim Your Starting Balances</h2>
-              <p className={styles.desc}>
-                Claim wrapped test tokens ({TOKENS.map(t => t.symbol).join(', ')}) from the
-                faucet and deposit them into the DEX vault. These are real, transferable
-                testnet tokens - you can withdraw them anytime from your Portfolio.
-              </p>
-              <button
-                className={styles.primaryBtn}
-                onClick={handleFund}
-                disabled={funding}
-              >
-                {funding ? (
-                  <><Loader2 size={18} className={styles.spin} /> {fundLabel()}</>
-                ) : (
-                  <><Coins size={18} /> {fundLabel()}</>
-                )}
-              </button>
-              <button className={styles.skipBtn} onClick={onDismiss}>
-                I'll fund later
               </button>
             </>
           )}

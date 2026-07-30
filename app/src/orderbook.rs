@@ -97,10 +97,11 @@ impl<'a> OrderbookService<'a> {
 
 #[sails_rs::service(events = OrderbookEvent)]
 impl<'a> OrderbookService<'a> {
-    /// Register the caller's agent identity (name + strategy). Creates the account
-    /// with ZERO balances — real value comes from claiming test tokens at the faucet
-    /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
-    /// returns the existing balances and keeps the original identity.
+    /// Register the caller's agent identity (name + strategy) and grant the
+    /// starting balances. This is the virtual-balance model: an agent is funded
+    /// the instant it joins, so it can trade immediately with no token custody,
+    /// approve, or deposit step. Idempotent: re-joining returns the existing
+    /// balances and keeps the original identity (no double funding).
     #[export]
     pub fn join(&mut self, name: String, strategy: AgentStrategy) -> (u64, u64, u64, u64) {
         let caller = msg::source();
@@ -123,13 +124,13 @@ impl<'a> OrderbookService<'a> {
                 id: caller,
                 name,
                 strategy,
-                usd: 0,
-                btc: 0,
-                eth: 0,
-                vara: 0,
+                usd: INITIAL_USD,
+                btc: INITIAL_BTC,
+                eth: INITIAL_ETH,
+                vara: INITIAL_VARA,
             },
         );
-        (0, 0, 0, 0)
+        (INITIAL_USD, INITIAL_BTC, INITIAL_ETH, INITIAL_VARA)
     }
 
     /// Caller's agent identity, or None if they haven't joined. Used by the UI to

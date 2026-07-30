@@ -1,9 +1,7 @@
 import { Card } from '../components/ui/Card';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { useSails } from '../hooks/useSails';
-import { useVault } from '../hooks/useVault';
 import { useMarketData } from '../providers/MarketDataProvider';
-import { TOKENS_CONFIGURED } from '../consts';
 import styles from './PortfolioView.module.css';
 import { useState, useEffect, useCallback } from 'react';
 import { web3FromSource } from '@polkadot/extension-dapp';
@@ -12,22 +10,14 @@ import { parseContractError } from '../lib/errors';
 import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
-import { ArrowUpRight, ArrowDownRight, Loader2, X } from 'lucide-react';
-
-// Display decimals per asset double as the internal-unit scale: a human amount ×
-// 10^decimals is the integer unit the contract (and its backing VFT) moves.
-type VaultModal = { name: string; kind: TokenKind; decimals: number; mode: 'deposit' | 'withdraw' };
 
 export function PortfolioView() {
   const { portfolio, loading, refresh: refreshPortfolio } = usePortfolio();
   const { program, account, isReady } = useSails();
-  const { deposit, withdraw, busy: vaultBusy, step: vaultStep } = useVault();
   const { refreshAll, prices } = useMarketData();
   const [orders, setOrders] = useState<any[]>([]);
   const [cancelling, setCancelling] = useState<number | null>(null);
-  const [modal, setModal] = useState<VaultModal | null>(null);
-  const [modalAmount, setModalAmount] = useState('');
-  const { success, error, info } = useToast();
+  const { success, error } = useToast();
   const { txState, resetTx } = useTxStatus();
 
   const [lpPositions, setLpPositions] = useState<any[]>([]);
@@ -85,43 +75,6 @@ export function PortfolioView() {
     }
   }, [program, account, success, error, refreshPortfolio, refreshAll, fetchOrders]);
 
-  const openDeposit = useCallback((name: string, kind: TokenKind, decimals: number) => {
-    if (!TOKENS_CONFIGURED) {
-      info('Wrapped token programs are not configured for this deployment yet.');
-      return;
-    }
-    setModalAmount('');
-    setModal({ name, kind, decimals, mode: 'deposit' });
-  }, [info]);
-
-  const openWithdraw = useCallback((name: string, kind: TokenKind, decimals: number) => {
-    if (!TOKENS_CONFIGURED) {
-      info('Wrapped token programs are not configured for this deployment yet.');
-      return;
-    }
-    setModalAmount('');
-    setModal({ name, kind, decimals, mode: 'withdraw' });
-  }, [info]);
-
-  const submitVault = useCallback(async () => {
-    if (!modal) return;
-    const human = Number(modalAmount);
-    if (!isFinite(human) || human <= 0) { error('Enter a valid amount.'); return; }
-    const units = BigInt(Math.round(human * 10 ** modal.decimals));
-    if (units <= 0n) { error('Amount is too small.'); return; }
-    const err = modal.mode === 'deposit'
-      ? await deposit(modal.kind, units)
-      : await withdraw(modal.kind, units);
-    if (err) {
-      error(parseContractError(err));
-      return;
-    }
-    success(`${modal.mode === 'deposit' ? 'Deposited' : 'Withdrew'} ${human} ${modal.name}.`);
-    setModal(null);
-    refreshPortfolio();
-    setTimeout(refreshPortfolio, 2500);
-  }, [modal, modalAmount, deposit, withdraw, error, success, refreshPortfolio]);
-
   const formatAmount = (val: bigint | number | string, decimals: number = 2) => {
      const n = Number(val);
      if (isNaN(n)) return '0.00';
@@ -177,19 +130,15 @@ export function PortfolioView() {
     <>
       <div className={styles.container}>
         <PageHeader eyebrow="Your account" title="Portfolio"
-          subtitle="Your balances, open orders, and liquidity - all backed by real testnet tokens." />
+          subtitle="Your trading balances, open orders, and liquidity on thebook." />
 
         <div className={styles.grid}>
           <Card title="Asset Balances">
             {assets.every(a => Number(a.amount) === 0) ? (
               <EmptyState
                 title="Empty Portfolio"
-                description={TOKENS_CONFIGURED
-                  ? 'Claim and deposit wrapped test tokens to start trading.'
-                  : 'Your agent starts with testnet balances - create it to begin trading.'}
-                action={TOKENS_CONFIGURED
-                  ? { label: 'Deposit USD', onClick: () => openDeposit('USD', 'Usd', 2) }
-                  : { label: 'Create Agent', onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')) }}
+                description="Your agent starts with testnet balances - create it to begin trading."
+                action={{ label: 'Create Agent', onClick: () => window.dispatchEvent(new Event('thebookdex:open-wizard')) }}
               />
             ) : (
               <table className={styles.table}>
@@ -198,7 +147,6 @@ export function PortfolioView() {
                     <th scope="col">Asset</th>
                     <th scope="col">Balance</th>
                     <th scope="col">Value (USD)</th>
-                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,22 +157,6 @@ export function PortfolioView() {
                       <td>{asset.name === 'USD' || asset.value > 0
                         ? `$${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '-'}</td>
-                      <td>
-                        {TOKENS_CONFIGURED ? (
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button className={styles.actionBtn} title={`Deposit ${asset.name}`}
-                              onClick={() => openDeposit(asset.name, asset.kind, asset.decimals)} aria-label={`Deposit ${asset.name}`}>
-                              <ArrowDownRight size={14} />
-                            </button>
-                            <button className={styles.actionBtn} title={`Withdraw ${asset.name}`}
-                              onClick={() => openWithdraw(asset.name, asset.kind, asset.decimals)} aria-label={`Withdraw ${asset.name}`}>
-                              <ArrowUpRight size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>-</span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -316,76 +248,6 @@ export function PortfolioView() {
           </Card>
         </div>
       </div>
-
-      {modal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${modal.mode} ${modal.name}`}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-          }}
-          onClick={() => !vaultBusy && setModal(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(92vw, 380px)', background: 'var(--bg-elevated, #16161f)',
-              border: '1px solid var(--border-color, #2a2a3a)', borderRadius: 12, padding: 20,
-              position: 'relative',
-            }}
-          >
-            <button
-              onClick={() => !vaultBusy && setModal(null)}
-              aria-label="Close"
-              style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
-            >
-              <X size={18} />
-            </button>
-            <h3 style={{ margin: '0 0 4px', textTransform: 'capitalize' }}>
-              {modal.mode} {modal.name}
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
-              {modal.mode === 'deposit'
-                ? 'Move wrapped tokens from your wallet into the DEX vault.'
-                : 'Withdraw tokens from the DEX vault back to your wallet.'}
-            </p>
-            <input
-              autoFocus
-              type="number"
-              min="0"
-              step="any"
-              value={modalAmount}
-              onChange={(e) => setModalAmount(e.target.value)}
-              placeholder={`Amount of ${modal.name}`}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 16,
-                border: '1px solid var(--border-color, #2a2a3a)', borderRadius: 10,
-                background: 'var(--bg, #0f0f16)', color: 'inherit', marginBottom: 14,
-              }}
-            />
-            <button
-              onClick={submitVault}
-              disabled={vaultBusy}
-              style={{
-                width: '100%', padding: '12px 14px', fontSize: 15, fontWeight: 600,
-                border: 'none', borderRadius: 10, cursor: vaultBusy ? 'default' : 'pointer',
-                background: 'var(--accent)', color: 'var(--on-accent)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}
-            >
-              {vaultBusy && <Loader2 size={16} className={styles.spin ?? ''} />}
-              {vaultBusy
-                ? (vaultStep === 'approving' ? 'Approving the DEX...'
-                  : vaultStep === 'depositing' ? 'Depositing...'
-                  : vaultStep === 'withdrawing' ? 'Withdrawing...'
-                  : 'Confirming...')
-                : `${modal.mode === 'deposit' ? 'Deposit' : 'Withdraw'} ${modal.name}`}
-            </button>
-          </div>
-        </div>
-      )}
 
       <TxStatusOverlay state={txState} onClose={resetTx} />
     </>
