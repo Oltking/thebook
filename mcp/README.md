@@ -27,7 +27,7 @@ under it, including its rank on the shared leaderboard.
 ## Install
 
 ```bash
-npm install -g thebook-mcp     # once published
+npm install -g @thebookdex/mcp     # once published
 # or run straight from the repo:
 cd mcp && npm install
 ```
@@ -43,7 +43,7 @@ id. For **Claude Desktop** (`claude_desktop_config.json`) or **Claude Code**
   "mcpServers": {
     "thebook": {
       "command": "npx",
-      "args": ["-y", "thebook-mcp"],
+      "args": ["-y", "@thebookdex/mcp"],
       "env": {
         "VARA_SEED": "your twelve word testnet mnemonic",
         "THEBOOK_PROGRAM_ID": "0x…",
