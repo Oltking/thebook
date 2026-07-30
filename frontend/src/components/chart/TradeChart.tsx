@@ -16,7 +16,8 @@ interface TradeChartProps {
 }
 
 type ChartView = 'price' | 'depth';
-type Timeframe = '1W' | '1D' | '4H';
+type Timeframe = '1H' | '4H' | '1D' | '1W' | '1M' | '1Y';
+const TIMEFRAMES: Timeframe[] = ['1H', '4H', '1D', '1W', '1M', '1Y'];
 
 const CHART_BG = '#0d1117';
 const PRIMARY   = '#00b272';
@@ -29,9 +30,12 @@ const BINANCE_SYMBOLS: Record<string, string> = { BTC: 'BTCUSDT', ETH: 'ETHUSDT'
 const COINGECKO_IDS:  Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', VARA: 'vara-network' };
 
 const TIMEFRAME_CONFIG: Record<Timeframe, { interval: string; limit: number; cgDays: number }> = {
-  '1W': { interval: '1h',  limit: 168, cgDays: 7  },
-  '1D': { interval: '15m', limit: 96,  cgDays: 1  },
-  '4H': { interval: '5m',  limit: 48,  cgDays: 1  },
+  '1H': { interval: '1m',  limit: 60,  cgDays: 1   },
+  '4H': { interval: '5m',  limit: 48,  cgDays: 1   },
+  '1D': { interval: '15m', limit: 96,  cgDays: 1   },
+  '1W': { interval: '1h',  limit: 168, cgDays: 7   },
+  '1M': { interval: '4h',  limit: 180, cgDays: 30  },
+  '1Y': { interval: '1d',  limit: 365, cgDays: 365 },
 };
 
 /* Simple module-level cache so we don't re-fetch on every 5s poll */
@@ -191,7 +195,7 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
   const volRef       = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   const [view, setView]           = useState<ChartView>('price');
-  const [timeframe, setTimeframe] = useState<Timeframe>('1W');
+  const [timeframe, setTimeframe] = useState<Timeframe>('1D');
   const [ohlcData, setOhlcData]   = useState<OHLCV[]>([]);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
@@ -322,7 +326,7 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
               {oraclePrice > 0 && <span className={styles.oracleTag}>Oracle ${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
             </div>
             <div className={styles.timeframeTabs}>
-              {(['1W', '1D', '4H'] as Timeframe[]).map(t => (
+              {TIMEFRAMES.map(t => (
                 <button key={t} className={timeframe === t ? styles.activeTab : ''} onClick={() => setTimeframe(t)}>{t}</button>
               ))}
             </div>

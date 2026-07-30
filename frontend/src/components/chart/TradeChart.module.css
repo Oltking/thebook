@@ -25,6 +25,17 @@
   gap: 2px;
 }
 
+/* Six timeframes can outgrow a narrow toolbar: let the row shrink and scroll
+   sideways instead of pushing the price info off-screen. */
+.timeframeTabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 1;
+}
+.timeframeTabs::-webkit-scrollbar { display: none; }
+.timeframeTabs button { flex-shrink: 0; }
+
 .viewTabs button,
 .timeframeTabs button {
   background: transparent;
