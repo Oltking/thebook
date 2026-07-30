@@ -177,18 +177,22 @@ the ingestion contract.
 
 ## §4 · One-shot redeploy (deploy-all)
 
-If the on-chain program is an older build (missing Perps / token vault), redeploy
-the current source in one command. This deploys thebook, deploys + wires the four
-wrapped tokens, registers the admin, and prints every env value.
+Redeploy the current source in one command. By default (virtual balances) this
+deploys thebook, registers the admin, and prints the env values — no tokens needed.
+Add `WITH_TOKENS=1` to also deploy + wire the four wrapped tokens for the optional
+real-custody path.
 
 ```
-cargo build --release                       # DEX + token wasm
+cargo build --release                       # DEX (+ token) wasm
 cd frontend
 VARA_SEED="<admin seed>" node scripts/deploy-all.mjs
+# or, to also deploy the optional custody tokens:
+VARA_SEED="<admin seed>" WITH_TOKENS=1 node scripts/deploy-all.mjs
 ```
 
-Put the printed VITE_PROGRAM_ID and VITE_TOKEN_* into frontend/.env, redeploy the
-frontend, then start the mark-price keeper (required for futures):
+Put the printed VITE_PROGRAM_ID (and VITE_TOKEN_* if you used WITH_TOKENS) into
+frontend/.env, redeploy the frontend, then start the mark-price keeper (required
+for futures):
 
 ```
 node scripts/keeper.mjs

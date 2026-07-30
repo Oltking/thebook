@@ -1,5 +1,10 @@
-// One-shot deploy for thebookdex: deploy the CURRENT thebook program, deploy and
-// wire the four wrapped tokens, register the admin, and print every env value.
+// One-shot deploy for thebookdex: deploy the CURRENT thebook program, register the
+// admin, and print every env value.
+//
+// Virtual-balance model: joining grants starting balances, so no tokens are needed
+// to trade. This deploy is lean by default (DEX only). Pass WITH_TOKENS=1 to also
+// deploy + wire the four wrapped VFT tokens for the optional real-custody path
+// (Deposit/Withdraw).
 //
 // Run this once with the admin account (it becomes the DEX admin). After it, set
 // the printed VITE_* values in frontend/.env and redeploy the frontend. Then run
@@ -7,11 +12,13 @@
 //
 // Usage (from frontend/):
 //   VARA_SEED="<funded admin seed>" node scripts/deploy-all.mjs
+//   VARA_SEED="..." WITH_TOKENS=1 node scripts/deploy-all.mjs   # + custody tokens
 //
 // Env (auto-loaded from .env.deploy and .env):
 //   VARA_SEED     the admin/deployer seed (required, must hold TVARA for gas)
 //   NODE_ADDRESS  Vara RPC (default wss://testnet.vara.network)
 // Optional:
+//   WITH_TOKENS   "1" to also deploy the custody tokens (default: off)
 //   DEX_WASM      default ../../target/wasm32-gear/release/thebook.opt.wasm
 //   TOKEN_WASM    default ../../target/wasm32-gear/release/thebook_token.opt.wasm
 //   IDL_PATH      default ../../client/thebook_client.idl (has New + all services)
@@ -37,11 +44,12 @@ const SEED = process.env.VARA_SEED;
 const DEX_WASM = process.env.DEX_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook.opt.wasm');
 const TOKEN_WASM = process.env.TOKEN_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook_token.opt.wasm');
 const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
+const WITH_TOKENS = /^(1|true|yes)$/i.test(process.env.WITH_TOKENS ?? '');
 
 function fail(m) { console.error(`\n  ✗ ${m}\n`); process.exit(1); }
 if (!SEED) fail('VARA_SEED is required (a funded admin seed).');
 if (!existsSync(DEX_WASM)) fail(`DEX WASM not found at ${DEX_WASM}. Build: cargo build --release`);
-if (!existsSync(TOKEN_WASM)) fail(`Token WASM not found at ${TOKEN_WASM}. Build: cargo build -p thebook-token --release`);
+if (WITH_TOKENS && !existsSync(TOKEN_WASM)) fail(`Token WASM not found at ${TOKEN_WASM}. Build: cargo build -p thebook-token --release`);
 if (!existsSync(IDL_PATH)) fail(`IDL not found at ${IDL_PATH}.`);
 
 const TOKENS = [
@@ -102,23 +110,27 @@ const THEBOOK_ID = await upload(readFileSync(DEX_WASM), dexInit, 'thebook');
 console.log(THEBOOK_ID);
 sails.setProgramId(THEBOOK_ID);
 
-// ── 2 · deploy + wire the four wrapped tokens ──
-const tokenCode = readFileSync(TOKEN_WASM);
+// ── 2 · (optional) deploy + wire the four wrapped tokens for real custody ──
 const env = { VITE_PROGRAM_ID: THEBOOK_ID };
-for (const t of TOKENS) {
-  const route = api.createType('String', 'New').toU8a();
-  const targs = api.createType('(String, String, u8, U256)', [t.name, t.symbol, t.decimals, t.faucet]).toU8a();
-  const payload = u8aToHex(u8aConcat(route, targs));
-  process.stdout.write(`  deploying ${t.symbol} … `);
-  const addr = await upload(tokenCode, payload, t.symbol);
-  console.log(addr);
-  process.stdout.write(`  wiring SetToken(${t.kind}) … `);
-  await callDex('Orderbook', 'SetToken', t.kind, addr);
-  console.log('ok');
-  env[`VITE_TOKEN_${t.kind.toUpperCase()}`] = addr;
+if (WITH_TOKENS) {
+  const tokenCode = readFileSync(TOKEN_WASM);
+  for (const t of TOKENS) {
+    const route = api.createType('String', 'New').toU8a();
+    const targs = api.createType('(String, String, u8, U256)', [t.name, t.symbol, t.decimals, t.faucet]).toU8a();
+    const payload = u8aToHex(u8aConcat(route, targs));
+    process.stdout.write(`  deploying ${t.symbol} … `);
+    const addr = await upload(tokenCode, payload, t.symbol);
+    console.log(addr);
+    process.stdout.write(`  wiring SetToken(${t.kind}) … `);
+    await callDex('Orderbook', 'SetToken', t.kind, addr);
+    console.log('ok');
+    env[`VITE_TOKEN_${t.kind.toUpperCase()}`] = addr;
+  }
+} else {
+  console.log('  tokens: skipped (virtual balances; pass WITH_TOKENS=1 to enable custody)');
 }
 
-// ── 3 · register the admin so deposits / reserve funding work later ──
+// ── 3 · register the admin so it has a funded account (Join grants balances) ──
 try {
   process.stdout.write('  registering admin (Join) … ');
   await callDex('Orderbook', 'Join', 'admin', 'ArbitrageHunter');
