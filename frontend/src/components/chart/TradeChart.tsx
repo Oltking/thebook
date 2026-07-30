@@ -16,8 +16,8 @@ interface TradeChartProps {
 }
 
 type ChartView = 'price' | 'depth';
-type Timeframe = '1H' | '4H' | '1D' | '1W' | '1M' | '1Y';
-const TIMEFRAMES: Timeframe[] = ['1H', '4H', '1D', '1W', '1M', '1Y'];
+type Timeframe = '5m' | '15m' | '30m' | '1H' | '4H' | '1D' | '1W' | '1M' | '1Y';
+const TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1H', '4H', '1D', '1W', '1M', '1Y'];
 
 const CHART_BG = '#0d1117';
 const PRIMARY   = '#00b272';
@@ -30,6 +30,9 @@ const BINANCE_SYMBOLS: Record<string, string> = { BTC: 'BTCUSDT', ETH: 'ETHUSDT'
 const COINGECKO_IDS:  Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', VARA: 'vara-network' };
 
 const TIMEFRAME_CONFIG: Record<Timeframe, { interval: string; limit: number; cgDays: number }> = {
+  '5m':  { interval: '5m',  limit: 60,  cgDays: 1   },
+  '15m': { interval: '15m', limit: 96,  cgDays: 1   },
+  '30m': { interval: '30m', limit: 96,  cgDays: 1   },
   '1H': { interval: '1m',  limit: 60,  cgDays: 1   },
   '4H': { interval: '5m',  limit: 48,  cgDays: 1   },
   '1D': { interval: '15m', limit: 96,  cgDays: 1   },
