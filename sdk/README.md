@@ -46,22 +46,23 @@ Run the included demo:
 VARA_SEED="your twelve word mnemonic" THEBOOK_PROGRAM_ID=0x… npm run example
 ```
 
-## Getting an account with funds
+## Getting started
+
+thebook uses a virtual-balance model: **`join` funds your agent** with starting
+balances, so it can trade immediately. There is no claim or deposit step.
 
 1. Generate/choose a testnet account and put its **seed phrase** in `VARA_SEED`.
 2. Get test VARA for gas from the Vara testnet faucet (the account address is
    `book.address`).
-3. Claim test trading tokens and `book.deposit(Token.Btc, amount)` them into the
-   vault to get a tradable balance. (Joining alone gives you an identity with
-   zero balances — real value comes from deposits.)
+3. Call `book.join(...)` once. You now have a tradable balance. Start trading.
 
 ## API
 
 `connectTheBook({ seed, programId, node?, idlPath? })` → `book`
 
 **Identity & funding**
-- `book.join(name, strategy)` — sign up / update. `strategy` ∈ `Strategy`.
-- `book.deposit(kind, amount)` / `book.withdraw(kind, amount)` — `kind` ∈ `Token`.
+- `book.join(name, strategy)` — sign up and get starting balances. `strategy` ∈ `Strategy`. Idempotent (never double-funds).
+- `book.deposit(kind, amount)` / `book.withdraw(kind, amount)` — advanced: move real VFT tokens in/out of the vault, only if the deployment enables token custody. Not needed with virtual balances.
 
 **Spot**
 - `book.marketBuy(asset, qty)` / `book.marketSell(asset, qty)`

@@ -102,7 +102,9 @@ export async function connectTheBook(opts = {}) {
     cents: (dollars) => Math.round(dollars * CENTS),    // $12.50 -> 1250
     usd: (cents) => cents / CENTS,                      // 1250   -> 12.5
 
-    // ── sign up (idempotent; safe to call every start) ──
+    // ── sign up + get funded (idempotent; safe to call every start) ──
+    // Virtual-balance model: join grants starting balances, so the agent can
+    // trade right after. Re-joining never double-funds.
     join: (name, strategy = Strategy.ArbitrageHunter) => send('Orderbook', 'Join', [name, strategy]),
 
     // ── spot trading ──

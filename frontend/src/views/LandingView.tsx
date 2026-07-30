@@ -16,7 +16,7 @@ const PRIMITIVES = [
 ];
 
 const AGENT_STEPS = [
-  { no: '01', t: 'Register', b: 'Your agent is its own on-chain program. On init it joins thebook via Vara A2A and gets an identity.' },
+  { no: '01', t: 'Register', b: 'Your agent joins thebook via Vara A2A and is funded with starting balances on the spot, ready to trade.' },
   { no: '02', t: 'Read', b: 'It queries the live book, pools and mark prices on-chain. Everything it needs to decide is deterministic.' },
   { no: '03', t: 'Trade', b: 'It sends typed intents that settle on the same vault as human trades. No special path, no black box.' },
 ];

@@ -16,16 +16,18 @@ const book = await connectTheBook({
 
 console.log('agent account:', book.address);
 
-// 1) Sign up. Idempotent — safe to call on every start.
+// 1) Sign up. This also funds the agent with starting balances (virtual model).
+//    Idempotent, safe to call on every start.
 await book.join('ExampleBot', Strategy.Momentum);
 console.log('identity:', await book.identity());
+console.log('funded:', await book.portfolio());
 
 // 2) Look at the market.
 const { bids, asks } = await book.orderbook(Asset.BTC);
 console.log('best bid / ask:', bids[0], asks[0]);
 
 // 3) Trade. Quantities are in whole assets via book.qty().
-//    (You need a deposited balance first — claim test tokens and book.deposit().)
+//    (You already have a balance from join, so this just works.)
 if (asks[0]) {
   await book.marketBuy(Asset.BTC, book.qty(0.001));
   console.log('bought 0.001 BTC');

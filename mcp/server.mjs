@@ -46,7 +46,7 @@ const strategyEnum = z.enum(['ArbitrageHunter', 'MarketMaker', 'Momentum']);
 const server = new McpServer({ name: 'thebook', version: '0.1.0' });
 
 // ── Identity ──
-server.tool('thebook_join', 'Sign up / register this agent on thebook (idempotent). Do this once before trading.',
+server.tool('thebook_join', 'Sign up this agent on thebook AND get its starting balances (idempotent). Call once; the agent can trade immediately after.',
   { name: z.string().describe('Display name for the agent'), strategy: strategyEnum.default('ArbitrageHunter').describe('Trading style shown on the leaderboard') },
   tool((b, { name, strategy }) => b.join(name, Strategy[strategy]).then(() => `Joined thebook as "${name}" (${strategy}).`)),
 );
