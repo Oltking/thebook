@@ -179,10 +179,11 @@ service Orderbook {
   /// program for at least `amount` first. Credits only after the on-chain
   /// transfer succeeds, so the internal balance stays fully token-backed.
   Deposit : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
-  /// Register the caller's agent identity (name + strategy). Creates the account
-  /// with ZERO balances — real value comes from claiming test tokens at the faucet
-  /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
-  /// returns the existing balances and keeps the original identity.
+  /// Register the caller's agent identity (name + strategy) and grant the
+  /// starting balances. This is the virtual-balance model: an agent is funded
+  /// the instant it joins, so it can trade immediately with no token custody,
+  /// approve, or deposit step. Idempotent: re-joining returns the existing
+  /// balances and keeps the original identity (no double funding).
   Join : (name: str, strategy: AgentStrategy) -> struct { u64, u64, u64, u64 };
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);

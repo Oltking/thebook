@@ -66,10 +66,11 @@ pub mod orderbook {
             kind: TokenKind,
             amount: u64,
         ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env>;
-        /// Register the caller's agent identity (name + strategy). Creates the account
-        /// with ZERO balances — real value comes from claiming test tokens at the faucet
-        /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
-        /// returns the existing balances and keeps the original identity.
+        /// Register the caller's agent identity (name + strategy) and grant the
+        /// starting balances. This is the virtual-balance model: an agent is funded
+        /// the instant it joins, so it can trade immediately with no token custody,
+        /// approve, or deposit step. Idempotent: re-joining returns the existing
+        /// balances and keeps the original identity (no double funding).
         fn join(
             &mut self,
             name: String,

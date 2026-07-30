@@ -139,20 +139,23 @@ async fn fund(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>, c
     }
 }
 
+// Virtual-balance model: joining grants the starting balances directly, so a
+// test agent is funded by Join alone, no faucet/deposit needed. (`fund` is kept
+// for the dedicated deposit/withdraw custody tests below.)
 async fn join_alice(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
+    let _ = env;
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
         .await
         .unwrap();
-    fund(env, program, ALICE).await;
 }
 
 async fn join_bob(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
+    let _ = env;
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
         .await
         .unwrap();
-    fund(env, program, BOB).await;
 }
 
 // ── Orderbook tests ──
@@ -772,13 +775,16 @@ async fn double_add_liquidity_then_remove_all() {
 async fn deposit_then_withdraw_round_trip() {
     let (env, program) = deploy().await;
     join_alice(&env, &program).await;
+    // Join already granted the virtual starting balances; now also run the real
+    // faucet -> approve -> deposit custody flow, so internal balances are the
+    // grant plus the deposit (2x), and the vault is backed by the deposited half.
+    fund(&env, &program, ALICE).await;
 
-    // Alice is funded to the canonical portfolio via the real flow in join_alice.
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port, (100_000, 100_000, 1_000_000, 1_000_000_000));
+    assert_eq!(port, (200_000, 200_000, 2_000_000, 2_000_000_000));
 
     // The wBTC token program holds the deposited BTC in the DEX's account, and
     // Alice's own token balance is zero (she deposited all of it).
@@ -819,7 +825,8 @@ async fn deposit_then_withdraw_round_trip() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port.1, 60_000, "internal BTC not debited on withdraw");
+    // Started at 200_000 internal BTC (grant + deposit), withdrew 40_000.
+    assert_eq!(port.1, 160_000, "internal BTC not debited on withdraw");
     let alice_wallet: U256 = btc
         .vft()
         .pending_call::<tok_vft_io::BalanceOf>((ALICE.into(),))

@@ -9,7 +9,6 @@ const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
-const AgentApiView = lazy(() => import('./views/AgentApiView').then(m => ({ default: m.AgentApiView })));
 const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
 
@@ -21,7 +20,7 @@ function PageLoader() {
   );
 }
 
-const TABS = ['trade', 'futures', 'swap', 'pools', 'portfolio', 'build'];
+const TABS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
 
 // The app has its own address so a refresh keeps you inside it. The public
 // landing is the root ("/"); the app lives under "/app". An "app." subdomain
@@ -102,8 +101,6 @@ function App() {
         return <PoolsView />;
       case 'portfolio':
         return <PortfolioView />;
-      case 'build':
-        return <AgentApiView />;
       default:
         return <TradeView mode="spot" />;
     }
