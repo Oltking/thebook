@@ -1,0 +1,27 @@
+# Render Blueprint: runs the thebook mark-price keeper as an always-on worker.
+#
+# The keeper pushes live BTC/ETH/VARA mark prices on-chain every ~15s so perps
+# have a settlement price. It serves no HTTP, so it's a Background Worker, not a
+# Web Service.
+#
+# Deploy: push this repo, then in Render → New → Blueprint, pick this file.
+# Set the two secret env vars (VARA_SEED, PROGRAM_ID) when prompted; they are
+# marked sync:false so they live in the dashboard, never in git.
+services:
+  - type: worker
+    name: thebook-keeper
+    runtime: node
+    plan: starter          # background workers require a paid instance type
+    rootDir: frontend
+    buildCommand: npm install
+    startCommand: node scripts/keeper.mjs
+    autoDeploy: true
+    envVars:
+      - key: NODE_ADDRESS
+        value: wss://testnet.vara.network
+      - key: INTERVAL_MS
+        value: "15000"
+      - key: VARA_SEED       # the DEX admin/deployer seed (secret)
+        sync: false
+      - key: PROGRAM_ID      # the deployed DEX program id, e.g. 0x…
+        sync: false
