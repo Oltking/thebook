@@ -1086,6 +1086,13 @@
   color: var(--text-secondary);
 }
 .marketLine b { color: var(--text-main); font-weight: 700; margin-left: 4px; }
+.estNote {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
 
 .backSimple {
   display: inline-flex;

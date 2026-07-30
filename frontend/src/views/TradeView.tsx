@@ -739,6 +739,17 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const bestBid = orderbook.bids.length > 0 ? Number(orderbook.bids[0][0]) * 1000 : 0;
   const bestAsk = orderbook.asks.length > 0 ? Number(orderbook.asks[0][0]) * 1000 : 0;
   const spreadUsd = bestBid > 0 && bestAsk > 0 ? bestAsk - bestBid : 0;
+  // When the on-chain book has no resting orders (thin testnet), the real bid/ask
+  // are empty. Rather than show blank dashes, quote an indicative bid/ask around
+  // the oracle mark (a few bps each side), flagged with `~` so it's clearly an
+  // estimate, not a live book quote.
+  const bookLive = bestBid > 0 && bestAsk > 0;
+  const INDIC_HALF = 0.00025; // ~2.5 bps per side
+  const quoteBid = bookLive ? bestBid : markPrice > 0 ? markPrice * (1 - INDIC_HALF) : 0;
+  const quoteAsk = bookLive ? bestAsk : markPrice > 0 ? markPrice * (1 + INDIC_HALF) : 0;
+  const quoteSpread = quoteBid > 0 && quoteAsk > 0 ? quoteAsk - quoteBid : 0;
+  const fmtUsd2 = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const q = bookLive ? '' : '~'; // estimate marker
   const change24 = prices[asset] ? Number(prices[asset]!.change_24h_bps) / 100 : null;
   const usdBal = portfolio ? Number(portfolio.usd) / 100 : 0;
   const assetBal = portfolio ? Number(asset === 'BTC' ? portfolio.btc : asset === 'ETH' ? portfolio.eth : portfolio.vara) / 1e5 : 0;
@@ -756,14 +767,14 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         </span>
       </div>
       <div className={styles.mkStat}>
-        <span>Best bid / ask</span>
+        <span>{bookLive ? 'Best bid / ask' : 'Bid / ask (est.)'}</span>
         <span className={styles.mkVal}>
-          {bestBid > 0 ? `$${bestBid.toLocaleString()}` : '-'} <span style={{ color: 'var(--text-dim)' }}>/</span> {bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '-'}
+          {quoteBid > 0 ? `${q}${fmtUsd2(quoteBid)}` : '-'} <span style={{ color: 'var(--text-dim)' }}>/</span> {quoteAsk > 0 ? `${q}${fmtUsd2(quoteAsk)}` : '-'}
         </span>
       </div>
       <div className={styles.mkStat}>
         <span>Spread</span>
-        <span className={styles.mkVal}>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '-'}</span>
+        <span className={styles.mkVal}>{quoteSpread > 0 ? `${q}${fmtUsd2(quoteSpread)}` : '-'}</span>
       </div>
       {account && portfolio && (
         <div className={styles.mkDivider}>
@@ -810,10 +821,13 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           <div className={styles.simpleEntry}>{entryPanel}</div>
 
           <div className={styles.marketLine}>
-            <span>Bid <b>{bestBid > 0 ? `$${bestBid.toLocaleString()}` : '—'}</b></span>
-            <span>Ask <b>{bestAsk > 0 ? `$${bestAsk.toLocaleString()}` : '—'}</b></span>
-            <span>Spread <b>{spreadUsd > 0 ? `$${spreadUsd.toLocaleString()}` : '—'}</b></span>
+            <span>Bid <b>{quoteBid > 0 ? `${q}${fmtUsd2(quoteBid)}` : '—'}</b></span>
+            <span>Ask <b>{quoteAsk > 0 ? `${q}${fmtUsd2(quoteAsk)}` : '—'}</b></span>
+            <span>Spread <b>{quoteSpread > 0 ? `${q}${fmtUsd2(quoteSpread)}` : '—'}</b></span>
           </div>
+          {!bookLive && quoteBid > 0 && (
+            <div className={styles.estNote}>~ indicative, quoted around the oracle mark (no resting orders yet)</div>
+          )}
         </div>
         {isFutures && positions.length > 0 && (
           <div className={styles.simpleCard} style={{ marginTop: 12 }}>{positionsPanel}</div>
