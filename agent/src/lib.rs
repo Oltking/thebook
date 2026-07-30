@@ -145,7 +145,7 @@ pub struct AgentService<'a> {
 }
 
 impl<'a> AgentService<'a> {
-    pub fn new(state: &'a RefCell<AgentState>) -> Self {
+    fn new(state: &'a RefCell<AgentState>) -> Self {
         Self { state }
     }
 }
