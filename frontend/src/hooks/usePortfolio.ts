@@ -82,8 +82,8 @@ export function usePortfolio() {
       await response();
 
       /* Don't claim success on the extrinsic landing alone - verify the identity
-         actually persisted on-chain (the read AgentView/Home depend on). Retry a
-         few times to allow for block inclusion before giving up. */
+         actually persisted on-chain (the Hive and portfolio reads depend on it).
+         Retry a few times to allow for block inclusion before giving up. */
       let confirmed = false;
       for (let i = 0; i < 5; i++) {
         const id = await resolveIdentity(program, account.decodedAddress);

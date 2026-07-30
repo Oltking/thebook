@@ -1,14 +1,15 @@
 // Fund the perps house reserve (optional, admin only).
 //
 // The reserve pays out perp profits. Funding it moves USD from the admin's own
-// DEX balance into the reserve, so this first claims wUSDC from the faucet,
-// approves + deposits it, then calls FundReserve. Futures open/close without
-// this; the reserve matters once winning positions need large payouts.
+// DEX balance into the reserve. Virtual-balance model: Join grants the admin its
+// starting USD, so this just Joins (idempotent) then calls FundReserve. Futures
+// open/close without this; the reserve matters once winning positions need large
+// payouts.
 //
-// Usage (from frontend/, after deploy-all + setting VITE_* in .env):
+// Usage (from frontend/, after deploy + setting VITE_* in .env):
 //   VARA_SEED="<admin seed>" node scripts/fund-reserve.mjs
 //
-// Optional: AMOUNT (USD cents, default 100000 = the faucet's wUSDC amount).
+// Optional: AMOUNT (USD cents, default 100000 = the admin's granted USD).
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,14 +30,12 @@ for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.en
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
 const SEED = process.env.VARA_SEED;
 const THEBOOK_ID = process.env.THEBOOK_ID ?? process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
-const USD_TOKEN = process.env.VITE_TOKEN_USD;
 const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
 const AMOUNT = BigInt(process.env.AMOUNT ?? '100000');
 
 function fail(m) { console.error(`\n  ✗ ${m}\n`); process.exit(1); }
 if (!SEED) fail('VARA_SEED is required (the admin seed).');
 if (!THEBOOK_ID) fail('VITE_PROGRAM_ID (the DEX id) is required.');
-if (!USD_TOKEN || /^0x0+$/.test(USD_TOKEN)) fail('VITE_TOKEN_USD is required (run deploy-all first).');
 
 await waitReady();
 const api = await GearApi.create({ providerAddress: NODE_ADDRESS });
@@ -90,28 +89,13 @@ async function callDex(service, fn, ...args) {
   return response();
 }
 
-// 0 · make sure the admin has a DEX account (Join is idempotent)
+// 0 · make sure the admin has a DEX account. Virtual-balance model: Join grants
+//     the admin its starting USD directly, so there is no claim/deposit step.
 process.stdout.write('  registering admin (Join) … ');
 try { await callDex('Orderbook', 'Join', 'admin', 'ArbitrageHunter'); console.log('ok'); }
 catch (e) { console.log(`(already joined or ${String(e?.message || e).slice(0, 40)})`); }
 
-// 1 · claim wUSDC from the token faucet
-process.stdout.write('  claiming wUSDC … ');
-await sendRaw(USD_TOKEN, route('Faucet', 'Claim'), 'claim');
-console.log('ok');
-
-// 2 · approve the DEX to pull the wUSDC
-process.stdout.write('  approving DEX … ');
-const approveArgs = api.createType('([u8;32], U256)', [u8aToHex(decodeAddress(THEBOOK_ID)), AMOUNT]).toU8a();
-await sendRaw(USD_TOKEN, route('Vft', 'Approve', approveArgs), 'approve');
-console.log('ok');
-
-// 3 · deposit into the DEX vault (credits admin USD balance)
-process.stdout.write('  depositing USD … ');
-await callDex('Orderbook', 'Deposit', 'Usd', AMOUNT.toString());
-console.log('ok');
-
-// 4 · move it into the house reserve
+// 1 · move granted USD into the house reserve
 process.stdout.write('  funding reserve … ');
 await callDex('Perps', 'FundReserve', AMOUNT.toString());
 console.log('ok');

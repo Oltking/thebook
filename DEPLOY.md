@@ -66,12 +66,17 @@ and prints the **program id**. Keep that value.
 4. Provide the IDL (`thebook.idl`) when prompted and select the `New` constructor.
 5. Submit, then copy the resulting program id.
 
-## 2.5. Deploy the wrapped test tokens and register them
+## 2.5. (Optional) Wrapped test tokens for real custody
 
-The DEX custodies real VFT tokens, not simulated balances. Deploy one token
-program per traded balance (from `token/`, WASM `thebook_token.opt.wasm`), using the
-`New(name, symbol, decimals, faucet_amount)` constructor. Suggested config (the
-faucet amount is what each user claims once and then deposits):
+**thebook uses a virtual-balance model: joining an agent grants its starting
+balances directly on-chain, so no tokens are needed to trade.** You can skip this
+section entirely for a standard launch.
+
+The wrapped VFT tokens are only for the optional "real custody" path (`Deposit` /
+`Withdraw`), where an agent moves real testnet tokens in and out of the DEX vault.
+If you want that, deploy one token program per balance (from `token/`, WASM
+`thebook_token.opt.wasm`) with the `New(name, symbol, decimals, faucet_amount)`
+constructor:
 
 | Balance | name / symbol | decimals | faucet_amount |
 |---------|---------------|----------|---------------|
@@ -80,19 +85,18 @@ faucet amount is what each user claims once and then deposits):
 | ETH     | `wETH`        | 6        | 1000000       |
 | VARA    | `wVARA`       | 6        | 1000000000    |
 
-After deploying all four, register each with the DEX **from the admin (deployer)
-account** by calling `Orderbook/SetToken(kind, token_program_id)` for each
-`TokenKind` (`Usd`, `Btc`, `Eth`, `Vara`) — via the IDEA portal or a script. Verify
-with the `Orderbook/GetTokens` query; deposits are rejected until a kind is set.
+Then register each with the DEX **from the admin (deployer) account** via
+`Orderbook/SetToken(kind, token_program_id)` for each `TokenKind`. `Deposit`/
+`Withdraw` stay disabled for a kind until it's set.
 
 ## 2.6. Turn on perpetual futures (mark-price keeper + house reserve)
 
 Perps settle PnL and liquidations at an **on-chain mark price** and pay profits
 from a **house reserve**, so two admin steps bring them online:
 
-1. **Seed the reserve.** As the admin, deposit USD (see the vault flow), then call
-   `Perps/FundReserve(amount)` (amount in USD cents) to move some of your USD into
-   the house reserve that pays trader profits. Query it with `Perps/GetReserve`.
+1. **Seed the reserve.** As the admin, join to receive your starting balances, then
+   call `Perps/FundReserve(amount)` (amount in USD cents) to move some of your USD
+   into the house reserve that pays trader profits. Query it with `Perps/GetReserve`.
 2. **Run the price keeper.** It pushes live BTC/ETH/VARA prices on-chain every few
    seconds via `Perps/SetMarkPrices` (admin-only):
 
@@ -120,14 +124,15 @@ Edit `.env`:
 VITE_NODE_ADDRESS=wss://testnet.vara.network
 VITE_PROGRAM_ID=<DEX program id from step 2>
 VITE_NETWORK_NAME=Vara Testnet
-VITE_TOKEN_USD=<wUSDC program id from step 2.5>
-VITE_TOKEN_BTC=<wBTC program id from step 2.5>
-VITE_TOKEN_ETH=<wETH program id from step 2.5>
-VITE_TOKEN_VARA=<wVARA program id from step 2.5>
+# Optional — only if you deployed the custody tokens in §2.5:
+VITE_TOKEN_USD=<wUSDC program id>
+VITE_TOKEN_BTC=<wBTC program id>
+VITE_TOKEN_ETH=<wETH program id>
+VITE_TOKEN_VARA=<wVARA program id>
 ```
 
-Until all four `VITE_TOKEN_*` ids are set, the onboarding "claim starting balances"
-step and the Portfolio deposit/withdraw controls stay hidden.
+The `VITE_TOKEN_*` ids are optional (virtual balances need no tokens). They only
+matter if you enabled the optional real-custody path in §2.5.
 
 Then run locally or build:
 
@@ -143,19 +148,16 @@ Variables instead of committing `.env`.
 
 1. Connect a wallet (the deployer account is the program **admin** — only it can
    register token addresses and manage autopilot).
-2. Create your agent (**Join** — a one-time identity registration; it grants **no**
-   free balance).
-3. Claim starting balances: the onboarding "Claim starting balances" step (or the
-   Portfolio deposit controls) runs claim → approve → deposit for each token.
-   Confirm the portfolio reflects the deposited amounts.
-4. Place a limit order, run a market order against it, and confirm balances update.
-5. Create an AMM pool, add liquidity, and swap.
-6. Withdraw an asset from the Portfolio and confirm the wrapped tokens return to
-   your wallet.
-7. With the keeper running and the reserve funded (§2.6), open a Long on the
+2. Create your agent (**Join**). It registers your identity **and grants your
+   starting balances** in one step — confirm the Portfolio shows them.
+3. Place a limit order, run a market order against it, and confirm balances update.
+4. Create an AMM pool, add liquidity, and swap.
+5. With the keeper running and the reserve funded (§2.6), open a Long on the
    Futures tab, watch PnL move with the mark, and close it.
+6. (Only if you enabled §2.5 custody) Deposit and withdraw a token and confirm the
+   wrapped tokens move in and out of your wallet.
 
-If all seven succeed, the testnet deployment is good.
+If these succeed, the testnet deployment is good.
 
 ## Data & indexing
 
@@ -192,7 +194,7 @@ frontend, then start the mark-price keeper (required for futures):
 node scripts/keeper.mjs
 ```
 
-Optional: fund the perps house reserve (claims wUSDC, deposits, FundReserve):
+Optional: fund the perps house reserve (Joins for the granted USD, then FundReserve):
 
 ```
 node scripts/fund-reserve.mjs
