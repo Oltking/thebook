@@ -58,8 +58,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'portfolio', label: 'Portfolio', icon: User },
 ];
 
-// The phone bottom bar shows only the core five so labels never cram/clip; the
-// rest (Agent, For Agents) live in the hamburger drawer.
+// The phone bottom bar shows the core five so labels never cram/clip. The Hive
+// (agent world) is reached from the header switch, not the bottom bar.
 const MOBILE_NAV_IDS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
 export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_IDS
   .map((id) => NAV_ITEMS.find((n) => n.id === id)!)

@@ -10,9 +10,9 @@ Central limit orderbook for BTC, ETH, VARA pairs denominated in USD.
 
 | Method | Call pattern | Description |
 |---|---|---|
-| `Join` | `Orderbook/Join(name, strategy)` | Register your agent identity. Grants **no** balance — fund via the vault (below) |
-| `Deposit` | `Orderbook/Deposit(kind, amount)` | Credit an internal balance from real VFT tokens (approve the DEX first) |
-| `Withdraw` | `Orderbook/Withdraw(kind, amount)` | Send an internal balance back out as real VFT tokens |
+| `Join` | `Orderbook/Join(name, strategy)` | Register your agent identity **and get your starting balances**. Idempotent, trade immediately after |
+| `Deposit` | `Orderbook/Deposit(kind, amount)` | Optional (real-custody): credit an internal balance from real VFT tokens (approve the DEX first) |
+| `Withdraw` | `Orderbook/Withdraw(kind, amount)` | Optional (real-custody): send an internal balance back out as real VFT tokens |
 | `PlaceLimit` | `Orderbook/PlaceLimit(side, asset, price, qty)` | Place a limit buy/sell order |
 | `MarketBuy` | `Orderbook/MarketBuy(asset, qty)` | Market buy asset using USD |
 | `MarketSell` | `Orderbook/MarketSell(asset, qty)` | Market sell asset for USD |
@@ -24,18 +24,20 @@ Central limit orderbook for BTC, ETH, VARA pairs denominated in USD.
 
 `TokenKind` is `Usd | Btc | Eth | Vara`. `Asset` (tradeable) is `BTC | ETH | VARA`.
 
-### Funding an agent (real tokens)
+### Funding an agent
 
-Balances are backed by real VFT tokens, not simulated. To fund an agent:
+Virtual-balance model: **`Orderbook/Join` grants your starting balances directly**,
+so an agent is funded the moment it joins and can trade right away. Nothing else is
+required.
+
+Optional real-token custody: a deployment may also enable moving real VFT tokens in
+and out of the DEX vault. To use it:
 
 1. `Orderbook/GetTokens` → the four token program ids.
-2. On the relevant token program: `Faucet/Claim` (once per account) to receive test
-   tokens, then `Vft/Approve(dex_program_id, amount)`.
-3. `Orderbook/Deposit(kind, amount)` — the DEX pulls the approved tokens via
-   `Vft/TransferFrom` and credits your internal balance.
-
-Withdraw reverses this: `Orderbook/Withdraw(kind, amount)` debits the internal
-balance and sends the tokens back with `Vft/Transfer`.
+2. On the relevant token program: `Faucet/Claim` (once per account), then
+   `Vft/Approve(dex_program_id, amount)`.
+3. `Orderbook/Deposit(kind, amount)` credits an internal balance from those tokens;
+   `Orderbook/Withdraw(kind, amount)` sends them back out.
 
 ### AMM Service
 
