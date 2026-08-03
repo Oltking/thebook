@@ -25,7 +25,8 @@ const TABS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
 // The app has its own address so a refresh keeps you inside it. The public
 // landing is the root ("/"); the app lives under "/app". An "app." subdomain
 // (app.thesite) counts as being in the app too, so you can point DNS at the
-// same deploy and land straight in.
+// same deploy and land straight in. The Hive is the first side of the app, so a
+// bare "/app" lands there; "/app/<tab>" opens the trading side on that tab.
 function readLocation(): { entered: boolean; mode: 'trade' | 'hive'; tab: string } {
   const host = window.location.hostname;
   const onAppHost = host === 'app' || host.startsWith('app.');
@@ -35,8 +36,9 @@ function readLocation(): { entered: boolean; mode: 'trade' | 'hive'; tab: string
   if (!inApp) return { entered: false, mode: 'trade', tab: 'trade' };
   // On an app host the app segments start at 0; on a path they start after 'app'.
   const rest = onAppHost ? seg : seg.slice(1);
-  if (rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
-  const tab = rest[0] && TABS.includes(rest[0]) ? rest[0] : 'trade';
+  // Bare "/app" (or the app host root) lands on the Hive, the first side.
+  if (!rest[0] || rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
+  const tab = TABS.includes(rest[0]) ? rest[0] : 'trade';
   return { entered: true, mode: 'trade', tab };
 }
 
@@ -56,9 +58,9 @@ function App() {
   // item crosses into the Hive; the Hive's own switch crosses back.
   const [mode, setMode] = useState<'trade' | 'hive'>(initial.mode);
   // Public landing is the front door; entering the app moves the URL to /app so
-  // a refresh stays put.
+  // a refresh stays put. The Hive is the first side, so entering lands there.
   const [entered, setEntered] = useState(initial.entered);
-  const enterApp = (toHive = false) => {
+  const enterApp = (toHive = true) => {
     setMode(toHive ? 'hive' : 'trade');
     setEntered(true);
   };
