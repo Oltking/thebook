@@ -738,7 +738,6 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
      user has no resting orders (thin-book testnet). Genuinely useful data. */
   const bestBid = orderbook.bids.length > 0 ? Number(orderbook.bids[0][0]) * 1000 : 0;
   const bestAsk = orderbook.asks.length > 0 ? Number(orderbook.asks[0][0]) * 1000 : 0;
-  const spreadUsd = bestBid > 0 && bestAsk > 0 ? bestAsk - bestBid : 0;
   // When the on-chain book has no resting orders (thin testnet), the real bid/ask
   // are empty. Rather than show blank dashes, quote an indicative bid/ask around
   // the oracle mark (a few bps each side), flagged with `~` so it's clearly an
