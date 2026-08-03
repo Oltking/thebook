@@ -60,7 +60,7 @@
 }
 
 .accent {
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .close {

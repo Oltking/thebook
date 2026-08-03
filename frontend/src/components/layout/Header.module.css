@@ -30,7 +30,7 @@
   min-height: 0;
   border: 1px solid var(--accent);
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-text);
   white-space: nowrap;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
@@ -58,7 +58,7 @@
 .leftGroup { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .logoText { white-space: nowrap; }
 .accent {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ── Network switch: sleek diagonal toggle, Testnet live / Mainnet coming soon ── */
@@ -131,7 +131,7 @@
   padding: 6px 12px;
   min-height: 38px;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-subtle);
   border: 1px solid var(--border-color);
   cursor: pointer;
   white-space: nowrap;
@@ -272,7 +272,7 @@
 
 .balanceValue {
   font-weight: 700;
-  color: var(--primary);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
 }
@@ -307,7 +307,7 @@
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   background: rgba(240, 185, 50, 0.12);
-  color: var(--primary);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;

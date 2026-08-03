@@ -212,7 +212,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             <span className={styles.sep}>/</span>{leaders.length} nodes
             <span className={styles.sep}>/</span>{opportunities.length} signals
             <span className={styles.sep}>/</span>vara-testnet
-            <span className={styles.sep}>/</span><span style={{ color: 'var(--green)' }}>sync ok</span>
+            <span className={styles.sep}>/</span><span style={{ color: 'var(--green-text)' }}>sync ok</span>
           </div>
 
           <div className={styles.console}>

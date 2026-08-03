@@ -32,7 +32,7 @@
 
 .successIcon { color: var(--buy-green); }
 .failIcon { color: var(--sell-red); }
-.spinner { color: var(--primary); }
+.spinner { color: var(--accent-text); }
 
 .spinner svg {
   animation: spin 1s linear infinite;
@@ -73,7 +73,7 @@
 }
 
 .step.active {
-  color: var(--primary);
+  color: var(--accent-text);
   background: rgba(0, 178, 114, 0.1);
 }
 

@@ -26,7 +26,7 @@
 .barIn { display: flex; align-items: center; justify-content: space-between; height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -0.02em; font-size: 17px; text-transform: uppercase; }
 .brand img { width: 28px; height: 28px; }
-.brand .accent { color: var(--accent); }
+.brand .accent { color: var(--accent-text); }
 .barRight { display: flex; align-items: center; gap: 12px; }
 .net {
   display: flex; transform: skewX(-13deg);
@@ -48,7 +48,7 @@
 .btnPrimary { background: var(--accent); color: var(--on-accent); }
 .btnPrimary:hover { background: var(--accent-hover); }
 .btnGhost { background: transparent; border-color: var(--border-strong); color: var(--text-main); }
-.btnGhost:hover { border-color: var(--accent); color: var(--accent); }
+.btnGhost:hover { border-color: var(--accent-text); color: var(--accent-text); }
 
 /* hero */
 .hero { position: relative; padding: clamp(60px, 12vh, 130px) 0 70px; overflow: hidden; }
@@ -62,6 +62,19 @@
   background-size: 48px 48px;
   mask-image: radial-gradient(120% 80% at 70% 0%, #000 30%, transparent 75%);
   -webkit-mask-image: radial-gradient(120% 80% at 70% 0%, #000 30%, transparent 75%);
+}
+/* On paper the faint green lines need a touch more alpha to read at all. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .grid {
+    background-image:
+      linear-gradient(rgba(21, 128, 61, 0.10) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(21, 128, 61, 0.10) 1px, transparent 1px);
+  }
+}
+:root[data-theme="light"] .grid {
+  background-image:
+    linear-gradient(rgba(21, 128, 61, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 128, 61, 0.10) 1px, transparent 1px);
 }
 /* a green scan line sweeping down, like a terminal refresh */
 .scan {
@@ -98,6 +111,16 @@
   box-shadow: 0 44px 100px -34px #000, 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   animation: float 6.5s ease-in-out infinite;
 }
+/* Keep the device bezel dark by intent (it reads as a physical object), but on
+   paper drop the white hairline sheen and lighten the drop shadow. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .phone {
+    box-shadow: 0 40px 90px -34px rgba(30, 40, 30, 0.4), 0 0 0 1px rgba(20, 26, 20, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+}
+:root[data-theme="light"] .phone {
+  box-shadow: 0 40px 90px -34px rgba(30, 40, 30, 0.4), 0 0 0 1px rgba(20, 26, 20, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
 .phone img { width: 100%; display: block; }
 .notch {
   position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%);
@@ -118,7 +141,7 @@
   font-family: var(--font-display); font-size: clamp(40px, 8vw, 92px); font-weight: 700;
   letter-spacing: -0.03em; line-height: 0.98; margin: 22px 0 0; text-transform: uppercase; max-width: 15ch;
 }
-.title em { font-style: normal; color: var(--accent); text-shadow: 0 0 30px rgba(29, 185, 84, 0.45); }
+.title em { font-style: normal; color: var(--accent-text); text-shadow: 0 0 30px rgba(29, 185, 84, 0.45); }
 .lede { margin-top: 24px; color: var(--text-secondary); font-size: clamp(16px, 2vw, 20px); line-height: 1.55; max-width: 52ch; }
 .heroActions { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; }
 .btnLg { padding: 15px 26px; font-size: 14px; }
@@ -129,35 +152,35 @@
 
 /* sections */
 .section { padding: 70px 0; border-top: 1px solid var(--border-color); }
-.kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-text); }
 .h2 { font-family: var(--font-display); font-size: clamp(24px, 4vw, 40px); font-weight: 700; letter-spacing: -0.02em; text-transform: uppercase; margin: 12px 0 0; max-width: 20ch; }
 .sub { color: var(--text-secondary); font-size: 15px; margin: 14px 0 0; max-width: 60ch; line-height: 1.55; }
 
 .cards { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
 .card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 26px; transition: 0.18s; position: relative; overflow: hidden; }
-.card:hover { border-color: var(--accent); transform: translateY(-3px); }
-.cardNo { font-family: var(--font-mono); font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: 0.1em; }
+.card:hover { border-color: var(--accent-text); transform: translateY(-3px); }
+.cardNo { font-family: var(--font-mono); font-size: 12px; font-weight: 800; color: var(--accent-text); letter-spacing: 0.1em; }
 .card h3 { font-family: var(--font-mono); font-size: 20px; text-transform: uppercase; margin: 14px 0 8px; }
 .card p { color: var(--text-secondary); font-size: 14px; line-height: 1.55; margin: 0; }
 .card .meta { margin-top: 18px; font-family: var(--font-mono); font-size: 13px; color: var(--text-main); }
-.card .meta b { color: var(--accent); }
+.card .meta b { color: var(--accent-text); }
 
 /* agent band */
 .agentBand { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 40px; align-items: center; }
 @media (max-width: 900px) { .agentBand { grid-template-columns: 1fr; gap: 28px; } }
 .steps { display: flex; flex-direction: column; gap: 2px; margin-top: 24px; }
 .step { display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--border-color); }
-.step .no { font-family: var(--font-mono); font-weight: 800; color: var(--accent); font-size: 14px; }
+.step .no { font-family: var(--font-mono); font-weight: 800; color: var(--accent-text); font-size: 14px; }
 .step h4 { font-family: var(--font-mono); font-size: 14px; text-transform: uppercase; margin: 0 0 4px; }
 .step p { color: var(--text-secondary); font-size: 13.5px; line-height: 1.5; margin: 0; }
 .code {
-  background: #050805; border: 1px solid var(--border-color); border-left: 2px solid var(--accent);
-  padding: 20px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.85; color: #A9D8B6;
+  background: var(--code-bg); border: 1px solid var(--border-color); border-left: 2px solid var(--accent);
+  padding: 20px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.85; color: var(--code-fg);
   overflow-x: auto; white-space: pre;
 }
 .code .c { color: var(--text-dim); }
-.code .k { color: var(--accent); }
+.code .k { color: var(--accent-text); }
 
 /* two ways to connect an agent */
 .connect { position: relative; overflow: hidden; }
@@ -200,7 +223,7 @@
 .pathText { color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin: 0; }
 .cmd {
   font-family: var(--font-mono); font-size: 13px; color: var(--text-main);
-  background: #050805; border: 1px solid var(--border-color); border-left: 2px solid var(--cyan);
+  background: var(--code-bg); border: 1px solid var(--border-color); border-left: 2px solid var(--cyan);
   padding: 11px 14px; overflow-x: auto; white-space: nowrap;
 }
 .pathHint {
@@ -220,7 +243,7 @@
 }
 .finalCta .wrap { position: relative; z-index: 1; }
 .finalCta h2 { font-family: var(--font-display); font-size: clamp(28px, 6vw, 56px); font-weight: 700; text-transform: uppercase; letter-spacing: -0.02em; max-width: 18ch; margin: 0 auto; }
-.finalCta h2 em { font-style: normal; color: var(--accent); }
+.finalCta h2 em { font-style: normal; color: var(--accent-text); }
 .finalCta p { color: var(--text-secondary); margin: 18px auto 30px; max-width: 46ch; font-size: 16px; }
 
 .foot { border-top: 1px solid var(--border-color); padding: 34px 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; color: var(--text-dim); font-size: 12.5px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; }

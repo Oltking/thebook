@@ -47,7 +47,7 @@
   height: 34px;
   min-height: 34px;
   flex-shrink: 0;
-  color: rgba(230, 255, 245, 0.6);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: color 0.15s;
   background: none;
@@ -56,7 +56,7 @@
 }
 
 .close:hover {
-  color: #e6fff5;
+  color: var(--text-main);
 }
 
 @keyframes scroll {

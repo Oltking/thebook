@@ -10,6 +10,7 @@ import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from '../ui/Toast';
 import { useViewport } from '../../hooks/useViewport';
 import { AccountSelector } from '../ui/AccountSelector';
+import { ThemeToggle } from '../ui/ThemeToggle';
 import { useMarketData } from '../../providers/MarketDataProvider';
 import { formatUsdPrice } from '../../lib/format';
 
@@ -103,12 +104,13 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
           <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
         </div>
 
-        {/* Trade / Hive world switch - centered, same position as the Hive's. */}
+        {/* Hive / Trade world switch - centered, same position as the Hive's.
+            The Hive is the first side of the app, so it sits on the left. */}
         <div className={styles.modeSwitch} role="tablist" aria-label="Mode">
-          <button role="tab" className={!isHive ? styles.modeOn : ''} aria-selected={!isHive}
-            onClick={isHive ? onExitHive : undefined}>Trade</button>
           <button role="tab" className={isHive ? styles.modeOn : ''} aria-selected={isHive}
             onClick={!isHive ? onEnterHive : undefined}>⬡ The Hive</button>
+          <button role="tab" className={!isHive ? styles.modeOn : ''} aria-selected={!isHive}
+            onClick={isHive ? onExitHive : undefined}>Trade</button>
         </div>
 
         {/* Live public price ticker. Hidden once connected, where the right side
@@ -134,6 +136,7 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
         )}
 
         <div className={styles.actions}>
+          <ThemeToggle />
           {isHive && onDeploy && (
             <button className={styles.deployHeaderBtn} onClick={onDeploy}>
               {isMobile ? '+ Agent' : '+ Deploy agent'}

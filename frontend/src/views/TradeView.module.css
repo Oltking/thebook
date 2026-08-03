@@ -267,7 +267,7 @@
 }
 
 .balanceTag:hover {
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .balanceTagLabel {
@@ -427,7 +427,7 @@
 
 .inputHint {
   font-size: var(--font-size-xs);
-  color: var(--primary);
+  color: var(--accent-text);
   margin-top: var(--space-2xs);
   cursor: pointer;
   text-decoration: underline;
@@ -459,7 +459,7 @@
 /* Unselected side of a Buy/Sell (or Long/Short) toggle → clean ghost, not a
    muddy desaturated fill. */
 .inactive {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--surface-subtle) !important;
   color: var(--text-secondary) !important;
   box-shadow: inset 0 0 0 1px var(--border-color) !important;
   filter: none !important;
@@ -507,7 +507,7 @@
 
 .orderTypeTabs .activeType {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -726,7 +726,7 @@
 
 .seedBtn:hover:not(:disabled) {
   border-color: var(--primary);
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .seedBtn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -800,11 +800,11 @@
   cursor: pointer;
 }
 
-.leverageBtn:hover { color: var(--primary); border-color: var(--primary); }
+.leverageBtn:hover { color: var(--accent-text); border-color: var(--primary); }
 
 .leverageActive {
   background: var(--accent-soft) !important;
-  color: var(--accent) !important;
+  color: var(--accent-text) !important;
   border-color: var(--accent) !important;
 }
 
@@ -1054,7 +1054,7 @@
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.proToggle:hover { color: var(--accent); border-color: var(--accent); }
+.proToggle:hover { color: var(--accent-text); border-color: var(--accent); }
 .priceRow { display: flex; align-items: baseline; gap: 12px; }
 .bigPrice {
   font-family: var(--font-mono);
@@ -1111,4 +1111,4 @@
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.backSimple:hover { color: var(--accent); border-color: var(--accent); }
+.backSimple:hover { color: var(--accent-text); border-color: var(--accent); }

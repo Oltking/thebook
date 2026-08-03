@@ -301,7 +301,7 @@
   align-items: center;
   gap: 6px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: var(--font-size-xs);
@@ -313,7 +313,7 @@
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
-  color: var(--primary);
+  color: var(--accent-text);
   border: 1px solid var(--primary);
   min-height: 36px;
   font-weight: 600;
@@ -327,4 +327,4 @@
   font-family: var(--font-mono);
   cursor: pointer;
 }
-.balanceTag:hover { color: var(--accent); }
+.balanceTag:hover { color: var(--accent-text); }

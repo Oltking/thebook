@@ -99,7 +99,7 @@
   border: 4px solid var(--bg-color);
   border-radius: 50%;
   padding: var(--space-2xs);
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .slippageRow {
@@ -130,7 +130,7 @@
 
 .slippageActive {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .slippageInput {

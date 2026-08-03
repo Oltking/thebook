@@ -90,14 +90,14 @@
 .navItem svg { flex-shrink: 0; opacity: 0.85; }
 
 .navItem:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-subtle-hover);
   color: var(--text-main);
 }
 
 .active,
 .active:hover {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .active svg { opacity: 1; }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
 import { useMarketData } from '../providers/MarketDataProvider';
 import { NETWORK_NAME } from '../consts';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 import styles from './LandingView.module.css';
 
 interface LandingViewProps {
@@ -82,6 +83,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
               <span className={styles.on}><i>Testnet</i></span>
               <span className={styles.soon}><i>Mainnet</i></span>
             </div>
+            <ThemeToggle />
             <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={onLaunch}>Launch app</button>
           </div>
         </div>

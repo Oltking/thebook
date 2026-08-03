@@ -86,7 +86,7 @@
 .netWorthValue {
   font-size: var(--font-size-2xl);
   font-weight: 800;
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
   margin-bottom: var(--space-xs);
@@ -113,7 +113,7 @@
 }
 
 .actionBtn:hover {
-  color: var(--accent);
+  color: var(--accent-text);
   border-color: var(--glass-border);
   background: var(--accent-soft);
 }

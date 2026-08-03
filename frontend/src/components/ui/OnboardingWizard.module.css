@@ -99,7 +99,7 @@
 }
 
 .current .dotLabel {
-  color: var(--primary);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -117,11 +117,11 @@
 }
 
 .rocket {
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .iconAccent {
-  color: var(--primary);
+  color: var(--accent-text);
 }
 
 .checkCircle {
