@@ -1,0 +1,28 @@
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--card-bg-hover);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toggle:hover {
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.toggle svg {
+  transition: transform var(--transition-base);
+}
+
+.toggle:hover svg {
+  transform: rotate(-18deg);
+}

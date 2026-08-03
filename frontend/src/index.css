@@ -1,8 +1,9 @@
 :root {
-  /* ── thebook ecosystem · one committed dark world ──
-     Fixed palette only: green, white, black, grey, brown. Sharp corners, sharp
-     mono display. Industrial terminal feel across the whole app. There is no
-     light mode; this is the single visual world. */
+  /* ── thebook ecosystem · two worlds, one identity ──
+     Fixed palette: green, white, black, grey, brown. Sharp corners, sharp mono
+     display. Industrial terminal feel across the whole app. The default here is
+     DARK; a light "paper terminal" variant lives in the theme layers below. Every
+     surface reads these tokens, so flipping the theme just re-points the tokens. */
 
   --bg-color: #050705;
   --bg-elevated: #0A0E0A;
@@ -25,14 +26,33 @@
   --on-accent: #04140d;
   --accent-gradient: linear-gradient(180deg, #1DB954 0%, #15904A 100%);
   --accent-soft: rgba(29, 185, 84, 0.12);
+  /* Green for text / links / thin strokes. On dark, the bright green reads fine;
+     on paper it is too light, so the light layer darkens this one to #15803D
+     while fills and glows keep the bright #1DB954. */
+  --accent-text: #1DB954;
 
   --brown: #9A784B;
   --brown-soft: rgba(154, 120, 75, 0.16);
 
-  /* Up = green, down = brown (the palette carries no red). */
+  /* Up = green, down = brown (the palette carries no red). Market semantics are
+     theme-invariant: a green candle is green on paper too. */
   --buy-green: #1DB954;
   --sell-red: #9A784B;
   --sell-soft: rgba(154, 120, 75, 0.16);
+
+  /* Raised surface tints. These replace the old rgba(255,255,255,0.03/0.04)
+     overlays, which vanish on a light ground. */
+  --surface-subtle: rgba(255, 255, 255, 0.035);
+  --surface-subtle-hover: rgba(255, 255, 255, 0.06);
+
+  /* Inline code / terminal blocks. */
+  --code-bg: #050805;
+  --code-fg: #A9D8B6;
+
+  /* Undefined before; PoolsView relied on a #141820 fallback. Now a real token. */
+  --bg-secondary: #141820;
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
 
   /* ── Elevation ── */
   --glow-accent: none;
@@ -87,6 +107,81 @@
   /* --bp-md: 768px; */
   /* --bp-lg: 1024px; */
   /* --bp-xl: 1280px; */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Light "paper terminal" theme.
+
+   A warm paper ground with ink text, hairline dark-on-light borders, and green
+   kept as the accent (darkened to #15803D only where it becomes text or a thin
+   stroke). Four layers, in cascade order:
+     1. :root above        = dark defaults (no attribute, no JS → dark).
+     2. @media light       = auto-follow the OS when the user has made no choice.
+     3. [data-theme=dark]  = user forced dark; must beat the media query.
+     4. [data-theme=light] = user forced light; must beat the media query.
+   Layers 3 and 4 restate their full block so the attribute selector (0,1,1) wins
+   over the media-query :root (0,0,1) in both directions.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Author the light palette once; it is applied by both selectors below. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg-color: #F4F2EC;
+    --bg-elevated: #FBFAF6;
+    --card-bg: #FFFFFF;
+    --card-bg-hover: #F0EEE7;
+    --card-solid: #FFFFFF;
+    --border-color: rgba(20, 26, 20, 0.12);
+    --border-strong: rgba(20, 26, 20, 0.22);
+    --glass-border: rgba(21, 128, 61, 0.45);
+    --text-main: #0C120C;
+    --text-secondary: #586158;
+    --text-dim: #8A928A;
+    --accent-hover: #17A047;
+    --accent-gradient: linear-gradient(180deg, #1DB954 0%, #0E7A3C 100%);
+    --accent-text: #15803D;
+    --brown: #7A5B32;
+    --brown-soft: rgba(122, 91, 50, 0.14);
+    --sell-red: #7A5B32;
+    --sell-soft: rgba(122, 91, 50, 0.14);
+    --surface-subtle: rgba(20, 26, 20, 0.045);
+    --surface-subtle-hover: rgba(20, 26, 20, 0.075);
+    --code-bg: #F0EEE6;
+    --code-fg: #186B3A;
+    --bg-secondary: #EDEBE3;
+    --scrollbar-thumb: rgba(20, 26, 20, 0.18);
+    --shadow-card: 0 0 0 1px rgba(20, 26, 20, 0.04), 0 10px 26px rgba(30, 40, 30, 0.10);
+    --shadow-pop: 0 24px 60px rgba(30, 40, 30, 0.18);
+  }
+}
+
+:root[data-theme="light"] {
+  --bg-color: #F4F2EC;
+  --bg-elevated: #FBFAF6;
+  --card-bg: #FFFFFF;
+  --card-bg-hover: #F0EEE7;
+  --card-solid: #FFFFFF;
+  --border-color: rgba(20, 26, 20, 0.12);
+  --border-strong: rgba(20, 26, 20, 0.22);
+  --glass-border: rgba(21, 128, 61, 0.45);
+  --text-main: #0C120C;
+  --text-secondary: #586158;
+  --text-dim: #8A928A;
+  --accent-hover: #17A047;
+  --accent-gradient: linear-gradient(180deg, #1DB954 0%, #0E7A3C 100%);
+  --accent-text: #15803D;
+  --brown: #7A5B32;
+  --brown-soft: rgba(122, 91, 50, 0.14);
+  --sell-red: #7A5B32;
+  --sell-soft: rgba(122, 91, 50, 0.14);
+  --surface-subtle: rgba(20, 26, 20, 0.045);
+  --surface-subtle-hover: rgba(20, 26, 20, 0.075);
+  --code-bg: #F0EEE6;
+  --code-fg: #186B3A;
+  --bg-secondary: #EDEBE3;
+  --scrollbar-thumb: rgba(20, 26, 20, 0.18);
+  --shadow-card: 0 0 0 1px rgba(20, 26, 20, 0.04), 0 10px 26px rgba(30, 40, 30, 0.10);
+  --shadow-pop: 0 24px 60px rgba(30, 40, 30, 0.18);
 }
 
 /* Angular display face: headings carry the industrial, terminal character. */
@@ -149,6 +244,26 @@ body::before {
 }
 @media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
 
+/* On paper the green glows get much softer so the ground stays a clean sheet. */
+@media (prefers-color-scheme: light) {
+  body::before {
+    background:
+      radial-gradient(40% 50% at 18% 18%, rgba(29, 185, 84, 0.07), transparent 60%),
+      radial-gradient(46% 56% at 84% 28%, rgba(29, 185, 84, 0.05), transparent 62%),
+      radial-gradient(52% 60% at 58% 104%, rgba(29, 185, 84, 0.06), transparent 60%),
+      radial-gradient(40% 50% at 8% 92%, rgba(122, 91, 50, 0.05), transparent 60%);
+    filter: blur(40px) saturate(1.02);
+  }
+}
+:root[data-theme="light"] body::before {
+  background:
+    radial-gradient(40% 50% at 18% 18%, rgba(29, 185, 84, 0.07), transparent 60%),
+    radial-gradient(46% 56% at 84% 28%, rgba(29, 185, 84, 0.05), transparent 62%),
+    radial-gradient(52% 60% at 58% 104%, rgba(29, 185, 84, 0.06), transparent 60%),
+    radial-gradient(40% 50% at 8% 92%, rgba(122, 91, 50, 0.05), transparent 60%);
+  filter: blur(40px) saturate(1.02);
+}
+
 /* Keep app content above the backdrop. */
 #root { position: relative; z-index: 1; }
 
@@ -207,7 +322,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
