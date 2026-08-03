@@ -4,6 +4,7 @@ import {
   CandlestickSeries, LineSeries, HistogramSeries,
   type IChartApi, type ISeriesApi, type UTCTimestamp,
 } from 'lightweight-charts';
+import { useTheme } from '../../hooks/useTheme';
 import styles from './TradeChart.module.css';
 
 interface TradeChartProps {
@@ -19,8 +20,23 @@ type ChartView = 'price' | 'depth';
 type Timeframe = '5m' | '15m' | '30m' | '1H' | '4H' | '1D' | '1W' | '1M' | '1Y';
 const TIMEFRAMES: Timeframe[] = ['5m', '15m', '30m', '1H', '4H', '1D', '1W', '1M', '1Y'];
 
-const CHART_BG = '#0d1117';
-const PRIMARY   = '#00b272';
+// The chart lib paints to a canvas, so it can't read our CSS tokens. We keep a
+// small chrome palette per theme here and re-apply it whenever the theme flips.
+// Candle + bid/ask greens/reds stay theme-invariant (set at their series).
+interface ChartChrome {
+  bg: string; text: string; grid: string; border: string;
+  crosshair: string; crosshairLabel: string; primary: string; muted: string;
+}
+const CHROME: Record<'dark' | 'light', ChartChrome> = {
+  dark: {
+    bg: '#0d1117', text: '#848e9c', grid: '#1a1f26', border: '#2b2f36',
+    crosshair: '#474d57', crosshairLabel: '#1e2329', primary: '#00b272', muted: '#848e9c',
+  },
+  light: {
+    bg: '#FFFFFF', text: '#586158', grid: 'rgba(20,26,20,0.08)', border: 'rgba(20,26,20,0.16)',
+    crosshair: '#8A928A', crosshairLabel: '#0C120C', primary: '#15803D', muted: '#8A928A',
+  },
+};
 
 /* ── Market data fetching ── */
 
@@ -106,7 +122,7 @@ async function fetchMarketData(asset: string, tf: Timeframe): Promise<OHLCV[]> {
 
 interface DepthPoint { price: number; cum: number }
 
-function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoint[]) {
+function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoint[], chrome: ChartChrome) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const dpr = window.devicePixelRatio || 1;
@@ -120,11 +136,11 @@ function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoi
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
-  ctx.fillStyle = CHART_BG; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = chrome.bg; ctx.fillRect(0, 0, W, H);
 
   const all = [...bids.map(b => b.price), ...asks.map(a => a.price)];
   if (!all.length) {
-    ctx.fillStyle = '#848e9c'; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+    ctx.fillStyle = chrome.muted; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
     ctx.fillText('No open orders yet', W / 2, H / 2); return;
   }
   const minP = all[0], maxP = all[all.length - 1], span = maxP - minP || 1;
@@ -133,7 +149,7 @@ function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoi
   const xP = (p: number) => PAD.left + ((p - minP) / span) * plotW;
   const yC = (c: number) => PAD.top + plotH - c * vS;
 
-  ctx.strokeStyle = '#1a1f26'; ctx.lineWidth = 1;
+  ctx.strokeStyle = chrome.grid; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = PAD.top + (plotH / 4) * i;
     ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
@@ -156,14 +172,14 @@ function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoi
 
   if (bids.length && asks.length) {
     const mid = asks[0].price;
-    ctx.strokeStyle = `${PRIMARY}99`; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = `${chrome.primary}99`; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(xP(mid), PAD.top); ctx.lineTo(xP(mid), PAD.top + plotH); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = PRIMARY; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = chrome.primary; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
     ctx.fillText(`$${mid.toFixed(0)}`, xP(mid), PAD.top - 6);
   }
 
-  ctx.fillStyle = '#848e9c'; ctx.font = '10px monospace';
+  ctx.fillStyle = chrome.muted; ctx.font = '10px monospace';
   ctx.textAlign = 'center';
   const lc = Math.min(5, all.length);
   for (let i = 0; i < lc; i++) {
@@ -180,17 +196,20 @@ function drawDepth(canvas: HTMLCanvasElement, bids: DepthPoint[], asks: DepthPoi
   ctx.fillStyle = '#f6465d'; ctx.fillText('▬ Asks', PAD.left + 56, PAD.top - 8);
 }
 
-function DepthCanvas({ bids, asks }: { bids: DepthPoint[]; asks: DepthPoint[] }) {
+function DepthCanvas({ bids, asks, chrome }: { bids: DepthPoint[]; asks: DepthPoint[]; chrome: ChartChrome }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const draw = () => { if (ref.current) drawDepth(ref.current, bids, asks); };
-  useEffect(draw, [bids, asks]);
-  useEffect(() => { window.addEventListener('resize', draw); return () => window.removeEventListener('resize', draw); }, [bids, asks]); // eslint-disable-line
+  const draw = () => { if (ref.current) drawDepth(ref.current, bids, asks, chrome); };
+  useEffect(draw, [bids, asks, chrome]);
+  useEffect(() => { window.addEventListener('resize', draw); return () => window.removeEventListener('resize', draw); }, [bids, asks, chrome]); // eslint-disable-line
   return <canvas ref={ref} className={styles.depthCanvas} />;
 }
 
 /* ── Price chart ── */
 
 export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) {
+  const { theme } = useTheme();
+  const chrome = CHROME[theme];
+
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const candleRef    = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -202,6 +221,11 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
   const [ohlcData, setOhlcData]   = useState<OHLCV[]>([]);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
+
+  // Keep the latest chrome reachable inside the create-once effect without
+  // making it a dependency (which would tear down and rebuild the chart).
+  const chromeRef = useRef(chrome);
+  chromeRef.current = chrome;
 
   const depthBids = useMemo(() => { let s = 0; return bids.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [bids]);
   const depthAsks = useMemo(() => { let s = 0; return asks.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [asks]);
@@ -224,23 +248,24 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
     const el = containerRef.current;
     const w = el.clientWidth  || 600;
     const h = el.clientHeight || 380;
+    const c = chromeRef.current;
 
     const chart = createChart(el, {
       width: w,
       height: h,
       layout: {
-        background: { type: ColorType.Solid, color: CHART_BG },
-        textColor: '#848e9c',
+        background: { type: ColorType.Solid, color: c.bg },
+        textColor: c.text,
         fontSize: 11,
       },
-      grid: { vertLines: { color: '#1a1f26' }, horzLines: { color: '#1a1f26' } },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: '#474d57', labelBackgroundColor: '#1e2329' },
-        horzLine: { color: '#474d57', labelBackgroundColor: '#1e2329' },
+        vertLine: { color: c.crosshair, labelBackgroundColor: c.crosshairLabel },
+        horzLine: { color: c.crosshair, labelBackgroundColor: c.crosshairLabel },
       },
-      timeScale: { borderColor: '#2b2f36', timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true },
-      rightPriceScale: { borderColor: '#2b2f36', minimumWidth: 68 },
+      timeScale: { borderColor: c.border, timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true },
+      rightPriceScale: { borderColor: c.border, minimumWidth: 68 },
       handleScroll: true,
       handleScale: true,
     });
@@ -252,7 +277,7 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
     });
 
     oracleRef.current = chart.addSeries(LineSeries, {
-      color: PRIMARY, lineWidth: 1, lineStyle: LineStyle.Dashed,
+      color: c.primary, lineWidth: 1, lineStyle: LineStyle.Dashed,
       lastValueVisible: true, priceLineVisible: false, title: 'Mark',
     });
 
@@ -283,6 +308,23 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
 
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; };
   }, [view]);
+
+  /* ── Re-apply chrome when the theme flips ── */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      layout: { background: { type: ColorType.Solid, color: chrome.bg }, textColor: chrome.text },
+      grid: { vertLines: { color: chrome.grid }, horzLines: { color: chrome.grid } },
+      crosshair: {
+        vertLine: { color: chrome.crosshair, labelBackgroundColor: chrome.crosshairLabel },
+        horzLine: { color: chrome.crosshair, labelBackgroundColor: chrome.crosshairLabel },
+      },
+      timeScale: { borderColor: chrome.border },
+      rightPriceScale: { borderColor: chrome.border },
+    });
+    oracleRef.current?.applyOptions({ color: chrome.primary });
+  }, [chrome, theme]);
 
   /* ── Update candlestick data ── */
   useEffect(() => {
@@ -367,7 +409,7 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
             )}
           </>
         ) : (
-          <DepthCanvas bids={depthBids} asks={depthAsks} />
+          <DepthCanvas bids={depthBids} asks={depthAsks} chrome={chrome} />
         )}
       </div>
     </div>
