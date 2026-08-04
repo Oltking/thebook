@@ -93,21 +93,12 @@
 
 /* two-column hero: copy on the left, a phone showing the app on the right */
 .heroGrid { display: grid; grid-template-columns: 1.08fr 0.92fr; gap: 40px; align-items: center; }
-/* On narrow screens the phone flows under the copy instead of vanishing. We
-   reserve only ~80% of its rendered height (aspect 2622/1206 ≈ 2.174) and clip
-   the rest, so the device bleeds off the bottom of the hero rather than flushing
-   the page downward. */
+/* Keep the phone beside the copy at every width, just like desktop: the second
+   column shrinks to the device's own width ("1fr auto") and the phone scales
+   down on smaller screens rather than dropping below the text. */
 @media (max-width: 1000px) {
-  .heroGrid { grid-template-columns: 1fr; gap: 10px; }
-  .phoneWrap {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    height: calc(min(78vw, 340px) * 2.174 * 0.8);
-    overflow: hidden;
-    margin-top: 6px;
-  }
-  .phone { width: min(78vw, 340px); animation: none; }
+  .heroGrid { grid-template-columns: 1fr auto; gap: 18px; }
+  .phone { width: clamp(140px, 32vw, 300px); }
 }
 
 .phoneWrap { position: relative; display: flex; justify-content: center; }
