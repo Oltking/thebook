@@ -4,10 +4,6 @@ export type Theme = 'light' | 'dark';
 
 const KEY = 'thebook-theme';
 
-function systemTheme(): Theme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 function stored(): Theme | null {
   try {
     const t = localStorage.getItem(KEY);
@@ -18,30 +14,19 @@ function stored(): Theme | null {
 }
 
 /**
- * Full light/dark toggle. Persists the explicit choice in localStorage and
- * stamps `data-theme` on <html> (which the CSS token scopes read). When the
- * user has made no choice, follows the OS preference and tracks live changes.
+ * Full light/dark toggle. Light is the default for anyone who has not chosen
+ * otherwise (we do not follow the OS), and an explicit choice is persisted in
+ * localStorage. Either way we stamp `data-theme` on <html>, which the CSS token
+ * scopes read, so the resolved theme is always concrete.
  */
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() => stored() ?? systemTheme());
+  const [theme, setThemeState] = useState<Theme>(() => stored() ?? 'light');
 
-  // Apply to <html>. Only stamp an explicit attribute when the user has chosen;
-  // otherwise leave it unset so the media query drives things.
+  // Always stamp the resolved theme so light truly wins by default, rather than
+  // leaving it unset and letting the OS media query hand dark-mode users dark.
   useEffect(() => {
-    const explicit = stored();
-    if (explicit) document.documentElement.setAttribute('data-theme', explicit);
-    else document.documentElement.removeAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
-
-  // Follow the OS when the user hasn't overridden it.
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => {
-      if (!stored()) setThemeState(systemTheme());
-    };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   const setTheme = useCallback((next: Theme) => {
     try {

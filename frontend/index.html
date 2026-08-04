@@ -12,12 +12,15 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <title>thebookdex</title>
     <script>
-      // No-flash theme init: honor the user's stored choice before first paint.
+      // No-flash theme init: honor a stored choice before first paint, and
+      // default everyone else to light (the app's default theme).
       (function () {
+        var t = 'light';
         try {
-          var t = localStorage.getItem('thebook-theme');
-          if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+          var s = localStorage.getItem('thebook-theme');
+          if (s === 'light' || s === 'dark') t = s;
         } catch (e) {}
+        document.documentElement.setAttribute('data-theme', t);
       })();
     </script>
   </head>
