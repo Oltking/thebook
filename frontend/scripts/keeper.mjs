@@ -28,10 +28,12 @@ import { SailsIdlParser } from 'sails-js-parser';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
 
+// Load both env files: .env.deploy carries the admin VARA_SEED, .env carries
+// VITE_PROGRAM_ID. Already-set vars (e.g. a CLI override) take precedence, and
+// the first file loaded wins for any key it shares with the second.
 for (const f of [resolve(__dirname, '..', '.env.deploy'), resolve(__dirname, '..', '.env')]) {
   if (existsSync(f)) {
     try { process.loadEnvFile(f); } catch { /* ignore malformed file */ }
-    break;
   }
 }
 
