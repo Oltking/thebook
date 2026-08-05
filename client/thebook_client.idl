@@ -188,6 +188,10 @@ service Orderbook {
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
   PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
+  /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+  /// so the market maker can quote both sides and USDT-only agents always have a
+  /// counterparty. Idempotent — after the first call it just returns the balances.
+  SeedHouse : () -> result (struct { u64, u64, u64, u64 }, ContractError);
   /// Admin-only: register the VFT program ID that backs a custodied balance.
   /// Must be set before deposit/withdraw can move real tokens for that kind.
   SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);

@@ -16,6 +16,23 @@ type ContractError = enum {
   SlippageExceeded,
   ZeroAmount,
   AgentCallFailed,
+  BookFull,
+  NoMarkPrice,
+  LeverageTooHigh,
+  PositionNotFound,
+  WrongDirection,
+  NotLiquidatable,
+  StaleMark,
+};
+
+/// The four balances the DEX custodies, each backed by a real VFT on-chain.
+/// `Usd` is a separate kind because the orderbook denominates in USD but the
+/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+type TokenKind = enum {
+  Usd,
+  Btc,
+  Eth,
+  Vara,
 };
 
 /// The trading persona a user picks when creating their agent. Display/behaviour
@@ -126,6 +143,30 @@ type SwapExecutedEvent = struct {
   fee: u64,
 };
 
+type MarkPriceEvent = struct {
+  asset: Asset,
+  price: u64,
+};
+
+type PerpOpenedEvent = struct {
+  owner: actor_id,
+  asset: Asset,
+  is_long: bool,
+  size: u64,
+  entry: u64,
+  margin: u64,
+  leverage: u32,
+};
+
+type PerpClosedEvent = struct {
+  owner: actor_id,
+  asset: Asset,
+  exit: u64,
+  payout: u64,
+  pnl: i64,
+  liquidated: bool,
+};
+
 constructor {
   New : ();
 };
@@ -133,17 +174,33 @@ constructor {
 service Orderbook {
   CallAgentService : (target: actor_id, payload: vec u8, gas_limit: u64) -> result (vec u8, ContractError);
   CancelOrder : (oid: u64) -> result (null, ContractError);
-  Challenge : (opponent: actor_id, amount: u64) -> result (u32, ContractError);
-  /// Create the caller's agent with a chosen name + strategy, funding it with
-  /// starting balances. Idempotent: re-joining returns the existing balances and
-  /// keeps the original identity (name is immutable in this phase).
+  /// Move real VFT tokens from the caller into the DEX vault, crediting their
+  /// internal balance. The caller must have `approve`d the DEX on the token
+  /// program for at least `amount` first. Credits only after the on-chain
+  /// transfer succeeds, so the internal balance stays fully token-backed.
+  Deposit : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
+  /// Register the caller's agent identity (name + strategy) and grant the
+  /// starting balances. This is the virtual-balance model: an agent is funded
+  /// the instant it joins, so it can trade immediately with no token custody,
+  /// approve, or deposit step. Idempotent: re-joining returns the existing
+  /// balances and keeps the original identity (no double funding).
   Join : (name: str, strategy: AgentStrategy) -> struct { u64, u64, u64, u64 };
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
   PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
-  SignalCollab : (_partner: actor_id, _note: str) -> null;
+  /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+  /// so the market maker can quote both sides and USDT-only agents always have a
+  /// counterparty. Idempotent — after the first call it just returns the balances.
+  SeedHouse : () -> result (struct { u64, u64, u64, u64 }, ContractError);
+  /// Admin-only: register the VFT program ID that backs a custodied balance.
+  /// Must be set before deposit/withdraw can move real tokens for that kind.
+  SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);
   StartAutopilot : () -> null;
   Tick : () -> result (str, ContractError);
+  /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
+  /// internal balance first, then transfers on-chain; if the transfer fails the
+  /// debit is reverted so funds are never silently lost.
+  Withdraw : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
   /// Caller's agent identity, or None if they haven't joined. Used by the UI to
   /// decide whether to show the "Create your Agent" onboarding.
   query GetIdentity : () -> opt struct { str, AgentStrategy };
@@ -152,6 +209,9 @@ service Orderbook {
   query GetOrderbook : (asset: Asset) -> struct { vec struct { u64, u64 }, vec struct { u64, u64 } };
   query GetPortfolio : () -> struct { u64, u64, u64, u64 };
   query GetStatus : () -> struct { u32, u64, u32, bool, u32 };
+  query GetToken : (kind: TokenKind) -> actor_id;
+  /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
+  query GetTokens : () -> struct { actor_id, actor_id, actor_id, actor_id };
   query GetTrades : (asset: Asset, limit: u32) -> vec struct { u64, u64, u64, actor_id, actor_id };
 
   events {
@@ -175,6 +235,43 @@ service Amm {
     LiquidityAdded: LiquidityAddedEvent;
     LiquidityRemoved: LiquidityRemovedEvent;
     SwapExecuted: SwapExecutedEvent;
+  }
+};
+
+service Perps {
+  /// Close your whole position at the current mark price, settling PnL against the
+  /// house reserve. Returns `(payout_cents, pnl_cents_signed)`.
+  ClosePosition : (asset: Asset) -> result (struct { u64, i64 }, ContractError);
+  /// Admin: move USD (cents) from your own balance into the house reserve that
+  /// pays trader profits. Never mints — total custodied USD is unchanged.
+  FundReserve : (amount: u64) -> result (u64, ContractError);
+  /// Permissionless liquidation: if a position's equity has fallen to the
+  /// maintenance margin, anyone may close it at the mark. The liquidator earns a
+  /// small fee from the residual equity; the rest flows to the reserve.
+  Liquidate : (owner: actor_id, asset: Asset) -> result (null, ContractError);
+  /// Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
+  /// cents from your balance; position size = margin * leverage at the mark price.
+  OpenPosition : (asset: Asset, is_long: bool, margin: u64, leverage: u32) -> result (u64, ContractError);
+  /// Keeper-only: publish the mark price (USD cents) for an asset. This is the
+  /// price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
+  SetMarkPrice : (asset: Asset, price: u64) -> result (null, ContractError);
+  /// Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
+  /// USD cents. A zero leaves that asset's mark unchanged.
+  SetMarkPrices : (btc: u64, eth: u64, vara: u64) -> result (null, ContractError);
+  /// Liquidation price (USD cents) for a position, i.e. the mark at which equity
+  /// hits maintenance margin. 0 if there is no such position.
+  query GetLiqPrice : (owner: actor_id, asset: Asset) -> u64;
+  query GetMarkPrice : (asset: Asset) -> u64;
+  query GetMarkPrices : () -> struct { u64, u64, u64 };
+  /// A trader's open positions as
+  /// `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
+  query GetPositions : (owner: actor_id) -> vec struct { Asset, bool, u64, u64, u64, u32, i64 };
+  query GetReserve : () -> u64;
+
+  events {
+    MarkPrice: MarkPriceEvent;
+    Opened: PerpOpenedEvent;
+    Closed: PerpClosedEvent;
   }
 };
 

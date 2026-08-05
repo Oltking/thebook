@@ -222,6 +222,40 @@ async fn join_creates_agent() {
 }
 
 #[tokio::test]
+async fn seed_house_grants_stockpile_admin_only() {
+    let (env, program) = deploy().await;
+    // Admin (the deployer / default actor) joins USDT-only, then claims the house
+    // stockpile once for deep market-maker inventory.
+    let _: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::Join>(("House".to_string(), AgentStrategy::MarketMaker))
+        .await
+        .unwrap();
+    let expected = (100_000 + 1_000_000_000, 100_000_000u64, 1_000_000_000u64, 100_000_000_000u64);
+    let seeded: Result<(u64, u64, u64, u64), ContractError> = orderbook_svc(&program)
+        .pending_call::<ob_io::SeedHouse>(())
+        .await
+        .unwrap();
+    assert_eq!(seeded.unwrap(), expected);
+    // Idempotent: a second call does not double the stockpile.
+    let again: Result<(u64, u64, u64, u64), ContractError> = orderbook_svc(&program)
+        .pending_call::<ob_io::SeedHouse>(())
+        .await
+        .unwrap();
+    assert_eq!(again.unwrap(), expected);
+    // Non-admin is rejected.
+    let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
+    let _: (u64, u64, u64, u64) = orderbook_svc(&bob)
+        .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
+        .await
+        .unwrap();
+    let denied: Result<(u64, u64, u64, u64), ContractError> = orderbook_svc(&bob)
+        .pending_call::<ob_io::SeedHouse>(())
+        .await
+        .unwrap();
+    assert!(denied.is_err(), "non-admin must not seed the house");
+}
+
+#[tokio::test]
 async fn join_sets_identity() {
     let (env, program) = deploy().await;
     join_alice(&env, &program).await;

@@ -144,6 +144,10 @@ export async function connectTheBook(opts = {}) {
     // trade right after. Re-joining never double-funds.
     join: (name, strategy = Strategy.ArbitrageHunter) => send('Orderbook', 'Join', [name, strategy]),
 
+    // Admin-only, one-time: grant the house (admin) its deep liquidity stockpile.
+    // No-op for non-admins (the program rejects it). Used by the market maker.
+    seedHouse: () => send('Orderbook', 'SeedHouse', []),
+
     // ── spot trading ──
     marketBuy: (asset, qty) => send('Orderbook', 'MarketBuy', [asset, qty]),
     marketSell: (asset, qty) => send('Orderbook', 'MarketSell', [asset, qty]),

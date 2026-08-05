@@ -9,6 +9,8 @@ use alloc::vec::Vec;
 pub struct DexState {
     /// Program deployer; the only account allowed to manage autopilot.
     pub admin: ActorId,
+    /// Whether the admin has already claimed the one-time house liquidity stockpile.
+    pub house_seeded: bool,
     pub agents: BTreeMap<ActorId, Agent>,
     pub orders: Vec<Order>,
     pub trades: Vec<TradeInfo>,

@@ -332,6 +332,14 @@ pub const INITIAL_USD: u64 = 100_000;
 pub const INITIAL_BTC: u64 = 0;
 pub const INITIAL_ETH: u64 = 0;
 pub const INITIAL_VARA: u64 = 0;
+
+// The house (admin) stockpile, granted once via `seed_house`, so the market maker
+// has deep inventory to quote both sides and USDT-only agents always have a
+// counterparty. USD in cents; assets in 1e5 units (1 whole = 100_000).
+pub const INITIAL_HOUSE_USD: u64 = 1_000_000_000; // $10,000,000
+pub const INITIAL_HOUSE_BTC: u64 = 100_000_000; // 1,000 BTC
+pub const INITIAL_HOUSE_ETH: u64 = 1_000_000_000; // 10,000 ETH
+pub const INITIAL_HOUSE_VARA: u64 = 100_000_000_000; // 1,000,000 VARA
 pub const SWAP_FEE_NUM: u64 = 3;
 pub const SWAP_FEE_DEN: u64 = 1_000;
 pub const MAX_PAGE: u32 = 50;

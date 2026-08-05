@@ -130,16 +130,23 @@ if (WITH_TOKENS) {
   console.log('  tokens: skipped (virtual balances; pass WITH_TOKENS=1 to enable custody)');
 }
 
-// ── 3 · register the admin so it has a funded account (Join grants balances) ──
+// ── 3 · register the admin (Join = USDT only), then claim the one-time house
+//        liquidity stockpile so the market maker has deep inventory to quote ──
 try {
   process.stdout.write('  registering admin (Join) … ');
-  await callDex('Orderbook', 'Join', 'admin', 'ArbitrageHunter');
+  await callDex('Orderbook', 'Join', 'House', 'MarketMaker');
+  console.log('ok');
+  process.stdout.write('  seeding house liquidity (SeedHouse) … ');
+  await callDex('Orderbook', 'SeedHouse');
   console.log('ok');
 } catch (e) {
   console.log(`skipped (${String(e?.message || e).slice(0, 60)})`);
 }
 
 console.log(`\n  ✓ deploy complete\n`);
+console.log(`  Next: run the keeper AND the market maker against the new program:`);
+console.log(`    node scripts/keeper.mjs`);
+console.log(`    node scripts/market-maker.mjs\n`);
 console.log(`  Put these in frontend/.env, then redeploy the frontend:\n`);
 for (const [k, v] of Object.entries(env)) console.log(`    ${k}=${v}`);
 console.log(`\n  Then start the mark-price keeper so futures work:`);

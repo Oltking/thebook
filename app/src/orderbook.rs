@@ -133,6 +133,37 @@ impl<'a> OrderbookService<'a> {
         (INITIAL_USD, INITIAL_BTC, INITIAL_ETH, INITIAL_VARA)
     }
 
+    /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+    /// so the market maker can quote both sides and USDT-only agents always have a
+    /// counterparty. Idempotent — after the first call it just returns the balances.
+    #[export]
+    pub fn seed_house(&mut self) -> Result<(u64, u64, u64, u64), ContractError> {
+        let caller = msg::source();
+        let mut st = self.state.borrow_mut();
+        if caller != st.admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        if st.house_seeded {
+            let ag = st.agents.get(&caller);
+            return Ok(ag.map(|a| (a.usd, a.btc, a.eth, a.vara)).unwrap_or((0, 0, 0, 0)));
+        }
+        st.house_seeded = true;
+        let ag = st.agents.entry(caller).or_insert(Agent {
+            id: caller,
+            name: "House".to_string(),
+            strategy: AgentStrategy::MarketMaker,
+            usd: 0,
+            btc: 0,
+            eth: 0,
+            vara: 0,
+        });
+        ag.usd += INITIAL_HOUSE_USD;
+        ag.btc += INITIAL_HOUSE_BTC;
+        ag.eth += INITIAL_HOUSE_ETH;
+        ag.vara += INITIAL_HOUSE_VARA;
+        Ok((ag.usd, ag.btc, ag.eth, ag.vara))
+    }
+
     /// Caller's agent identity, or None if they haven't joined. Used by the UI to
     /// decide whether to show the "Create your Agent" onboarding.
     #[export]

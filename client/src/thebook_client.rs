@@ -93,6 +93,10 @@ pub mod orderbook {
             price: u64,
             qty: u64,
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env>;
+        /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+        /// so the market maker can quote both sides and USDT-only agents always have a
+        /// counterparty. Idempotent — after the first call it just returns the balances.
+        fn seed_house(&mut self) -> sails_rs::client::PendingCall<io::SeedHouse, Self::Env>;
         /// Admin-only: register the VFT program ID that backs a custodied balance.
         /// Must be set before deposit/withdraw can move real tokens for that kind.
         fn set_token(
@@ -192,6 +196,9 @@ pub mod orderbook {
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env> {
             self.pending_call((side, asset, price, qty))
         }
+        fn seed_house(&mut self) -> sails_rs::client::PendingCall<io::SeedHouse, Self::Env> {
+            self.pending_call(())
+        }
         fn set_token(
             &mut self,
             kind: TokenKind,
@@ -265,6 +272,7 @@ pub mod orderbook {
         sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
         sails_rs::io_struct_impl!(PlaceLimit (side: super::Side, asset: super::Asset, price: u64, qty: u64) -> Result<u64, super::ContractError>);
+        sails_rs::io_struct_impl!(SeedHouse () -> Result<(u64,u64,u64,u64,), super::ContractError>);
         sails_rs::io_struct_impl!(SetToken (kind: super::TokenKind, address: ActorId) -> Result<(), super::ContractError>);
         sails_rs::io_struct_impl!(StartAutopilot () -> ());
         sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);

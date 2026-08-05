@@ -179,14 +179,19 @@ service Orderbook {
   /// program for at least `amount` first. Credits only after the on-chain
   /// transfer succeeds, so the internal balance stays fully token-backed.
   Deposit : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
-  /// Register the caller's agent identity (name + strategy). Creates the account
-  /// with ZERO balances — real value comes from claiming test tokens at the faucet
-  /// and `deposit`ing them, not from free money on join. Idempotent: re-joining
-  /// returns the existing balances and keeps the original identity.
+  /// Register the caller's agent identity (name + strategy) and grant the
+  /// starting balances. This is the virtual-balance model: an agent is funded
+  /// the instant it joins, so it can trade immediately with no token custody,
+  /// approve, or deposit step. Idempotent: re-joining returns the existing
+  /// balances and keeps the original identity (no double funding).
   Join : (name: str, strategy: AgentStrategy) -> struct { u64, u64, u64, u64 };
   MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
   MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
   PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
+  /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+  /// so the market maker can quote both sides and USDT-only agents always have a
+  /// counterparty. Idempotent — after the first call it just returns the balances.
+  SeedHouse : () -> result (struct { u64, u64, u64, u64 }, ContractError);
   /// Admin-only: register the VFT program ID that backs a custodied balance.
   /// Must be set before deposit/withdraw can move real tokens for that kind.
   SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);
