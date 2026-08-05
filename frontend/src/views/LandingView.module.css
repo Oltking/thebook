@@ -93,17 +93,16 @@
 
 /* two-column hero: copy on the left, a phone showing the app on the right */
 .heroGrid { display: grid; grid-template-columns: 1.08fr 0.92fr; gap: 40px; align-items: center; }
-/* On mobile the layout stays exactly like desktop: copy on the left, phone on
-   the right, side by side. We keep the two columns ("1fr auto") and simply scale
-   the device down in proportion to the smaller screen, so it never drops below
-   the text and the copy is never squeezed. */
+/* On mobile the layout stays exactly like desktop: copy on the left, the phone
+   beside it on the right at full size. We do NOT shrink the device and we do NOT
+   drop it below the text. Instead the phone keeps its size and bleeds off the
+   right edge (a negative right margin pulls most of it past the frame, where the
+   hero's overflow clips it), so the copy keeps its room and the phone reads as a
+   real object running out of frame, just like the desktop composition. */
 @media (max-width: 1000px) {
-  .heroGrid { grid-template-columns: 1fr auto; gap: 20px; }
-  .phone { width: clamp(96px, 22vw, 190px); }
-}
-@media (max-width: 560px) {
-  .heroGrid { gap: 14px; }
-  .phone { width: clamp(84px, 26vw, 150px); }
+  .heroGrid { grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .phone { width: clamp(240px, 68vw, 320px); }
+  .phoneWrap { margin-right: clamp(-180px, -36vw, -120px); }
 }
 
 .phoneWrap { position: relative; display: flex; justify-content: center; }
