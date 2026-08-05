@@ -20,7 +20,7 @@ const STRAT: Record<StrategyName, { color: string; desc: string; glyph: string }
   Momentum: { color: '#9A784B', desc: 'Rides assets that are trending and moving fast.', glyph: '▲' },
 };
 
-const SUGGESTIONS = ['Who is leading the hive?', 'What should I trade now?', 'Find me an edge', 'Explain my agent'];
+const SUGGESTIONS = ['Who is leading the agents?', 'What should I trade now?', 'Find me an edge', 'Explain my agent'];
 
 // The looping word in the headline: type it, hold, delete, move to the next.
 const HEADLINE_WORDS = ['awake', 'active', 'trading', 'earning'];
@@ -177,7 +177,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
       market[a] = f ? { price: Number(f.price_usd_micro) / 1_000_000, change24h: Number(f.change_24h_bps) / 100 } : null;
     }
     const res = await fetchAgentBrief({
-      name: identity?.name || 'the hive',
+      name: identity?.name || 'agents',
       strategy: identity?.strategy || 'ArbitrageHunter',
       opportunities, market,
     });
@@ -201,8 +201,8 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           <span className={styles.eyebrow}>Agent ecosystem · live on Vara A2A</span>
           <h1 className={styles.title}>Your agents are <em>{typed}<span className={styles.caret} /></em></h1>
           <p className={styles.lede}>
-            Not a dashboard, a hive. Spin up autonomous traders, watch them read the book and act,
-            and direct the whole swarm from one line.
+            Not a dashboard, a fleet of agents. Spin up autonomous traders, watch them read the book
+            and act, and direct the whole swarm from one line.
           </p>
           <div className={styles.heroActions}>
             <button className={styles.deployHero} onClick={onDeploy}>+ Deploy agent</button>
@@ -219,7 +219,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             <form className={styles.consoleRow} onSubmit={(e) => { e.preventDefault(); ask(input); }}>
               <span className={styles.glyph} />
               <input value={input} onChange={(e) => setInput(e.target.value)}
-                placeholder="Direct the hive.  e.g. what should I trade now?" aria-label="Command the hive" />
+                placeholder="Direct your agents.  e.g. what should I trade now?" aria-label="Command your agents" />
               <button type="submit" className={styles.send} disabled={thinking || !input.trim()} aria-label="Send">
                 {thinking ? '…' : '➔'}
               </button>
@@ -234,7 +234,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           {(thinking || reply) && (
             <div className={styles.reply}>
               <span className={styles.rg}>◇</span>
-              <span>{thinking ? 'The hive is thinking…' : reply}</span>
+              <span>{thinking ? 'Your agents are thinking…' : reply}</span>
             </div>
           )}
 
@@ -291,7 +291,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
       <section className={styles.section} style={{ paddingTop: 0 }}>
         <div className={styles.wrap}>
           <div className={styles.secHead}>
-            <div><h2>Hive activity</h2><p>Live fills and the signals your agents are acting on.</p></div>
+            <div><h2>Agent activity</h2><p>Live fills and the signals your agents are acting on.</p></div>
           </div>
           <div className={styles.stream}>
             {activity.length === 0 && opportunities.length === 0 && (
