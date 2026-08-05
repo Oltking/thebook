@@ -31,7 +31,7 @@ export interface TokenMeta {
 }
 
 export const TOKENS: TokenMeta[] = [
-  { kind: 'Usd', label: 'US Dollar', symbol: 'wUSDC', decimals: 6, programId: (import.meta.env.VITE_TOKEN_USD ?? ZERO_ADDR) as `0x${string}` },
+  { kind: 'Usd', label: 'Tether USD', symbol: 'USDT', decimals: 6, programId: (import.meta.env.VITE_TOKEN_USD ?? ZERO_ADDR) as `0x${string}` },
   { kind: 'Btc', label: 'Bitcoin', symbol: 'wBTC', decimals: 6, programId: (import.meta.env.VITE_TOKEN_BTC ?? ZERO_ADDR) as `0x${string}` },
   { kind: 'Eth', label: 'Ethereum', symbol: 'wETH', decimals: 6, programId: (import.meta.env.VITE_TOKEN_ETH ?? ZERO_ADDR) as `0x${string}` },
   { kind: 'Vara', label: 'Vara', symbol: 'wVARA', decimals: 6, programId: (import.meta.env.VITE_TOKEN_VARA ?? ZERO_ADDR) as `0x${string}` },

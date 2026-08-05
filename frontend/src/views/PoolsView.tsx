@@ -1,5 +1,6 @@
 import { Card } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Select } from '../components/ui/Select';
 import styles from './PoolsView.module.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSails } from '../hooks/useSails';
@@ -179,11 +180,11 @@ export function PoolsView() {
   const provideUsdLiquidity = async () => {
     if (!program || !account || !usdAsset || !usdQuote) return;
     const usd = parseFloat(usdInput);
-    if (isNaN(usd) || usd <= 0) { error('Enter a valid USD amount'); return; }
+    if (isNaN(usd) || usd <= 0) { error('Enter a valid USDT amount'); return; }
 
     const halfUsd = usd / 2;
     if (halfUsd > usdBal) {
-      error(`Insufficient USD. You have $${usdBal.toFixed(2)}, need $${halfUsd.toFixed(2)} for the bid side.`);
+      error(`Insufficient USDT. You have $${usdBal.toFixed(2)}, need $${halfUsd.toFixed(2)} for the bid side.`);
       return;
     }
 
@@ -212,8 +213,8 @@ export function PoolsView() {
       }
 
       success(sellQty > 0n
-        ? `Liquidity added · ${usdAsset}/USD two-sided quote is live`
-        : `Bid liquidity added · ${usdAsset}/USD`);
+        ? `Liquidity added · ${usdAsset}/USDT two-sided quote is live`
+        : `Bid liquidity added · ${usdAsset}/USDT`);
       setUsdAsset(null);
       refreshPortfolio(); refreshAll();
       setTimeout(() => { refreshPortfolio(); refreshAll(); }, 2500);
@@ -254,13 +255,11 @@ export function PoolsView() {
         {showCreate && (
           <Card title="Create Pool">
             <div className={styles.createForm}>
-              <select value={newA} onChange={e => setNewA(e.target.value as Asset)} aria-label="First asset">
-                {['BTC', 'ETH', 'VARA'].map(a => <option key={a}>{a}</option>)}
-              </select>
+              <Select value={newA} onChange={v => setNewA(v as Asset)} ariaLabel="First asset"
+                options={['BTC', 'ETH', 'VARA'].map(a => ({ value: a, label: a }))} />
               <span style={{ color: 'var(--text-secondary)' }}>/</span>
-              <select value={newB} onChange={e => setNewB(e.target.value as Asset)} aria-label="Second asset">
-                {['BTC', 'ETH', 'VARA'].map(a => <option key={a}>{a}</option>)}
-              </select>
+              <Select value={newB} onChange={v => setNewB(v as Asset)} ariaLabel="Second asset"
+                options={['BTC', 'ETH', 'VARA'].map(a => ({ value: a, label: a }))} />
               <button onClick={handleCreatePool} disabled={isBusy}>
                 {isBusy ? 'Creating...' : 'Create'}
               </button>
@@ -269,7 +268,7 @@ export function PoolsView() {
         )}
 
         {/* ── USD Spot Pairs ── */}
-        <Card title="USD Spot Pairs - Orderbook Liquidity">
+        <Card title="USDT Spot Pairs - Orderbook Liquidity">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, padding: '4px 0' }}>
             {(['BTC', 'ETH', 'VARA'] as Asset[]).map(asset => {
               const feed    = prices[asset];
@@ -289,7 +288,7 @@ export function PoolsView() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--primary)' }}>
-                      {asset}/USD
+                      {asset}/USDT
                     </span>
                     <span style={{ fontSize: 11, color: change >= 0 ? 'var(--buy-green)' : 'var(--sell-red)', fontWeight: 600 }}>
                       {change >= 0 ? '+' : ''}{change.toFixed(2)}%
@@ -330,7 +329,7 @@ export function PoolsView() {
             })}
           </div>
           <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(0,178,114,0.08)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            USD pairs are orderbook markets. Adding liquidity places a resting Buy bid and Sell ask around the current price - you earn the spread whenever either side is matched.
+            USDT pairs are orderbook markets. Adding liquidity places a resting Buy bid and Sell ask around the current price - you earn the spread whenever either side is matched.
           </div>
         </Card>
 
@@ -381,7 +380,7 @@ export function PoolsView() {
               return (
                 <EmptyState
                   title="No Active Positions"
-                  description="Add liquidity to an AMM pool or a USD spot pair to start earning fees."
+                  description="Add liquidity to an AMM pool or a USDT spot pair to start earning fees."
                 />
               );
             }
@@ -411,7 +410,7 @@ export function PoolsView() {
                     <div key={`grp-${asset}`} className={styles.lpRow}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                         <div>
-                          <span style={{ fontWeight: 600 }}>{asset} / USD</span>
+                          <span style={{ fontWeight: 600 }}>{asset} / USDT</span>
                           <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
                             {orders.length} order{orders.length === 1 ? '' : 's'} · ${totalUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </span>
@@ -560,18 +559,18 @@ export function PoolsView() {
       {/* ── USD Pair Liquidity Modal ── */}
       {usdAsset && (
         <div className={styles.modalOverlay} onClick={closeUsdModal} role="dialog" aria-modal="true"
-          aria-label={`Add ${usdAsset}/USD liquidity`}>
+          aria-label={`Add ${usdAsset}/USDT liquidity`}>
           <div ref={usdTrapRef} tabIndex={-1} className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>{usdAsset} / USD - Add Liquidity</h3>
+            <h3>{usdAsset} / USDT - Add Liquidity</h3>
 
             <div className={styles.poolInfoBox}>
               <span>Mark price: {usdMark > 0 ? `$${usdMark.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '---'}</span>
-              <span>Your USD: ${usdBal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              <span>Your USDT: ${usdBal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               <span>Your {usdAsset}: {assetBal(usdAsset).toLocaleString(undefined, { maximumFractionDigits: 5 })}</span>
             </div>
 
             <div className={styles.formGroup}>
-              <label>Liquidity Amount (USD)</label>
+              <label>Liquidity Amount (USDT)</label>
               <input
                 type="number"
                 value={usdInput}

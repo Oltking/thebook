@@ -7,6 +7,8 @@ import { useSails } from '../hooks/useSails';
 import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers, ArrowUpRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
+import { formatUsdPrice } from '../lib/format';
+import { Select } from '../components/ui/Select';
 import { useViewport } from '../hooks/useViewport';
 import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -278,7 +280,9 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   const orderbookEmpty = orderbook.bids.length === 0 && orderbook.asks.length === 0;
 
-  const fmtMark = (v: number) => v > 0 ? `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---';
+  // Use the shared sub-cent-aware formatter so low-priced assets (VARA ~$0.0004)
+  // don't collapse to "$0.00" the way a fixed 2-decimal format does.
+  const fmtMark = (v: number) => v > 0 ? formatUsdPrice(v) : '---';
 
   const spotMobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
     { id: 'chart',      label: 'Chart',  icon: BarChart3 },
@@ -301,63 +305,44 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   const mobileChartHeader = (
     <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-color)', paddingBottom: 6, marginBottom: 4 }}>
-      {/* Row 1: asset selector + refresh */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5 }}>
-        {(['BTC', 'ETH', 'VARA'] as Asset[]).map(a => (
-          <button
-            key={a}
-            onClick={() => setAsset(a)}
-            style={{
-              flex: 1,
-              padding: '3px 4px',
-              borderRadius: 6,
-              background: asset === a ? 'var(--primary)' : 'var(--card-bg-hover)',
-              color: asset === a ? 'var(--on-accent)' : 'var(--text-secondary)',
-              fontWeight: 700,
-              fontSize: 11,
-              minHeight: 26,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {isSpot ? a : `${a}-P`}
-          </button>
-        ))}
+      {/* Row 1: bold pair title (dropdown) + 24h change pill, refresh on the right */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <Select
+          value={asset}
+          onChange={(v) => setAsset(v as Asset)}
+          ariaLabel="Select market"
+          className={styles.marketSelect}
+          options={(['BTC', 'ETH', 'VARA'] as Asset[]).map(a => ({
+            value: a, label: isSpot ? `${a} / USDT` : `${a}-PERP`,
+          }))}
+        />
+        <span className={change24h >= 0 ? styles.chgPillUp : styles.chgPillDown}>
+          {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
+        </span>
         <button onClick={() => fetchPrice(asset)} disabled={pricesLoading}
-          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', padding: 0, minHeight: 26, cursor: 'pointer', flexShrink: 0 }}>
-          <RefreshCw size={12} className={pricesLoading ? styles.spin : ''} />
+          style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-secondary)', padding: 0, minHeight: 26, cursor: 'pointer', flexShrink: 0 }}>
+          <RefreshCw size={13} className={pricesLoading ? styles.spin : ''} />
         </button>
       </div>
-      {/* Row 2: stats all in one horizontal line */}
-      <div style={{ display: 'flex', flexDirection: 'row', gap: 8 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            {isSpot ? 'Oracle' : 'Mark'}
-          </span>
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: change24h >= 0 ? 'var(--buy-green)' : 'var(--sell-red)', whiteSpace: 'nowrap' }}>
-            {fmtMark(markPrice)}
-          </span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>24h</span>
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: change24h >= 0 ? 'var(--buy-green)' : 'var(--sell-red)', whiteSpace: 'nowrap' }}>
-            {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
-          </span>
-        </div>
+      {/* Row 2: big price + oracle/fill sub-stats, MEXC-style */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em', color: change24h >= 0 ? 'var(--buy-green)' : 'var(--sell-red)', whiteSpace: 'nowrap' }}>
+          {fmtMark(markPrice)}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+          {isSpot ? 'Oracle' : 'Mark'}
+        </span>
         {lastExecPrice > 0n && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-            <span style={{ fontSize: 7, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fill</span>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-              ${fmt(Number(lastExecPrice) * 1000)}
-            </span>
-          </div>
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginLeft: 'auto', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            Fill ${fmt(Number(lastExecPrice) * 1000)}
+          </span>
         )}
       </div>
     </div>
   );
 
   const chartPanel = (
-    <Card title={isSpot ? `${asset} / USD` : `${asset}-PERP`} className={styles.fullHeight}>
+    <Card title={isSpot ? `${asset} / USDT` : `${asset}-PERP`} className={styles.fullHeight}>
       {isMobile ? mobileChartHeader : (
         <div className={styles.headerStats}>
           <div className={styles.assetSelector}>
@@ -486,7 +471,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
       {orderType === 'Limit' && (
         <div className={styles.formGroup}>
-          <label>Entry Price (USD)</label>
+          <label>Entry Price (USDT)</label>
           <input type="number" value={price}
             onChange={e => { setPrice(e.target.value); priceAutoRef.current = false; }} placeholder="0.00" />
           {markPrice > 0 && (
@@ -499,7 +484,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       )}
 
       <div className={styles.formGroup}>
-        <label>Margin (USD)</label>
+        <label>Margin (USDT)</label>
         <input type="number" value={usdAmount} onChange={e => setUsdAmount(e.target.value)} placeholder="100" />
         {account && portfolio && maxMargin > 0 && (
           <div className={styles.balanceTag} onClick={() => setUsdAmount(maxMargin.toFixed(2))}>
@@ -519,7 +504,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       {actualCost > 0 && entryPrice > 0 && (
         <div className={styles.positionPreview}>
           <div className={styles.previewRow}>
-            <span>USD Cost</span>
+            <span>USDT Cost</span>
             <span className={styles.positive}>${fmt(actualCost)}</span>
           </div>
           <div className={styles.previewRow}>
@@ -611,7 +596,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       </div>
       {orderType === 'Limit' && (
         <div className={styles.formGroup}>
-          <label>Price (USD)</label>
+          <label>Price (USDT)</label>
           <input type="number" value={price} onChange={e => { setPrice(e.target.value); priceAutoRef.current = false; }} placeholder="0.00" />
           {markPrice > 0 && (
             <div className={styles.inputHint} onClick={() => { setPrice(markPrice.toFixed(2)); priceAutoRef.current = true; }}>
@@ -754,7 +739,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const assetBal = portfolio ? Number(asset === 'BTC' ? portfolio.btc : asset === 'ETH' ? portfolio.eth : portfolio.vara) / 1e5 : 0;
 
   const spotMarketPanel = (
-    <Card title={`${asset}/USD Market`}>
+    <Card title={`${asset}/USDT Market`}>
       <div className={styles.mkStat}>
         <span>Mark price</span>
         <span className={styles.mkVal}>{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '-'}</span>
@@ -777,7 +762,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       </div>
       {account && portfolio && (
         <div className={styles.mkDivider}>
-          <div className={styles.mkStat}><span>Your USD</span><span className={styles.mkVal}>${usdBal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+          <div className={styles.mkStat}><span>Your USDT</span><span className={styles.mkVal}>${usdBal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
           <div className={styles.mkStat}><span>Your {asset}</span><span className={styles.mkVal}>{assetBal.toLocaleString(undefined, { maximumFractionDigits: 5 })}</span></div>
         </div>
       )}

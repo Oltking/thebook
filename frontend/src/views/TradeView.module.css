@@ -1112,3 +1112,39 @@
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .backSimple:hover { color: var(--accent-text); border-color: var(--accent); }
+
+/* Pair selector, MEXC-style: a bold title with a caret, no box/border. Sized to
+   its content and pinned to the left; the popover list keeps the component's look. */
+.marketSelect { flex: 0 0 auto; }
+.marketSelect > button {
+  min-height: 0;
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+}
+.marketSelect > button:hover { border-color: transparent; }
+.marketSelect > button:focus-visible { box-shadow: none; outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* 24h change pill sitting beside the pair title. */
+.chgPillUp, .chgPillDown {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chgPillUp {
+  color: var(--buy-green);
+  background: color-mix(in srgb, var(--buy-green) 14%, transparent);
+}
+.chgPillDown {
+  color: var(--sell-red);
+  background: color-mix(in srgb, var(--sell-red) 14%, transparent);
+}

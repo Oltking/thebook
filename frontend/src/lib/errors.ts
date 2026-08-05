@@ -13,7 +13,7 @@ export function parseContractError(e: unknown): string {
   const lower = msg.toLowerCase();
   const has = (s: string) => lower.includes(s.toLowerCase());
 
-  if (has('InsufficientUsd')) return 'You don\'t have enough USD balance. Deposit USD to continue.';
+  if (has('InsufficientUsd')) return 'You don\'t have enough USDT balance. Deposit USDT to continue.';
   if (has('InsufficientAsset')) return 'You don\'t have enough balance of that asset.';
   if (has('JoinFirst')) return 'You need to create your agent first - click "Create Agent" to do the one-time setup.';
   if (has('NotAuthorized')) return 'You are not authorized to perform this action.';

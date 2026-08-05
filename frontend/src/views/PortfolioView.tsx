@@ -120,7 +120,7 @@ export function PortfolioView() {
   const openOrders = orders.filter((o: any) => o[6] === 'Open' || o[6] === 'Partial');
 
   const assets = [
-    { name: 'USD',  kind: 'Usd' as TokenKind,  amount: portfolio.usd,  decimals: 2, value: usdVal },
+    { name: 'USDT', kind: 'Usd' as TokenKind,  amount: portfolio.usd,  decimals: 2, value: usdVal },
     { name: 'BTC',  kind: 'Btc' as TokenKind,  amount: portfolio.btc,  decimals: 5, value: btcVal },
     { name: 'ETH',  kind: 'Eth' as TokenKind,  amount: portfolio.eth,  decimals: 5, value: ethVal },
     { name: 'VARA', kind: 'Vara' as TokenKind, amount: portfolio.vara, decimals: 5, value: varaVal },
@@ -146,7 +146,7 @@ export function PortfolioView() {
                   <tr>
                     <th scope="col">Asset</th>
                     <th scope="col">Balance</th>
-                    <th scope="col">Value (USD)</th>
+                    <th scope="col">Value (USDT)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -154,7 +154,7 @@ export function PortfolioView() {
                     <tr key={asset.name}>
                       <td className={styles.assetName}>{asset.name}</td>
                       <td>{formatAmount(asset.amount, asset.decimals)}</td>
-                      <td>{asset.name === 'USD' || asset.value > 0
+                      <td>{asset.name === 'USDT' || asset.value > 0
                         ? `$${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '-'}</td>
                     </tr>
@@ -170,7 +170,7 @@ export function PortfolioView() {
                       ${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className={styles.netWorthLabel}>
-                      {pricesReady ? 'USD + assets at market price' : 'USD balance (connect for live asset prices)'}
+                      {pricesReady ? 'USDT + assets at market price' : 'USDT balance (connect for live asset prices)'}
                   </span>
               </div>
           </Card>

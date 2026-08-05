@@ -1,4 +1,5 @@
 import { Card } from '../components/ui/Card';
+import { Select } from '../components/ui/Select';
 import { ArrowDown } from 'lucide-react';
 import styles from './SwapView.module.css';
 import { useState, useCallback, useMemo, useEffect } from 'react';
@@ -160,10 +161,9 @@ export function SwapView() {
               <input type="number" placeholder="0.00" className={styles.amountInput}
                 value={amountIn} onChange={e => setAmountIn(e.target.value)}
                 aria-label="Amount to swap from" />
-              <select value={fromAsset} onChange={e => setFromAsset(e.target.value as Asset)}
-                className={styles.assetSelect} aria-label="From asset">
-                {ALL_ASSETS.filter(a => a !== toAsset).map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <Select value={fromAsset} onChange={v => setFromAsset(v as Asset)}
+                className={styles.assetSelect} ariaLabel="From asset"
+                options={ALL_ASSETS.filter(a => a !== toAsset).map(a => ({ value: a, label: a }))} />
             </div>
             {usdHint(amountIn, fromAsset) && <div className={styles.usdHint}>{usdHint(amountIn, fromAsset)}</div>}
           </div>
@@ -179,10 +179,9 @@ export function SwapView() {
             <div className={styles.inputRow}>
               <input type="number" placeholder="0.00" className={styles.amountInput} readOnly value={amountOut}
                 aria-label="Estimated amount to receive" />
-              <select value={toAsset} onChange={e => setToAsset(e.target.value as Asset)}
-                className={styles.assetSelect} aria-label="To asset">
-                {ALL_ASSETS.filter(a => a !== fromAsset).map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <Select value={toAsset} onChange={v => setToAsset(v as Asset)}
+                className={styles.assetSelect} ariaLabel="To asset"
+                options={ALL_ASSETS.filter(a => a !== fromAsset).map(a => ({ value: a, label: a }))} />
             </div>
             {usdHint(amountOut, toAsset) && <div className={styles.usdHint}>{usdHint(amountOut, toAsset)}</div>}
           </div>

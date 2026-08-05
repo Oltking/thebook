@@ -58,33 +58,16 @@
   color: var(--text-dim);
 }
 
-.assetSelect {
-  background-color: var(--card-solid);
-  padding: 10px 34px 10px 16px;
+/* The custom <Select/> styles its own trigger; here we only size the wrapper and
+   square off the trigger to match the swap card's sharp inputs. */
+.assetSelect { min-width: 116px; flex-shrink: 0; }
+.assetSelect > button {
+  min-height: 46px;
   border-radius: 0;
-  font-weight: 700;
+  border-color: var(--border-strong);
   font-size: var(--font-size-base);
   letter-spacing: 0.01em;
-  border: 1px solid var(--border-strong);
-  color: var(--text-main);
-  min-height: 46px;
-  min-width: 96px;
-  flex-shrink: 0;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2302FBC1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
-
-.assetSelect:hover {
-  border-color: var(--accent);
-  background-color: var(--card-bg-hover);
-}
-.assetSelect:focus { border-color: var(--accent); }
-.assetSelect option { background: var(--bg-elevated); color: var(--text-main); }
 
 .divider {
   display: flex;
