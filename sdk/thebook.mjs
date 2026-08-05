@@ -49,12 +49,20 @@ const ASSET_UNIT = 100_000;
  * @param {string} [opts.programId]  thebook program id (0x…). Defaults to $THEBOOK_PROGRAM_ID.
  * @param {string} [opts.node]       Vara RPC ws endpoint. Defaults to $NODE_ADDRESS or testnet.
  * @param {string} [opts.idlPath]    Path to thebook.idl (defaults to the one bundled here).
+ * @param {string} [opts.voucherEndpoint] Gasless voucher URL (e.g. https://app/api/voucher).
+ *                                   Defaults to $THEBOOK_VOUCHER_URL. When set, the agent's
+ *                                   gas is sponsor-paid, so it needs no VARA of its own.
  */
 export async function connectTheBook(opts = {}) {
   const seed = opts.seed ?? process.env.VARA_SEED;
   const programId = opts.programId ?? process.env.THEBOOK_PROGRAM_ID;
   const node = opts.node ?? process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
   const idlPath = opts.idlPath ?? resolve(__dirname, 'thebook.idl');
+  // Optional gasless voucher endpoint (the same /api/voucher the web app uses). When
+  // set, the agent's transactions are paid by the sponsor account, so the agent
+  // needs no VARA of its own. Falls back to self-paid gas if the endpoint is absent
+  // or errors. See frontend/api/voucher.ts for the server side.
+  const voucherEndpoint = opts.voucherEndpoint ?? process.env.THEBOOK_VOUCHER_URL;
   if (!seed) throw new Error('connectTheBook: a `seed` is required (the agent account).');
   if (!programId) throw new Error('connectTheBook: a `programId` is required (thebook contract).');
 
@@ -69,11 +77,34 @@ export async function connectTheBook(opts = {}) {
   const keyring = new Keyring({ type: 'sr25519' });
   const account = keyring.addFromUri(seed);
 
+  // Gasless: request (once, lazily) a sponsor-funded voucher for this agent from the
+  // configured endpoint, and reuse it for every tx. Silent fallback to self-paid gas.
+  let voucherId = null;
+  let voucherTried = false;
+  async function ensureVoucher() {
+    if (!voucherEndpoint || voucherTried) return voucherId;
+    voucherTried = true;
+    try {
+      const res = await fetch(voucherEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: account.address }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && d.enabled && d.voucherId) voucherId = d.voucherId;
+      }
+    } catch { /* no backend / offline — self-paid gas */ }
+    return voucherId;
+  }
+
   // Send a state-changing call and wait until it's finalized. Surfaces the
   // program's own error (e.g. JoinFirst, InsufficientUsd) as a thrown Error.
   async function send(service, fn, args) {
     const tx = sails.services[service].functions[fn](...args);
     tx.withAccount(account);
+    const vid = await ensureVoucher();
+    if (vid) tx.withVoucher(vid);
     await tx.calculateGas(true);
     const { response } = await tx.signAndSend();
     const value = await response();
@@ -95,6 +126,12 @@ export async function connectTheBook(opts = {}) {
     account,
     address: account.address,
     programId,
+
+    // Gasless status: resolves the voucher (if an endpoint is configured) and
+    // reports whether this agent's txs are sponsor-paid. Called automatically on
+    // the first trade; exposed here so an agent can check/warm it up explicitly.
+    async gasless() { return !!(await ensureVoucher()); },
+    get voucherId() { return voucherId; },
 
     // ── unit helpers ──
     qty: (whole) => Math.round(whole * ASSET_UNIT),     // 0.01 BTC -> size units

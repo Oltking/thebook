@@ -59,7 +59,10 @@ const TIMEFRAME_CONFIG: Record<Timeframe, { interval: string; limit: number; cgD
 
 /* Simple module-level cache so we don't re-fetch on every 5s poll */
 const ohlcCache = new Map<string, { data: OHLCV[]; ts: number }>();
-const CACHE_TTL = 5 * 60 * 1000;
+// Short TTL so the chart's periodic poll gets fresh candles (and the latest,
+// still-forming one) rather than a frozen 5-minute snapshot.
+const CACHE_TTL = 12 * 1000;
+const POLL_MS = 15 * 1000;
 
 async function fetchBinance(symbol: string, interval: string, limit: number): Promise<OHLCV[]> {
   const ctrl = new AbortController();
@@ -255,15 +258,21 @@ export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: Tra
   const depthBids = useMemo(() => { let s = 0; return bids.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [bids]);
   const depthAsks = useMemo(() => { let s = 0; return asks.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [asks]);
 
-  /* ── Fetch market OHLC data ── */
+  /* ── Fetch market OHLC data, then keep it live by polling ── */
   useEffect(() => {
     if (view !== 'price') return;
     let cancelled = false;
-    setLoading(true); setError('');
-    fetchMarketData(asset, timeframe)
-      .then(data => { if (!cancelled) { setOhlcData(data); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setError('Could not load market data'); setLoading(false); } });
-    return () => { cancelled = true; };
+    const load = (initial: boolean) => {
+      if (initial) { setLoading(true); setError(''); }
+      fetchMarketData(asset, timeframe)
+        .then(data => { if (!cancelled) { setOhlcData(data); if (initial) setLoading(false); } })
+        .catch(() => { if (!cancelled && initial) { setError('Could not load market data'); setLoading(false); } });
+    };
+    load(true);
+    // Refresh on an interval so the chart advances and the forming candle updates,
+    // instead of staying frozen on the first snapshot. Pause when the tab is hidden.
+    const timer = setInterval(() => { if (!document.hidden) load(false); }, POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [asset, timeframe, view]);
 
   /* ── Create chart once ── */
@@ -379,6 +388,22 @@ export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: Tra
     const hist = historyToOhlc(priceHistory, asset);
     return hist.length ? hist : oracleSeries;
   }, [ohlcData, priceHistory, asset, oracleSeries]);
+
+  /* Price precision from the asset's magnitude, so low-priced assets (VARA ~$0.0004)
+     don't render every axis label and last-value as "0.00". */
+  const pricePrecision = useMemo(() => {
+    const ref = oraclePrice > 0 ? oraclePrice : (displayData.length ? displayData[displayData.length - 1].close : 0);
+    if (ref >= 1) return 2;
+    if (ref >= 0.01) return 4;
+    if (ref > 0) return 6;
+    return 2;
+  }, [oraclePrice, displayData]);
+
+  useEffect(() => {
+    const pf = { type: 'price' as const, precision: pricePrecision, minMove: 1 / Math.pow(10, pricePrecision) };
+    candleRef.current?.applyOptions({ priceFormat: pf });
+    oracleRef.current?.applyOptions({ priceFormat: pf });
+  }, [pricePrecision]);
 
   /* ── Update candlestick data ── */
   useEffect(() => {

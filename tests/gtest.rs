@@ -139,23 +139,66 @@ async fn fund(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>, c
     }
 }
 
-// Virtual-balance model: joining grants the starting balances directly, so a
-// test agent is funded by Join alone, no faucet/deposit needed. (`fund` is kept
-// for the dedicated deposit/withdraw custody tests below.)
+/// Deposit the BTC/ETH/VARA basket (NOT usd) to `caller` via the faucet→deposit
+/// onboarding. Join now funds USDT only, so tests that trade an asset first acquire
+/// it here (the same way an agent would), which also restores the pre-change asset
+/// balances the trade assertions are written against.
+async fn give_assets(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>, caller: u64) {
+    let dex = program.id();
+    let (_t_usd, t_btc, t_eth, t_vara): (ActorId, ActorId, ActorId, ActorId) = program
+        .orderbook()
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    let dex_actor =
+        Actor::<ThebookClientProgram, GtestEnv>::new(env.clone().with_actor_id(caller.into()), dex);
+    let assets = [
+        (t_btc, TokenKind::Btc, INITIAL_BTC),
+        (t_eth, TokenKind::Eth, INITIAL_ETH),
+        (t_vara, TokenKind::Vara, INITIAL_VARA),
+    ];
+    for (tid, kind, amount) in assets {
+        let token = Actor::<ThebookTokenClientProgram, GtestEnv>::new(
+            env.clone().with_actor_id(caller.into()),
+            tid,
+        );
+        let _: U256 = token
+            .faucet()
+            .pending_call::<tok_faucet_io::Claim>(())
+            .await
+            .unwrap()
+            .unwrap();
+        let _: bool = token
+            .vft()
+            .pending_call::<tok_vft_io::Approve>((dex, U256::from(amount)))
+            .await
+            .unwrap();
+        let _: u64 = dex_actor
+            .orderbook()
+            .pending_call::<ob_io::Deposit>((kind, amount))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}
+
+// Join funds USDT only; trading tests also acquire the asset basket via the faucet
+// so they can sell/provide/​swap. (`join_raw` below joins without the assets, for the
+// funding assertion itself.)
 async fn join_alice(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
-    let _ = env;
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
         .await
         .unwrap();
+    give_assets(env, program, ALICE).await;
 }
 
 async fn join_bob(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv>) {
-    let _ = env;
     let _: (u64, u64, u64, u64) = orderbook_svc(program)
         .pending_call::<ob_io::Join>(("Bob".to_string(), AgentStrategy::MarketMaker))
         .await
         .unwrap();
+    give_assets(env, program, BOB).await;
 }
 
 // ── Orderbook tests ──
@@ -163,13 +206,19 @@ async fn join_bob(env: &GtestEnv, program: &Actor<ThebookClientProgram, GtestEnv
 #[tokio::test]
 async fn join_creates_agent() {
     let (env, program) = deploy().await;
-    join_alice(&env, &program).await;
+    let _ = env;
+    // Raw join (no asset top-up): verify the on-chain funding grants USDT only.
+    let _: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
+        .await
+        .unwrap();
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port, (100_000, 100_000, 1_000_000, 1_000_000_000));
+    // Join now funds USDT only; assets are acquired by trading, not granted.
+    assert_eq!(port, (100_000, 0, 0, 0));
 }
 
 #[tokio::test]
@@ -774,17 +823,20 @@ async fn double_add_liquidity_then_remove_all() {
 #[tokio::test]
 async fn deposit_then_withdraw_round_trip() {
     let (env, program) = deploy().await;
-    join_alice(&env, &program).await;
-    // Join already granted the virtual starting balances; now also run the real
-    // faucet -> approve -> deposit custody flow, so internal balances are the
-    // grant plus the deposit (2x), and the vault is backed by the deposited half.
+    // Raw join funds USDT only (no faucet claim), so the single `fund()` below is
+    // the one and only faucet -> approve -> deposit custody flow: USDT ends at the
+    // grant plus its deposit (2x), and each asset is exactly one deposit.
+    let _: (u64, u64, u64, u64) = orderbook_svc(&program)
+        .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
+        .await
+        .unwrap();
     fund(&env, &program, ALICE).await;
 
     let port: (u64, u64, u64, u64) = orderbook_svc(&program)
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port, (200_000, 200_000, 2_000_000, 2_000_000_000));
+    assert_eq!(port, (200_000, 100_000, 1_000_000, 1_000_000_000));
 
     // The wBTC token program holds the deposited BTC in the DEX's account, and
     // Alice's own token balance is zero (she deposited all of it).
@@ -825,8 +877,8 @@ async fn deposit_then_withdraw_round_trip() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    // Started at 200_000 internal BTC (grant + deposit), withdrew 40_000.
-    assert_eq!(port.1, 160_000, "internal BTC not debited on withdraw");
+    // Started at 100_000 internal BTC (one faucet deposit), withdrew 40_000.
+    assert_eq!(port.1, 60_000, "internal BTC not debited on withdraw");
     let alice_wallet: U256 = btc
         .vft()
         .pending_call::<tok_vft_io::BalanceOf>((ALICE.into(),))

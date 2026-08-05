@@ -10,12 +10,20 @@ import { useTxStatus, TxStatusOverlay } from '../components/ui/TxStatus';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useMarketData } from '../providers/MarketDataProvider';
 
+// The AMM assets plus the USDT stablecoin, which the UI treats as a swappable token
+// even though on-chain it's the quote currency (USDT legs route via the order book).
+type SwapToken = Asset | 'USDT';
+
 export function SwapView() {
   const { program, account } = useSails();
   const { pools, prices, loading: marketLoading, pricesStale, pricesLoading, fetchPrices, refreshAll } = useMarketData();
 
-  const priceUsd = (a: Asset) => {
-    const f = prices[a];
+  // USDT is the stablecoin, not an AMM asset. It's swappable here, but any leg that
+  // touches USDT routes through the spot order book (market buy/sell) instead of an
+  // AMM pool, since the contract has no USDT/asset pools.
+  const priceUsd = (a: SwapToken) => {
+    if (a === 'USDT') return 1;
+    const f = prices[a as Asset];
     return f ? Number(f.price_usd_micro) / 1_000_000 : 0;
   };
   const fmtUnits = (raw: bigint | number | string) =>
@@ -24,17 +32,18 @@ export function SwapView() {
     (Number(p.reserve_a) / 1e5) * priceUsd(p.asset_a) + (Number(p.reserve_b) / 1e5) * priceUsd(p.asset_b);
   const fmtUsd = (v: number) =>
     v > 0 ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-';
-  const [fromAsset, setFromAsset] = useState<Asset>('VARA');
-  const [toAsset, setToAsset] = useState<Asset>('ETH');
+  const [fromAsset, setFromAsset] = useState<SwapToken>('USDT');
+  const [toAsset, setToAsset] = useState<SwapToken>('BTC');
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
   const [slippage, setSlippage] = useState(0.5);
   const { success, error } = useToast();
   const { txState, executeTx, resetTx } = useTxStatus();
 
-  // The token pickers always offer every asset; whether a route actually exists
-  // is handled separately by `activePool` (with a spot-price fallback estimate).
-  const ALL_ASSETS: Asset[] = ['BTC', 'ETH', 'VARA'];
+  // The token pickers offer every token including USDT. Whether a route exists is
+  // handled by `activePool` (AMM) or, when USDT is involved, the spot order book.
+  const ALL_ASSETS: SwapToken[] = ['USDT', 'BTC', 'ETH', 'VARA'];
+  const usdtRoute = fromAsset === 'USDT' || toAsset === 'USDT';
 
   const activePool = useMemo(
     () => pools.find(p =>
@@ -103,7 +112,7 @@ export function SwapView() {
     ? quote.impactPct >= 5 ? styles.impactHigh : quote.impactPct >= 1 ? styles.impactMed : styles.impactLow
     : undefined;
 
-  const usdHint = (amt: string, asset: Asset) => {
+  const usdHint = (amt: string, asset: SwapToken) => {
     const v = parseFloat(amt);
     return !isNaN(v) && v > 0 && priceUsd(asset) > 0 ? `≈ $${(v * priceUsd(asset)).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '';
   };
@@ -119,7 +128,8 @@ export function SwapView() {
   }, [fromAsset, toAsset]);
 
   const handleSwap = async () => {
-    if (!program || !account || !activePool || !amountIn) return;
+    if (!program || !account || !amountIn) return;
+    if (!usdtRoute && !activePool) return;
     if (pricesStale && !pricesLoading) {
       success('Price is stale - signing a refresh tx now. Please approve in your wallet.');
       await fetchPrices();
@@ -127,26 +137,38 @@ export function SwapView() {
     const parsedIn = parseFloat(amountIn);
     const parsedOut = parseFloat(amountOut);
     if (isNaN(parsedIn) || parsedIn <= 0) return;
-    const slippageMultiplier = (100 - slippage) / 100;
-    const minOutValue = isNaN(parsedOut) || parsedOut <= 0 ? 0n : BigInt(Math.round(parsedOut * 10**5 * slippageMultiplier));
-    const inAmount = BigInt(Math.round(parsedIn * 10**5));
-    const minOut = minOutValue;
 
-    const err = await executeTx(
-      () => program!.amm.swap(activePool.id, fromAsset as Asset, inAmount, minOut),
-      account,
-      () => {
-        setAmountIn('');
-        setAmountOut('');
-        refreshAll();
-        success('Swap executed!');
-        setTimeout(() => refreshAll(), 2000);
+    const onDone = () => {
+      setAmountIn('');
+      setAmountOut('');
+      refreshAll();
+      success('Swap executed!');
+      setTimeout(() => refreshAll(), 2000);
+    };
+
+    // Build the transaction: an AMM swap for asset/asset pairs, or a spot market
+    // order for any leg that involves USDT (the contract has no USDT AMM pools).
+    let makeTx: () => any;
+    if (usdtRoute) {
+      if (fromAsset === 'USDT') {
+        // Buy the target asset with USDT: market buy `amountOut` units of `toAsset`.
+        if (isNaN(parsedOut) || parsedOut <= 0) { error('No price available for this market yet.'); return; }
+        const qty = BigInt(Math.round(parsedOut * 10 ** 5));
+        makeTx = () => program!.orderbook.marketBuy(toAsset as Asset, qty);
+      } else {
+        // Sell the source asset for USDT: market sell `amountIn` units of `fromAsset`.
+        const qty = BigInt(Math.round(parsedIn * 10 ** 5));
+        makeTx = () => program!.orderbook.marketSell(fromAsset as Asset, qty);
       }
-    );
-
-    if (err) {
-      error(parseContractError(err));
+    } else {
+      const slippageMultiplier = (100 - slippage) / 100;
+      const minOut = isNaN(parsedOut) || parsedOut <= 0 ? 0n : BigInt(Math.round(parsedOut * 10 ** 5 * slippageMultiplier));
+      const inAmount = BigInt(Math.round(parsedIn * 10 ** 5));
+      makeTx = () => program!.amm.swap(activePool!.id, fromAsset as Asset, inAmount, minOut);
     }
+
+    const err = await executeTx(makeTx, account, onDone);
+    if (err) error(parseContractError(err));
   };
 
   return (
@@ -237,14 +259,18 @@ export function SwapView() {
                 <span>1 {fromAsset} = {(priceUsd(fromAsset) / (priceUsd(toAsset) || 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toAsset}</span>
               </div>
               <div className={styles.infoRow}>
-                <span style={{ color: 'var(--text-dim)' }}>No {fromAsset}/{toAsset} pool yet - create one on Pools to swap.</span>
+                <span style={{ color: 'var(--text-dim)' }}>
+                  {usdtRoute
+                    ? 'Routed through the spot order book (needs resting liquidity to fill).'
+                    : `No ${fromAsset}/${toAsset} pool yet - create one on Pools to swap.`}
+                </span>
               </div>
             </div>
           )}
 
           <button className={styles.swapBtn} onClick={handleSwap}
-            disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed' || !account || !activePool}>
-            {txState.stage === 'broadcasting' || txState.stage === 'confirming' ? 'Swapping...' : 'Swap'}
+            disabled={txState.visible && txState.stage !== 'failed' && txState.stage !== 'confirmed' || !account || (!usdtRoute && !activePool)}>
+            {txState.stage === 'broadcasting' || txState.stage === 'confirming' ? 'Swapping...' : usdtRoute ? 'Swap via order book' : 'Swap'}
           </button>
           {!account && <div style={{ textAlign: 'center', marginTop: 8, color: 'var(--text-secondary)' }}>Connect wallet to swap</div>}
         </Card>

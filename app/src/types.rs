@@ -326,10 +326,12 @@ pub struct TradeEvent {
     pub seller: ActorId,
 }
 
+// A new agent is funded with USDT only (1,000 USDT = 100_000 cents). It buys any
+// BTC/ETH/VARA exposure itself via the book/AMM; no free asset grant on join.
 pub const INITIAL_USD: u64 = 100_000;
-pub const INITIAL_BTC: u64 = 100_000;
-pub const INITIAL_ETH: u64 = 1_000_000;
-pub const INITIAL_VARA: u64 = 1_000_000_000;
+pub const INITIAL_BTC: u64 = 0;
+pub const INITIAL_ETH: u64 = 0;
+pub const INITIAL_VARA: u64 = 0;
 pub const SWAP_FEE_NUM: u64 = 3;
 pub const SWAP_FEE_DEN: u64 = 1_000;
 pub const MAX_PAGE: u32 = 50;

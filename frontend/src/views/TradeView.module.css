@@ -1148,3 +1148,117 @@
   color: var(--sell-red);
   background: color-mix(in srgb, var(--sell-red) 14%, transparent);
 }
+
+/* ── Pro "Trade" tab: order form beside a compact order book (MEXC-style) ── */
+.tradeBookRow {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 12px;
+  align-items: start;
+}
+.tradeForm, .tradeBook { min-width: 0; }
+
+.miniBook {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  padding-top: 2px;
+}
+.miniHead {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  padding: 0 4px 5px;
+}
+.miniCol { display: flex; flex-direction: column; gap: 1px; }
+
+.miniRow {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+.miniRow::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: var(--d, 0%);
+  z-index: 0;
+}
+.miniAsk::before { background: color-mix(in srgb, var(--sell-red) 13%, transparent); }
+.miniBid::before { background: color-mix(in srgb, var(--buy-green) 13%, transparent); }
+
+.miniPrice, .miniAmt { position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
+.miniAsk .miniPrice { color: var(--sell-red); }
+.miniBid .miniPrice { color: var(--buy-green); }
+.miniAmt { color: var(--text-secondary); }
+
+.miniMid {
+  padding: 6px 4px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.miniMidUp { color: var(--buy-green); }
+.miniMidDown { color: var(--sell-red); }
+
+.miniEmpty {
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* Order Book / Trades toggle above the right column. */
+.bookToggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.bookToggle button {
+  flex: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+.bookToggleOn {
+  background: var(--card-bg-hover) !important;
+  color: var(--text-main) !important;
+}
+
+/* Recent-trades row (right column, Trades view). */
+.miniTradeRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.miniTradeRow .miniAmt { text-align: right; }
+.miniTime { color: var(--text-dim); font-size: 10px; text-align: right; }
+
+/* Full-width Trades / Open Orders section below the form + book. */
+.tradeBelow {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+.histList { display: flex; flex-direction: column; gap: 1px; }

@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { usePerps } from '../hooks/usePerps';
 import { useSails } from '../hooks/useSails';
-import { TrendingUp, TrendingDown, BarChart3, BookOpen, ListOrdered, ShoppingCart, RefreshCw, Zap, Layers, ArrowUpRight, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart3, ShoppingCart, RefreshCw, Zap, Layers, ArrowUpRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import { parseContractError } from '../lib/errors';
 import { formatUsdPrice } from '../lib/format';
@@ -44,6 +44,8 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const [qty, setQty]             = useState('');
   // Simple by default; the full chart/depth terminal is opt-in ("Pro view").
   const [pro, setPro]             = useState(false);
+  // Full-width section below the form + book: recent Trades or the user's Open Orders.
+  const [belowTab, setBelowTab]   = useState<'trades' | 'orders'>('trades');
   const { isMobile } = useViewport();
 
   const isSpot    = mode === 'spot';
@@ -284,18 +286,16 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   // don't collapse to "$0.00" the way a fixed 2-decimal format does.
   const fmtMark = (v: number) => v > 0 ? formatUsdPrice(v) : '---';
 
+  // The book and trades now live inside the Trade panel (MEXC-style), so they are
+  // no longer separate tabs; only the chart and the combined trade view remain.
   const spotMobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
     { id: 'chart',      label: 'Chart',  icon: BarChart3 },
-    { id: 'depth',      label: 'Depth',  icon: BookOpen },
-    { id: 'executions', label: 'Trades', icon: ListOrdered },
     { id: 'entry',      label: 'Trade',  icon: ShoppingCart },
   ];
 
   const futuresMobilePanels: { id: PanelId; label: string; icon: React.ElementType }[] = [
     { id: 'chart',      label: 'Chart',      icon: BarChart3 },
-    { id: 'depth',      label: 'Depth',      icon: BookOpen },
-    { id: 'executions', label: 'Trades',     icon: ListOrdered },
-    { id: 'entry',      label: 'Open',       icon: ShoppingCart },
+    { id: 'entry',      label: 'Trade',      icon: ShoppingCart },
     { id: 'positions',  label: 'Positions',  icon: Layers },
   ];
 
@@ -437,6 +437,56 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         )}
       </div>
     </Card>
+  );
+
+  /* Compact order book that sits beside the order form in the Pro "Trade" panel:
+     red asks over the mid price over green bids, per-row depth shading, tap-to-price. */
+  const priceFromRow = (p: bigint) => { setPrice((Number(p) * 1000).toString()); priceAutoRef.current = false; };
+  const depthOf = (qq: bigint) => (maxQty > 0n ? `${(Number(qq) / Number(maxQty) * 100).toFixed(1)}%` : '0%');
+  const bookRow = (side: 'ask' | 'bid') => ([p, qq]: [bigint, bigint], i: number) => (
+    <button key={i} className={`${styles.miniRow} ${side === 'ask' ? styles.miniAsk : styles.miniBid}`}
+      style={{ '--d': depthOf(qq) } as React.CSSProperties} onClick={() => priceFromRow(p)}>
+      <span className={styles.miniPrice}>{(Number(p) * 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      <span className={styles.miniAmt}>{(Number(qq) / 1e5).toFixed(4)}</span>
+    </button>
+  );
+  const spotBook = (
+    <div className={styles.miniBook}>
+      <div className={styles.miniHead}><span>Price (USDT)</span><span>Amount ({asset})</span></div>
+      {orderbookEmpty ? (
+        <div className={styles.miniEmpty}>No open orders yet</div>
+      ) : (
+        <>
+          <div className={styles.miniCol}>{orderbook.asks.slice(0, 8).reverse().map(bookRow('ask'))}</div>
+          <div className={styles.miniMid}>
+            <span className={change24h >= 0 ? styles.miniMidUp : styles.miniMidDown}>{fmtMark(markPrice)}</span>
+          </div>
+          <div className={styles.miniCol}>{orderbook.bids.slice(0, 8).map(bookRow('bid'))}</div>
+        </>
+      )}
+    </div>
+  );
+
+  /* Recent trades, the other face of the right column (toggled with the book). */
+  const spotTrades = (
+    <div className={styles.miniBook}>
+      <div className={styles.miniHead}><span>Price (USDT)</span><span>Amount ({asset})</span><span>Time</span></div>
+      {tradesList.length === 0 ? (
+        <div className={styles.miniEmpty}>No trades yet</div>
+      ) : (
+        <div className={styles.miniCol}>
+          {tradesList.slice(0, 18).map((t, i) => (
+            <div key={i} className={styles.miniTradeRow}>
+              <span className={styles.miniPrice} style={{ color: 'var(--buy-green)' }}>
+                {(Number(t.price) * 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+              <span className={styles.miniAmt}>{(Number(t.qty) / 1e5).toFixed(4)}</span>
+              <span className={styles.miniTime}>{t.time}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   const maxMargin = portfolio ? Number(portfolio.usd) / 100 : 0;
@@ -658,6 +708,43 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   const entryPanel = isSpot ? spotEntryPanel : futuriesEntryPanel;
 
+  /* MEXC-style combined trade panel: order form on the left with the order book on
+     the right, then a full-width Trades / Open Orders section below. */
+  const tradePanel = (
+    <div>
+      <div className={styles.tradeBookRow}>
+        <div className={styles.tradeForm}>{entryPanel}</div>
+        <div className={styles.tradeBook}>{spotBook}</div>
+      </div>
+      <div className={styles.tradeBelow}>
+        <div className={styles.bookToggle}>
+          <button className={belowTab === 'trades' ? styles.bookToggleOn : ''} onClick={() => setBelowTab('trades')}>Trades</button>
+          <button className={belowTab === 'orders' ? styles.bookToggleOn : ''} onClick={() => setBelowTab('orders')}>
+            Open Orders{account && myOrders.length > 0 ? ` (${myOrders.length})` : ''}
+          </button>
+        </div>
+        {belowTab === 'trades' ? spotTrades : (
+          !account ? <div className={styles.miniEmpty}>Connect your wallet to see your orders</div>
+          : myOrders.length === 0 ? <div className={styles.miniEmpty}>No open orders</div>
+          : (
+            <div className={styles.histList}>
+              {myOrders.map((o: any, i: number) => (
+                <div key={i} className={styles.myOrderRow}>
+                  <span className={o[1] === 'Buy' ? styles.buyText : styles.askText}>{String(o[1])} {String(o[2])}</span>
+                  <span className={styles.myOrderPrice}>${(Number(o[3]) * 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className={styles.myOrderQty}>{(Number(o[4]) / 1e5).toFixed(4)}</span>
+                  <button className={styles.cancelSmBtn} onClick={() => handleCancelOrder(o[0])} disabled={cancellingOid === Number(o[0])}>
+                    {cancellingOid === Number(o[0]) ? '…' : '✕'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+
   const positionsPanel = (
     <Card title="My Positions" className={styles.fullHeight}>
       {positions.length === 0 ? (
@@ -844,9 +931,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         </div>
         <div className={`${styles.mobilePanel} ${mobilePanel !== 'entry' && mobilePanel !== 'positions' ? styles.mobilePanelFill : ''}`}>
           {mobilePanel === 'chart'      && chartPanel}
-          {mobilePanel === 'depth'      && depthPanel}
-          {mobilePanel === 'executions' && executionsPanel}
-          {mobilePanel === 'entry'      && entryPanel}
+          {mobilePanel === 'entry'      && tradePanel}
           {mobilePanel === 'positions'  && isFutures && positionsPanel}
         </div>
         <TxStatusOverlay state={txState} onClose={resetTx} />

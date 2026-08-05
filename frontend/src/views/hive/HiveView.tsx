@@ -31,7 +31,10 @@ function hexOf(id: unknown): string {
   return String(id).toLowerCase();
 }
 
-interface Leader { addr: string; name: string; strategy: StrategyName; netWorth: number; }
+// Raw on-chain balances per agent (usd in cents, assets in 1e5 units) so we can
+// value them at live prices, the on-chain net_worth uses fixed nominal divisors
+// and is not real portfolio value.
+interface Leader { addr: string; name: string; strategy: StrategyName; usd: number; btc: number; eth: number; vara: number; }
 
 export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
   const { program, account } = useSails();
@@ -78,14 +81,19 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
       if (!program) return;
       try {
         const board = await program.orderbook.getLeaderboard(50).call();
-        if (on && Array.isArray(board)) {
-          setLeaders(board.map((e: any) => ({
-            addr: hexOf(e.id),
-            name: String(e.name),
-            strategy: (e.strategy as StrategyName) ?? 'ArbitrageHunter',
-            netWorth: Number(e.net_worth ?? e.usd ?? 0) / 100,
-          })));
-        }
+        if (!Array.isArray(board)) return;
+        // Pull each agent's real balances so the swarm can be valued at live prices
+        // (consistent with the user's own net worth), refreshed on every poll.
+        const withBalances = await Promise.all(board.map(async (e: any) => {
+          const addr = hexOf(e.id);
+          let usd = Number(e.usd ?? 0), btc = 0, eth = 0, vara = 0;
+          try {
+            const p: any = await program.orderbook.getPortfolio().withAddress(addr).call();
+            if (Array.isArray(p)) { usd = Number(p[0] ?? 0); btc = Number(p[1] ?? 0); eth = Number(p[2] ?? 0); vara = Number(p[3] ?? 0); }
+          } catch { /* fall back to the entry's usd only */ }
+          return { addr, name: String(e.name), strategy: (e.strategy as StrategyName) ?? 'ArbitrageHunter', usd, btc, eth, vara };
+        }));
+        if (on) setLeaders(withBalances);
       } catch { /* leaderboard unavailable */ }
     };
     fetchBoard();
@@ -108,13 +116,23 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     const f = prices[a];
     return f ? Number(f.price_usd_micro) / 1_000_000 : 0;
   };
+  const netWorthOf = (usd: number, btc: number, eth: number, vara: number) =>
+    usd / 100 + (btc / 1e5) * spot('BTC') + (eth / 1e5) * spot('ETH') + (vara / 1e5) * spot('VARA');
+
   const myNetWorth = useMemo(() => {
     if (!portfolio) return 0;
-    return Number(portfolio.usd) / 100
-      + (Number(portfolio.btc) / 1e5) * spot('BTC')
-      + (Number(portfolio.eth) / 1e5) * spot('ETH')
-      + (Number(portfolio.vara) / 1e5) * spot('VARA');
+    return netWorthOf(Number(portfolio.usd), Number(portfolio.btc), Number(portfolio.eth), Number(portfolio.vara));
   }, [portfolio, prices]);
+
+  // Value every swarm agent at the same live prices, so the leaderboard is real
+  // portfolio value and updates in real time as prices move.
+  const leadersValued = useMemo(
+    () => leaders.map((l) => ({
+      addr: l.addr, name: l.name, strategy: l.strategy,
+      netWorth: netWorthOf(l.usd, l.btc, l.eth, l.vara),
+    })),
+    [leaders, prices],
+  );
 
   const opportunities = useMemo<Opportunity[]>(() => {
     const obs: Record<string, { bids: [bigint, bigint][]; asks: [bigint, bigint][] }> = {};
@@ -125,7 +143,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
   // Build the roster: the leaderboard agents, with the connected user surfaced
   // first (and given a live thought) if they've joined.
   const roster = useMemo(() => {
-    const rows = leaders.map((l) => ({ ...l, me: l.addr === myAddr }));
+    const rows = leadersValued.map((l) => ({ ...l, me: l.addr === myAddr }));
     // Surface the connected user's agent as soon as they've joined, even if the
     // per-caller identity read is lagging (a portfolio means they registered).
     const joined = !!identity || !!portfolio;
@@ -140,7 +158,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     }
     rows.sort((a, b) => (a.me ? -1 : b.me ? 1 : b.netWorth - a.netWorth));
     return rows.slice(0, 6);
-  }, [leaders, identity, portfolio, myAddr, myNetWorth]);
+  }, [leadersValued, identity, portfolio, myAddr, myNetWorth]);
 
   const nodes: HiveNode[] = useMemo(() => {
     const max = Math.max(1, ...roster.map((r) => r.netWorth));
