@@ -101,7 +101,7 @@
    real object running out of frame, just like the desktop composition. */
 @media (max-width: 1000px) {
   .heroGrid { grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
-  .phone { width: clamp(240px, 68vw, 320px); }
+  .phone { width: clamp(192px, 54vw, 256px); }
   .phoneWrap { margin-right: clamp(-180px, -36vw, -120px); }
 }
 
