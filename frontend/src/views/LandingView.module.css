@@ -105,6 +105,39 @@
   .phoneWrap { margin-right: clamp(-180px, -36vw, -120px); }
 }
 
+/* Mobile only: nudge every text size down by 1px for a tighter phone read. The
+   clamped display sizes drop 1px off both ends so the whole range shifts. */
+@media (max-width: 640px) {
+  .brand { font-size: 16px; }
+  .net span { font-size: 10px; }
+  .btn { font-size: 11.5px; }
+  .btnLg { font-size: 13px; }
+  .eyebrow { font-size: 11px; }
+  .title { font-size: clamp(39px, 8vw, 91px); }
+  .lede { font-size: clamp(15px, 2vw, 19px); }
+  .heroStats .n { font-size: 25px; }
+  .heroStats .l { font-size: 11px; }
+  .kicker { font-size: 11px; }
+  .h2 { font-size: clamp(23px, 4vw, 39px); }
+  .sub { font-size: 14px; }
+  .cardNo { font-size: 11px; }
+  .card h3 { font-size: 19px; }
+  .card p { font-size: 13px; }
+  .card .meta { font-size: 12px; }
+  .step .no { font-size: 13px; }
+  .step h4 { font-size: 13px; }
+  .step p { font-size: 12.5px; }
+  .code { font-size: 11.5px; }
+  .pathHead h3 { font-size: 18px; }
+  .pathTag { font-size: 10px; }
+  .pathText { font-size: 13px; }
+  .cmd { font-size: 12px; }
+  .pathHint { font-size: 11.5px; }
+  .finalCta h2 { font-size: clamp(27px, 6vw, 55px); }
+  .finalCta p { font-size: 15px; }
+  .foot { font-size: 11.5px; }
+}
+
 .phoneWrap { position: relative; display: flex; justify-content: center; }
 .phoneGlow {
   position: absolute; width: 78%; height: 78%; top: 8%; left: 11%;
