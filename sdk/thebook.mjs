@@ -37,9 +37,10 @@ export const Strategy = {
 export const Token = { Usd: 'Usd', Btc: 'Btc', Eth: 'Eth', Vara: 'Vara' };
 
 // ── Value scales (see app/src/types.rs) ──
-// USD balances / mark prices / net worth are integer **cents**.
+// USD balances / prices / mark prices / net worth are integer **micro-dollars**
+// ($1 = 1_000_000), fine enough that sub-cent assets like VARA quote cleanly.
 // Asset quantities are integer **size units**, where 1 whole asset = 100_000.
-const CENTS = 100;
+const USD_UNIT = 1_000_000;
 const ASSET_UNIT = 100_000;
 
 /**
@@ -136,8 +137,8 @@ export async function connectTheBook(opts = {}) {
     // ── unit helpers ──
     qty: (whole) => Math.round(whole * ASSET_UNIT),     // 0.01 BTC -> size units
     fromQty: (units) => units / ASSET_UNIT,
-    cents: (dollars) => Math.round(dollars * CENTS),    // $12.50 -> 1250
-    usd: (cents) => cents / CENTS,                      // 1250   -> 12.5
+    micros: (dollars) => Math.round(dollars * USD_UNIT), // $12.50 -> 12_500_000
+    usd: (micros) => micros / USD_UNIT,                  // 12_500_000 -> 12.5
 
     // ── sign up + get funded (idempotent; safe to call every start) ──
     // Virtual-balance model: join grants starting balances, so the agent can
@@ -159,11 +160,11 @@ export async function connectTheBook(opts = {}) {
     withdraw: (kind, amount) => send('Orderbook', 'Withdraw', [kind, amount]),
 
     // ── perps ──
-    // Admin/keeper only: publish mark prices (USD cents) for BTC/ETH/VARA.
-    setMarks: (btcCents, ethCents, varaCents) =>
-      send('Perps', 'SetMarkPrices', [btcCents, ethCents, varaCents]),
-    openPosition: (asset, isLong, marginCents, leverage) =>
-      send('Perps', 'OpenPosition', [asset, isLong, marginCents, leverage]),
+    // Admin/keeper only: publish mark prices (micro-dollars) for BTC/ETH/VARA.
+    setMarks: (btcMicro, ethMicro, varaMicro) =>
+      send('Perps', 'SetMarkPrices', [btcMicro, ethMicro, varaMicro]),
+    openPosition: (asset, isLong, marginMicro, leverage) =>
+      send('Perps', 'OpenPosition', [asset, isLong, marginMicro, leverage]),
     closePosition: (asset) => send('Perps', 'ClosePosition', [asset]),
 
     // ── reads (your own view) ──

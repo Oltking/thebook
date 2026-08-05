@@ -326,17 +326,18 @@ pub struct TradeEvent {
     pub seller: ActorId,
 }
 
-// A new agent is funded with USDT only (1,000 USDT = 100_000 cents). It buys any
-// BTC/ETH/VARA exposure itself via the book/AMM; no free asset grant on join.
-pub const INITIAL_USD: u64 = 100_000;
+// A new agent is funded with USDT only (1,000 USDT). USD balances are in
+// micro-dollars ($1 = 1_000_000) so sub-cent assets like VARA quote cleanly.
+// It buys any BTC/ETH/VARA exposure itself via the book/AMM; no free grant on join.
+pub const INITIAL_USD: u64 = 1_000_000_000; // $1,000
 pub const INITIAL_BTC: u64 = 0;
 pub const INITIAL_ETH: u64 = 0;
 pub const INITIAL_VARA: u64 = 0;
 
 // The house (admin) stockpile, granted once via `seed_house`, so the market maker
 // has deep inventory to quote both sides and USDT-only agents always have a
-// counterparty. USD in cents; assets in 1e5 units (1 whole = 100_000).
-pub const INITIAL_HOUSE_USD: u64 = 1_000_000_000; // $10,000,000
+// counterparty. USD in micro-dollars; assets in 1e5 units (1 whole = 100_000).
+pub const INITIAL_HOUSE_USD: u64 = 10_000_000_000_000; // $10,000,000
 pub const INITIAL_HOUSE_BTC: u64 = 100_000_000; // 1,000 BTC
 pub const INITIAL_HOUSE_ETH: u64 = 1_000_000_000; // 10,000 ETH
 pub const INITIAL_HOUSE_VARA: u64 = 100_000_000_000; // 1,000,000 VARA
@@ -351,8 +352,9 @@ pub const MAX_TRADES: usize = 1_000;
 
 // ── Perpetual futures (GMX-style: keeper mark price + house-reserve settlement) ──
 /// Asset quantity scale: `1 asset = ASSET_UNIT internal size units` (matches the
-/// spot orderbook qty scale). Mark prices and margin are in **USD cents**, the same
-/// integer scale as the internal `usd` balance, so PnL math stays exact.
+/// spot orderbook qty scale). Mark prices and margin are in **micro-dollars**
+/// ($1 = 1_000_000), the same integer scale as the internal `usd` balance and the
+/// orderbook price, so PnL math stays exact.
 pub const ASSET_UNIT: u64 = 100_000;
 /// Highest leverage a position may open at.
 pub const MAX_LEVERAGE: u32 = 20;

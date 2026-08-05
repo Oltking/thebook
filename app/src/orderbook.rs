@@ -18,6 +18,14 @@ pub enum OrderbookEvent {
     Trade(TradeEvent),
 }
 
+/// USD value (micro-dollars) of `qty` asset units at `price` (micro-dollars per
+/// whole asset): `price * qty / ASSET_UNIT`. Uses u128 intermediate to avoid
+/// overflow on large house-sized fills. This is the single settlement identity —
+/// escrow, fills, refunds and cancels all route through it so they stay consistent.
+fn notional(price: u64, qty: u64) -> u64 {
+    ((price as u128 * qty as u128) / ASSET_UNIT as u128) as u64
+}
+
 fn balance_of(ag: &Agent, asset: Asset) -> u64 {
     match asset {
         Asset::BTC => ag.btc,
@@ -199,7 +207,7 @@ impl<'a> OrderbookService<'a> {
             .ok_or(ContractError::JoinFirst)?;
 
         if side == Side::Buy {
-            let cost = price * qty;
+            let cost = notional(price, qty);
             if ag.usd < cost {
                 return Err(ContractError::InsufficientUsd);
             }
@@ -251,11 +259,11 @@ impl<'a> OrderbookService<'a> {
 
             if side == Side::Buy {
                 if let Some(ag) = st.agents.get_mut(&seller) {
-                    ag.usd += price_match * fill;
+                    ag.usd += notional(price_match, fill);
                 }
                 if let Some(ag) = st.agents.get_mut(&buyer) {
                     add_asset(ag, asset, fill);
-                    ag.usd += (price - price_match) * fill;
+                    ag.usd += notional(price - price_match, fill);
                 }
             } else {
                 // The resting buyer already escrowed `o.price` per unit when they
@@ -265,7 +273,7 @@ impl<'a> OrderbookService<'a> {
                     add_asset(ag, asset, fill);
                 }
                 if let Some(ag) = st.agents.get_mut(&seller) {
-                    ag.usd += price_match * fill;
+                    ag.usd += notional(price_match, fill);
                 }
             }
 
@@ -359,7 +367,7 @@ impl<'a> OrderbookService<'a> {
         if rem > 0 {
             let ag = st.agents.get_mut(&caller).unwrap();
             match side {
-                Side::Buy => ag.usd += price * rem,
+                Side::Buy => ag.usd += notional(price, rem),
                 Side::Sell => add_asset(ag, asset, rem),
             }
         }
@@ -413,7 +421,7 @@ impl<'a> OrderbookService<'a> {
             }
             let fill = rem.min(avail);
             cost = cost
-                .checked_add(p.checked_mul(fill).ok_or(ContractError::BadParams)?)
+                .checked_add(notional(p, fill))
                 .ok_or(ContractError::BadParams)?;
             plan.push((mi, p, fill, seller));
             rem -= fill;
@@ -438,7 +446,7 @@ impl<'a> OrderbookService<'a> {
             };
 
             if let Some(sag) = st.agents.get_mut(&seller) {
-                sag.usd += p * fill;
+                sag.usd += notional(p, fill);
             }
             let tid = st.next_tid;
             st.next_tid += 1;
@@ -520,7 +528,7 @@ impl<'a> OrderbookService<'a> {
             } else {
                 o.status = OrderStatus::Partial;
             }
-            rev += p * fill;
+            rev += notional(p, fill);
 
             // The resting buyer escrowed their bid when placing the limit order, so
             // only credit the asset here — deducting USD again would double-charge.
@@ -651,7 +659,13 @@ impl<'a> OrderbookService<'a> {
             .agents
             .values()
             .map(|ag| {
-                let nw = ag.usd + ag.btc / 1000 + ag.eth / 100 + ag.vara / 100000;
+                // Fallback net worth in micro-dollars (the frontend re-values at
+                // live prices). Rough nominal per-unit micro-USD: BTC ~950_000,
+                // ETH ~19_000, VARA ~0.004 (≈ /250).
+                let nw = ag.usd
+                    + ag.btc.saturating_mul(950_000)
+                    + ag.eth.saturating_mul(19_000)
+                    + ag.vara / 250;
                 LeaderEntry {
                     id: ag.id,
                     name: ag.name.clone(),

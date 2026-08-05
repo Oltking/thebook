@@ -80,7 +80,7 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
   }, []);
 
   const formatUsd = (val: bigint | number | string) => {
-    return (Number(val) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+    return (Number(val) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2 });
   };
 
   const priceTicker = [

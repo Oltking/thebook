@@ -20,6 +20,16 @@ type PanelId = 'chart' | 'depth' | 'executions' | 'entry' | 'positions';
 
 const LEVERAGE_OPTIONS = [1, 2, 5, 10, 25];
 
+// On-chain price unit is micro-dollars ($1 = 1_000_000), so BTC, ETH and VARA
+// all quote cleanly with one integer field. Convert at the boundary only.
+const PRICE_UNIT = 1_000_000;
+const pxToUsd = (p: number | bigint) => Number(p) / PRICE_UNIT;
+const usdToPx = (usd: number) => Math.max(1, Math.round(usd * PRICE_UNIT));
+// Per-asset display precision (a "standard" tick: BTC $1, ETH $0.01, VARA 1e-7).
+const PRICE_DECIMALS: Record<string, number> = { BTC: 2, ETH: 2, VARA: 7 };
+const fmtPx = (p: number | bigint, asset: string) =>
+  pxToUsd(p).toLocaleString(undefined, { maximumFractionDigits: PRICE_DECIMALS[asset] ?? 2 });
+
 function fmt(n: number, decimals = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
@@ -120,7 +130,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       const amt = asset === 'BTC' ? portfolio.btc : asset === 'ETH' ? portfolio.eth : portfolio.vara;
       return { value: amt, label: `${(Number(amt)/1e5).toFixed(5)}`, decimals: 5 };
     }
-    return { value: portfolio.usd, label: `$${(Number(portfolio.usd)/100).toLocaleString()}`, decimals: 2 };
+    return { value: portfolio.usd, label: `$${(Number(portfolio.usd)/1e6).toLocaleString()}`, decimals: 2 };
   }, [portfolio, side, asset]);
 
   function minDecimals(n: number): number {
@@ -205,7 +215,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       const err = await executeTx(
         () => orderType === 'Market'
           ? (side === 'Buy' ? program!.orderbook.marketBuy(asset, q) : program!.orderbook.marketSell(asset, q))
-          : program!.orderbook.placeLimit(side, asset, BigInt(Math.max(1, Math.round(parseFloat(price)/1000))), q),
+          : program!.orderbook.placeLimit(side, asset, BigInt(usdToPx(parseFloat(price))), q),
         account,
         () => {
           setQty('');
@@ -222,7 +232,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
        the contract sizes it by leverage at the on-chain mark price. */
     if (actualCost <= 0) { error('Enter a margin amount'); return; }
 
-    const availableUsd = portfolio ? Number(portfolio.usd) / 100 : 0;
+    const availableUsd = portfolio ? Number(portfolio.usd) / 1e6 : 0;
     if (actualCost > availableUsd) {
       error(`Insufficient balance. You have $${fmt(availableUsd)} available.`);
       return;
@@ -251,7 +261,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
       const { signer } = await web3FromSource(account.meta.source);
       const demoAmt = asset === 'BTC' ? 0.001 : asset === 'ETH' ? 0.01 : 100;
       const q = BigInt(Math.round(demoAmt * 1e5));
-      const p = BigInt(Math.max(1, Math.round(markPrice / 1000)));
+      const p = BigInt(usdToPx(markPrice));
 
       const st = program.orderbook.placeLimit('Sell', asset, p, q);
       await st.withAccount(account.address, { signer }).calculateGas(true, 100);
@@ -334,7 +344,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         </span>
         {lastExecPrice > 0n && (
           <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginLeft: 'auto', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-            Fill ${fmt(Number(lastExecPrice) * 1000)}
+            Fill ${fmtPx(lastExecPrice, asset)}
           </span>
         )}
       </div>
@@ -368,7 +378,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
             {lastExecPrice > 0n && (
               <div className={styles.statItem}>
                 <span className={styles.statLabel}>Last Fill</span>
-                <span className={styles.statValue}>${fmt(Number(lastExecPrice) * 1000)}</span>
+                <span className={styles.statValue}>${fmtPx(lastExecPrice, asset)}</span>
               </div>
             )}
             <button className={styles.stalePriceBtn} onClick={() => fetchPrice(asset)} disabled={pricesLoading}
@@ -410,27 +420,27 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
             {orderbook.asks.slice(0, 10).reverse().map(([p, q], i) => (
               <div key={i} className={`${styles.obRow} ${styles.ask}`}
                 style={{ '--depth': maxQty > 0n ? `${(Number(q) / Number(maxQty) * 100).toFixed(1)}%` : '0%' } as React.CSSProperties}
-                onClick={() => { setPrice((Number(p) * 1000).toString()); priceAutoRef.current = false; }}
+                onClick={() => { setPrice(pxToUsd(p).toString()); priceAutoRef.current = false; }}
                 role="button" tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrice((Number(p)*1000).toString()); priceAutoRef.current = false; } }}>
-                <span>{(Number(p)*1000).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrice(pxToUsd(p).toString()); priceAutoRef.current = false; } }}>
+                <span>{fmtPx(p, asset)}</span>
                 <span>{(Number(q)/1e5).toFixed(5)}</span>
-                <span>{((Number(p)*Number(q))/100).toFixed(2)}</span>
+                <span>{((Number(p)*Number(q))/1e11).toFixed(2)}</span>
               </div>
             ))}
             <div className={styles.spread}>
-              <span className={styles.lastPrice}>{lastExecPrice ? (Number(lastExecPrice)*1000).toLocaleString(undefined,{maximumFractionDigits:2}) : '---'}</span>
+              <span className={styles.lastPrice}>{lastExecPrice ? fmtPx(lastExecPrice, asset) : '---'}</span>
               <span className={styles.spreadLabel}>Last Fill</span>
             </div>
             {orderbook.bids.slice(0, 10).map(([p, q], i) => (
               <div key={i} className={`${styles.obRow} ${styles.bid}`}
                 style={{ '--depth': maxQty > 0n ? `${(Number(q) / Number(maxQty) * 100).toFixed(1)}%` : '0%' } as React.CSSProperties}
-                onClick={() => { setPrice((Number(p)*1000).toString()); priceAutoRef.current = false; }}
+                onClick={() => { setPrice(pxToUsd(p).toString()); priceAutoRef.current = false; }}
                 role="button" tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrice((Number(p)*1000).toString()); priceAutoRef.current = false; } }}>
-                <span>{(Number(p)*1000).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPrice(pxToUsd(p).toString()); priceAutoRef.current = false; } }}>
+                <span>{fmtPx(p, asset)}</span>
                 <span>{(Number(q)/1e5).toFixed(5)}</span>
-                <span>{((Number(p)*Number(q))/100).toFixed(2)}</span>
+                <span>{((Number(p)*Number(q))/1e11).toFixed(2)}</span>
               </div>
             ))}
           </>
@@ -441,12 +451,12 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   /* Compact order book that sits beside the order form in the Pro "Trade" panel:
      red asks over the mid price over green bids, per-row depth shading, tap-to-price. */
-  const priceFromRow = (p: bigint) => { setPrice((Number(p) * 1000).toString()); priceAutoRef.current = false; };
+  const priceFromRow = (p: bigint) => { setPrice(pxToUsd(p).toString()); priceAutoRef.current = false; };
   const depthOf = (qq: bigint) => (maxQty > 0n ? `${(Number(qq) / Number(maxQty) * 100).toFixed(1)}%` : '0%');
   const bookRow = (side: 'ask' | 'bid') => ([p, qq]: [bigint, bigint], i: number) => (
     <button key={i} className={`${styles.miniRow} ${side === 'ask' ? styles.miniAsk : styles.miniBid}`}
       style={{ '--d': depthOf(qq) } as React.CSSProperties} onClick={() => priceFromRow(p)}>
-      <span className={styles.miniPrice}>{(Number(p) * 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      <span className={styles.miniPrice}>{fmtPx(p, asset)}</span>
       <span className={styles.miniAmt}>{(Number(qq) / 1e5).toFixed(4)}</span>
     </button>
   );
@@ -478,7 +488,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           {tradesList.slice(0, 18).map((t, i) => (
             <div key={i} className={styles.miniTradeRow}>
               <span className={styles.miniPrice} style={{ color: 'var(--buy-green)' }}>
-                {(Number(t.price) * 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {fmtPx(t.price, asset)}
               </span>
               <span className={styles.miniAmt}>{(Number(t.qty) / 1e5).toFixed(4)}</span>
               <span className={styles.miniTime}>{t.time}</span>
@@ -489,7 +499,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
     </div>
   );
 
-  const maxMargin = portfolio ? Number(portfolio.usd) / 100 : 0;
+  const maxMargin = portfolio ? Number(portfolio.usd) / 1e6 : 0;
 
   const futuriesEntryPanel = (
     <Card title="Open Position">
@@ -613,7 +623,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           {myOrders.slice(0, 5).map((o: any, i: number) => (
             <div key={i} className={styles.myOrderRow}>
               <span className={o[1] === 'Buy' ? styles.buyText : styles.askText}>{String(o[1])} {String(o[2])}</span>
-              <span className={styles.myOrderPrice}>${(Number(o[3])*1000).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+              <span className={styles.myOrderPrice}>${pxToUsd(o[3]).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
               <span className={styles.myOrderQty}>{(Number(o[4])/1e5).toFixed(4)}</span>
               <button className={styles.cancelSmBtn} onClick={() => handleCancelOrder(o[0])}
                 disabled={cancellingOid === Number(o[0])}>
@@ -694,7 +704,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
           {myOrders.slice(0, 5).map((o: any, i: number) => (
             <div key={i} className={styles.myOrderRow}>
               <span className={o[1]==='Buy' ? styles.buyText : styles.askText}>{String(o[1])} {String(o[2])}</span>
-              <span className={styles.myOrderPrice}>${(Number(o[3])*1000).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+              <span className={styles.myOrderPrice}>${pxToUsd(o[3]).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
               <span className={styles.myOrderQty}>{(Number(o[4])/1e5).toFixed(4)}</span>
               <button className={styles.cancelSmBtn} onClick={() => handleCancelOrder(o[0])} disabled={cancellingOid===Number(o[0])}>
                 {cancellingOid===Number(o[0]) ? '…' : '✕'}
@@ -731,7 +741,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
               {myOrders.map((o: any, i: number) => (
                 <div key={i} className={styles.myOrderRow}>
                   <span className={o[1] === 'Buy' ? styles.buyText : styles.askText}>{String(o[1])} {String(o[2])}</span>
-                  <span className={styles.myOrderPrice}>${(Number(o[3]) * 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className={styles.myOrderPrice}>${pxToUsd(o[3]).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
                   <span className={styles.myOrderQty}>{(Number(o[4]) / 1e5).toFixed(4)}</span>
                   <button className={styles.cancelSmBtn} onClick={() => handleCancelOrder(o[0])} disabled={cancellingOid === Number(o[0])}>
                     {cancellingOid === Number(o[0]) ? '…' : '✕'}
@@ -797,7 +807,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
         )}
         {tradesList.map((t, i) => (
           <div key={i} className={styles.obRow}>
-            <span className={styles.buyText}>{(Number(t.price)*1000).toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+            <span className={styles.buyText}>{fmtPx(t.price, asset)}</span>
             <span>{(Number(t.qty)/1e5).toFixed(5)}</span>
             <span>{t.time}</span>
           </div>
@@ -808,8 +818,8 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
 
   /* Spot: a compact market card so the entry column reads full even when the
      user has no resting orders (thin-book testnet). Genuinely useful data. */
-  const bestBid = orderbook.bids.length > 0 ? Number(orderbook.bids[0][0]) * 1000 : 0;
-  const bestAsk = orderbook.asks.length > 0 ? Number(orderbook.asks[0][0]) * 1000 : 0;
+  const bestBid = orderbook.bids.length > 0 ? pxToUsd(orderbook.bids[0][0]) : 0;
+  const bestAsk = orderbook.asks.length > 0 ? pxToUsd(orderbook.asks[0][0]) : 0;
   // When the on-chain book has no resting orders (thin testnet), the real bid/ask
   // are empty. Rather than show blank dashes, quote an indicative bid/ask around
   // the oracle mark (a few bps each side), flagged with `~` so it's clearly an
@@ -822,7 +832,7 @@ export function TradeView({ mode = 'spot' }: TradeViewProps) {
   const fmtUsd2 = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
   const q = bookLive ? '' : '~'; // estimate marker
   const change24 = prices[asset] ? Number(prices[asset]!.change_24h_bps) / 100 : null;
-  const usdBal = portfolio ? Number(portfolio.usd) / 100 : 0;
+  const usdBal = portfolio ? Number(portfolio.usd) / 1e6 : 0;
   const assetBal = portfolio ? Number(asset === 'BTC' ? portfolio.btc : asset === 'ETH' ? portfolio.eth : portfolio.vara) / 1e5 : 0;
 
   const spotMarketPanel = (

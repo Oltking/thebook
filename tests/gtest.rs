@@ -218,7 +218,7 @@ async fn join_creates_agent() {
         .await
         .unwrap();
     // Join now funds USDT only; assets are acquired by trading, not granted.
-    assert_eq!(port, (100_000, 0, 0, 0));
+    assert_eq!(port, (1_000_000_000, 0, 0, 0));
 }
 
 #[tokio::test]
@@ -230,7 +230,7 @@ async fn seed_house_grants_stockpile_admin_only() {
         .pending_call::<ob_io::Join>(("House".to_string(), AgentStrategy::MarketMaker))
         .await
         .unwrap();
-    let expected = (100_000 + 1_000_000_000, 100_000_000u64, 1_000_000_000u64, 100_000_000_000u64);
+    let expected = (1_000_000_000 + 10_000_000_000_000, 100_000_000u64, 1_000_000_000u64, 100_000_000_000u64);
     let seeded: Result<(u64, u64, u64, u64), ContractError> = orderbook_svc(&program)
         .pending_call::<ob_io::SeedHouse>(())
         .await
@@ -284,7 +284,7 @@ async fn place_limit_buy_then_cancel() {
     join_alice(&env, &program).await;
 
     let oid: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 1))
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 5_000_000, 1))
         .await
         .unwrap()
         .unwrap();
@@ -300,7 +300,7 @@ async fn place_limit_buy_then_cancel() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port.0, 100_000);
+    assert_eq!(port.0, 1_000_000_000);
 }
 
 #[tokio::test]
@@ -309,7 +309,7 @@ async fn place_limit_sell_then_cancel() {
     join_alice(&env, &program).await;
 
     let oid: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 60, 1))
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 6_000_000, 1))
         .await
         .unwrap()
         .unwrap();
@@ -333,7 +333,7 @@ async fn market_buy_fills_sell_order() {
     join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 2))
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 5_000_000, 2))
         .await
         .unwrap()
         .unwrap();
@@ -361,7 +361,7 @@ async fn market_sell_fills_buy_order() {
     join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 5_000_000, 2))
         .await
         .unwrap()
         .unwrap();
@@ -393,7 +393,7 @@ async fn resting_buy_not_double_charged_on_market_sell() {
     join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 5_000_000, 2))
         .await
         .unwrap()
         .unwrap();
@@ -410,7 +410,7 @@ async fn resting_buy_not_double_charged_on_market_sell() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port.0, 99_900, "resting buyer USD double-charged");
+    assert_eq!(port.0, 999_999_900, "resting buyer USD double-charged");
     assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
 }
 
@@ -422,7 +422,7 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
     join_alice(&env, &program).await;
 
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 50, 2))
+        .pending_call::<ob_io::PlaceLimit>((Side::Buy, Asset::BTC, 5_000_000, 2))
         .await
         .unwrap()
         .unwrap();
@@ -430,7 +430,7 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
     let bob = Actor::new(env.clone().with_actor_id(BOB.into()), program.id());
     join_bob(&env, &bob).await;
     let _: u64 = orderbook_svc(&bob)
-        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 1))
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 5_000_000, 1))
         .await
         .unwrap()
         .unwrap();
@@ -439,7 +439,7 @@ async fn resting_buy_not_double_charged_on_limit_sell() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port.0, 99_900, "resting buyer USD double-charged");
+    assert_eq!(port.0, 999_999_900, "resting buyer USD double-charged");
     assert_eq!(port.1, 100_001, "resting buyer did not receive bought BTC");
 }
 
@@ -704,7 +704,7 @@ async fn full_dex_scenario() {
 
     // ALICE: sell 1 BTC at $50 on orderbook
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 50, 1))
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 5_000_000, 1))
         .await
         .unwrap()
         .unwrap();
@@ -762,9 +762,10 @@ async fn market_buy_insufficient_usd_does_not_mutate_state() {
     let (env, program) = deploy().await;
     join_alice(&env, &program).await;
 
-    // Alice offers 1 BTC at a price Bob cannot cover (Bob starts with 100_000 USD).
+    // Alice offers 1 BTC at a price Bob cannot cover (Bob starts with 1e9 micro-USD
+    // = $1,000; this ask's notional is $20,000).
     let _: u64 = orderbook_svc(&program)
-        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 200_000, 1))
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 2_000_000_000_000_000, 1))
         .await
         .unwrap()
         .unwrap();
@@ -859,7 +860,7 @@ async fn deposit_then_withdraw_round_trip() {
     let (env, program) = deploy().await;
     // Raw join funds USDT only (no faucet claim), so the single `fund()` below is
     // the one and only faucet -> approve -> deposit custody flow: USDT ends at the
-    // grant plus its deposit (2x), and each asset is exactly one deposit.
+    // join grant (1e9 micro) plus its 100_000 deposit, and each asset is one deposit.
     let _: (u64, u64, u64, u64) = orderbook_svc(&program)
         .pending_call::<ob_io::Join>(("Alice".to_string(), AgentStrategy::ArbitrageHunter))
         .await
@@ -870,7 +871,7 @@ async fn deposit_then_withdraw_round_trip() {
         .pending_call::<ob_io::GetPortfolio>(())
         .await
         .unwrap();
-    assert_eq!(port, (200_000, 100_000, 1_000_000, 1_000_000_000));
+    assert_eq!(port, (1_000_100_000, 100_000, 1_000_000, 1_000_000_000));
 
     // The wBTC token program holds the deposited BTC in the DEX's account, and
     // Alice's own token balance is zero (she deposited all of it).
@@ -1037,7 +1038,9 @@ async fn set_token_non_admin_fails() {
 
 // ── Perpetual futures tests ──
 
-const BTC_MARK: u64 = 6_420_800; // $64,208.00 in USD cents
+// A test mark in micro-dollars ($1 = 1e6). The exact dollar value is immaterial —
+// the perp assertions are all relative (PnL sign, payout vs margin, reserve delta).
+const BTC_MARK: u64 = 6_420_800;
 
 fn perps_svc(
     program: &Actor<ThebookClientProgram, GtestEnv>,

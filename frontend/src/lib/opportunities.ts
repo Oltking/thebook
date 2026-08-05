@@ -6,14 +6,15 @@
  * React - so it's trivially testable and the dashboard just renders + executes.
  *
  * Scaling between human units and the contract's integer units:
- *   price : contract unit = $1000        → usd = priceContract * 1000
+ *   price : contract unit = micro-dollar → usd = priceContract / 1_000_000
  *   qty   : contract unit = 1e-5 asset   → asset = qtyContract / 100_000
- *   usd   : contract unit = cents        → dollars = usd / 100
+ *   usd   : contract unit = micro-dollar → dollars = usd / 1_000_000
  */
 
-export const PRICE_SCALE = 1000;
+// Micro-dollar price/usd unit ($1 = 1_000_000). PRICE_SCALE is a *divisor* now.
+export const PRICE_SCALE = 1_000_000;
 export const QTY_SCALE = 100_000;
-export const USD_SCALE = 100;
+export const USD_SCALE = 1_000_000;
 
 /** Minimum edge (%) before we bother surfacing a signal. */
 const MIN_EDGE_PCT = 0.5;
@@ -89,7 +90,7 @@ export function findOpportunities(snap: MarketSnapshot, strategy?: StrategyName)
 
     // ── Orderbook arbitrage vs off-chain spot ──
     if (spot && bestAsk && bestAsk[1] > 0n) {
-      const askUsd = Number(bestAsk[0]) * PRICE_SCALE;
+      const askUsd = Number(bestAsk[0]) / PRICE_SCALE;
       if (askUsd > 0 && askUsd < spot) {
         const edge = ((spot - askUsd) / spot) * 100;
         if (edge >= MIN_EDGE_PCT) {
@@ -110,7 +111,7 @@ export function findOpportunities(snap: MarketSnapshot, strategy?: StrategyName)
     }
 
     if (spot && bestBid && bestBid[1] > 0n) {
-      const bidUsd = Number(bestBid[0]) * PRICE_SCALE;
+      const bidUsd = Number(bestBid[0]) / PRICE_SCALE;
       if (bidUsd > spot) {
         const edge = ((bidUsd - spot) / spot) * 100;
         if (edge >= MIN_EDGE_PCT) {
@@ -134,12 +135,12 @@ export function findOpportunities(snap: MarketSnapshot, strategy?: StrategyName)
     if (spot) {
       const hasBid = !!bestBid && bestBid[1] > 0n;
       const hasAsk = !!bestAsk && bestAsk[1] > 0n;
-      const bidUsd = hasBid ? Number(bestBid![0]) * PRICE_SCALE : 0;
-      const askUsd = hasAsk ? Number(bestAsk![0]) * PRICE_SCALE : 0;
+      const bidUsd = hasBid ? Number(bestBid![0]) / PRICE_SCALE : 0;
+      const askUsd = hasAsk ? Number(bestAsk![0]) / PRICE_SCALE : 0;
       const spreadPct = hasBid && hasAsk && bidUsd > 0 ? ((askUsd - bidUsd) / spot) * 100 : Infinity;
       if (!hasBid || !hasAsk || spreadPct > WIDE_SPREAD_PCT) {
-        // Quote a modest order at spot (rounded to the contract's $1000 tick).
-        const priceContract = BigInt(Math.max(1, Math.round(spot / PRICE_SCALE)));
+        // Quote a modest order at spot (in micro-dollars).
+        const priceContract = BigInt(Math.max(1, Math.round(spot * PRICE_SCALE)));
         const qtyAsset = asset === 'BTC' ? 0.001 : asset === 'ETH' ? 0.01 : 100;
         const qtyContract = BigInt(Math.round(qtyAsset * QTY_SCALE));
         // If only one side exists, post the missing side; else post a buy at spot.

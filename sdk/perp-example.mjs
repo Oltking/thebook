@@ -30,7 +30,7 @@ if (!marks.btc) {
 
 // 3) Open a small isolated-margin long: $50 margin, 5x leverage.
 console.log('opening long BTC  $50 margin  5x …');
-await book.openPosition(Asset.BTC, /* isLong */ true, book.cents(50), 5);
+await book.openPosition(Asset.BTC, /* isLong */ true, book.micros(50), 5);
 
 console.log('portfolio after open:', await book.portfolio());
 

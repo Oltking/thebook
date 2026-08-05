@@ -13,9 +13,8 @@
 // Env is auto-loaded from .env.deploy then .env. INTERVAL_MS (default 15000)
 // controls the requote cadence.
 //
-// NOTE on precision: the book price unit is $1000/tick, which quotes BTC fine but
-// is too coarse for ETH/VARA. Set ASSETS=BTC (default) until finer tick precision
-// lands; pass ASSETS=BTC,ETH,VARA to quote all three anyway.
+// Prices are micro-dollars ($1 = 1e6) on-chain, so BTC, ETH and VARA all quote
+// cleanly; ASSETS defaults to all three.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,16 +30,19 @@ const SEED = process.env.VARA_SEED;
 const PROGRAM_ID = process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000);
-const ASSETS = (process.env.ASSETS ?? 'BTC').split(',').map((s) => s.trim().toUpperCase());
+const ASSETS = (process.env.ASSETS ?? 'BTC,ETH,VARA').split(',').map((s) => s.trim().toUpperCase());
+const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
 const fail = (m) => { console.error(`\n  ✗ ${m}\n`); process.exit(1); };
 if (!SEED) fail('VARA_SEED is required (the DEX admin / deployer seed).');
 if (!PROGRAM_ID) fail('PROGRAM_ID is required.');
 
 // Ladder: (tick offset from mark, size in whole asset) for each side.
+// Each level is (spread in basis points from mid, size in whole assets). Micro-dollar
+// prices make a raw "+1 tick" negligible, so we step by a fraction of price instead.
 const LADDER = [
-  { off: 0, size: 2 },
-  { off: 1, size: 4 },
-  { off: 2, size: 8 },
+  { bps: 5, size: 2 },
+  { bps: 15, size: 4 },
+  { bps: 30, size: 8 },
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -70,16 +72,17 @@ async function requote() {
   for (const a of ASSETS) {
     const usd = marks[a.toLowerCase()];
     if (!usd || usd <= 0) { console.log(`  · ${a}: no mark, skip`); continue; }
-    const tick = Math.max(1, Math.round(usd / 1000)); // book price unit = $1000/tick
-    for (const { off, size } of LADDER) {
-      // Asks at/above the mark, bids below — the house makes the market both ways.
-      try { await book.placeLimit(Side.Sell, Asset[a], tick + off, book.qty(size)); } catch (e) { console.warn(`  ask ${a} ${tick + off}: ${e?.message || e}`); }
-      const bidTick = tick - 1 - off;
-      if (bidTick >= 1) {
-        try { await book.placeLimit(Side.Buy, Asset[a], bidTick, book.qty(size)); } catch (e) { console.warn(`  bid ${a} ${bidTick}: ${e?.message || e}`); }
+    const mid = Math.max(1, Math.round(usd * MICRO)); // price in micro-dollars
+    for (const { bps, size } of LADDER) {
+      const spread = Math.max(1, Math.round((mid * bps) / 10_000));
+      // Asks above the mark, bids below — the house makes the market both ways.
+      try { await book.placeLimit(Side.Sell, Asset[a], mid + spread, book.qty(size)); } catch (e) { console.warn(`  ask ${a} ${mid + spread}: ${e?.message || e}`); }
+      const bidPx = mid - spread;
+      if (bidPx >= 1) {
+        try { await book.placeLimit(Side.Buy, Asset[a], bidPx, book.qty(size)); } catch (e) { console.warn(`  bid ${a} ${bidPx}: ${e?.message || e}`); }
       }
     }
-    console.log(`  ✓ ${a} quoted around $${usd.toLocaleString()} (tick ${tick})`);
+    console.log(`  ✓ ${a} quoted around $${usd.toLocaleString()} (mid ${mid} µ$)`);
   }
 }
 

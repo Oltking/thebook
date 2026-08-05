@@ -31,7 +31,7 @@ function hexOf(id: unknown): string {
   return String(id).toLowerCase();
 }
 
-// Raw on-chain balances per agent (usd in cents, assets in 1e5 units) so we can
+// Raw on-chain balances per agent (usd in micro-dollars, assets in 1e5 units) so we can
 // value them at live prices, the on-chain net_worth uses fixed nominal divisors
 // and is not real portfolio value.
 interface Leader { addr: string; name: string; strategy: StrategyName; usd: number; btc: number; eth: number; vara: number; }
@@ -117,7 +117,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     return f ? Number(f.price_usd_micro) / 1_000_000 : 0;
   };
   const netWorthOf = (usd: number, btc: number, eth: number, vara: number) =>
-    usd / 100 + (btc / 1e5) * spot('BTC') + (eth / 1e5) * spot('ETH') + (vara / 1e5) * spot('VARA');
+    usd / 1e6 + (btc / 1e5) * spot('BTC') + (eth / 1e5) * spot('ETH') + (vara / 1e5) * spot('VARA');
 
   const myNetWorth = useMemo(() => {
     if (!portfolio) return 0;
@@ -174,7 +174,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     const fills: { t: string; text: string; kind: 'trade' }[] = [];
     for (const a of ['BTC', 'ETH', 'VARA'] as const) {
       for (const tr of (trades[a] || []).slice(0, 4)) {
-        const px = Number(tr.price) * 1000;
+        const px = Number(tr.price) / 1e6;
         fills.push({
           t: tr.time || '',
           kind: 'trade',

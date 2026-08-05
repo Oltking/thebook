@@ -109,7 +109,7 @@ export function PortfolioView() {
     return f ? Number(f.price_usd_micro) / 1_000_000 : 0;
   };
 
-  const usdVal  = Number(portfolio.usd) / 100;
+  const usdVal  = Number(portfolio.usd) / 1_000_000;
   const btcVal  = (Number(portfolio.btc)  / 1e5) * priceUsd('BTC');
   const ethVal  = (Number(portfolio.eth)  / 1e5) * priceUsd('ETH');
   const varaVal = (Number(portfolio.vara) / 1e5) * priceUsd('VARA');
@@ -153,7 +153,9 @@ export function PortfolioView() {
                   {assets.map((asset) => (
                     <tr key={asset.name}>
                       <td className={styles.assetName}>{asset.name}</td>
-                      <td>{formatAmount(asset.amount, asset.decimals)}</td>
+                      <td>{asset.name === 'USDT'
+                        ? asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : formatAmount(asset.amount, asset.decimals)}</td>
                       <td>{asset.name === 'USDT' || asset.value > 0
                         ? `$${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '-'}</td>
@@ -189,7 +191,7 @@ export function PortfolioView() {
                 <div>
                   <span style={{ fontWeight: 600 }}>{o[1] as string} {o[2] as string}</span>
                   <span style={{ margin: '0 8px', color: 'var(--text-secondary)' }}>@</span>
-                  <span>${(Number(o[3]) * 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  <span>${(Number(o[3]) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                     Qty: {formatAmount(o[4], 5)} / Filled: {formatAmount(o[5], 5)}
                   </div>

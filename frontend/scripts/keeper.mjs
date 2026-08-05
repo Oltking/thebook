@@ -53,12 +53,12 @@ if (!SEED) fail('VARA_SEED is required (the DEX admin / deployer key).');
 if (!PROGRAM_ID) fail('PROGRAM_ID (or VITE_PROGRAM_ID) is required.');
 if (!existsSync(IDL_PATH)) fail(`IDL not found at ${IDL_PATH}.`);
 
-/** Fetch a USD spot price, in cents (integer), or 0 if unavailable. */
-async function priceCents(fetchers) {
+/** Fetch a USD spot price, in micro-dollars (integer), or 0 if unavailable. */
+async function priceMicros(fetchers) {
   for (const f of fetchers) {
     try {
       const p = await f();
-      if (p && isFinite(p) && p > 0) return Math.round(p * 100);
+      if (p && isFinite(p) && p > 0) return Math.round(p * 1_000_000);
     } catch { /* try next source */ }
   }
   return 0;
@@ -77,9 +77,9 @@ const coingecko = (id) => async () => {
 
 async function fetchMarks() {
   const [btc, eth, vara] = await Promise.all([
-    priceCents([binance('BTCUSDT'), coingecko('bitcoin')]),
-    priceCents([binance('ETHUSDT'), coingecko('ethereum')]),
-    priceCents([coingecko('vara-network'), binance('VARAUSDT')]),
+    priceMicros([binance('BTCUSDT'), coingecko('bitcoin')]),
+    priceMicros([binance('ETHUSDT'), coingecko('ethereum')]),
+    priceMicros([coingecko('vara-network'), binance('VARAUSDT')]),
   ]);
   return { btc, eth, vara };
 }
@@ -113,7 +113,7 @@ async function pushOnce() {
   await tx.calculateGas(true);
   const { response } = await tx.signAndSend();
   await response();
-  const usd = (c) => c ? `$${(c / 100).toLocaleString()}` : '—';
+  const usd = (m) => m ? `$${(m / 1_000_000).toLocaleString()}` : "—";
   console.log(`  ✓ ${new Date().toISOString()}  BTC ${usd(btc)}  ETH ${usd(eth)}  VARA ${usd(vara)}`);
 }
 

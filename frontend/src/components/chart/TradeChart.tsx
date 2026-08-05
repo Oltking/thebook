@@ -255,8 +255,8 @@ export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: Tra
   const chromeRef = useRef(chrome);
   chromeRef.current = chrome;
 
-  const depthBids = useMemo(() => { let s = 0; return bids.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [bids]);
-  const depthAsks = useMemo(() => { let s = 0; return asks.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) * 1000, cum: s }; }); }, [asks]);
+  const depthBids = useMemo(() => { let s = 0; return bids.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) / 1e6, cum: s }; }); }, [bids]);
+  const depthAsks = useMemo(() => { let s = 0; return asks.map(([p, q]) => { s += Number(q) / 1e5; return { price: Number(p) / 1e6, cum: s }; }); }, [asks]);
 
   /* ── Fetch market OHLC data, then keep it live by polling ── */
   useEffect(() => {

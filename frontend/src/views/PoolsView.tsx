@@ -163,18 +163,20 @@ export function PoolsView() {
 
   const assetBal = (a: Asset) =>
     portfolio ? Number(a === 'BTC' ? portfolio.btc : a === 'ETH' ? portfolio.eth : portfolio.vara) / 1e5 : 0;
-  const usdBal = portfolio ? Number(portfolio.usd) / 100 : 0;
+  const usdBal = portfolio ? Number(portfolio.usd) / 1_000_000 : 0;
 
   const openUsdModal = (a: Asset) => { setUsdAsset(a); setUsdInput(''); };
   const closeUsdModal = () => { if (!lpBusy) setUsdAsset(null); };
 
-  /* Two-sided quote levels for the current mark (contract price tick = $1000) */
+  /* Two-sided quote levels for the current mark (price is micro-dollars, $1 = 1e6).
+     Bid/ask sit ~20 bps either side of the mark. */
   const usdQuote = (() => {
     if (usdMark <= 0) return null;
-    const markTick = Math.max(2, Math.round(usdMark / 1000));
-    const bidTick = Math.max(1, markTick - 1);
-    const askTick = markTick + 1;
-    return { bidTick, askTick, bidPriceUsd: bidTick * 1000, askPriceUsd: askTick * 1000 };
+    const mid = Math.max(1, Math.round(usdMark * 1_000_000));
+    const spread = Math.max(1, Math.round(mid * 0.002)); // 20 bps
+    const bidTick = Math.max(1, mid - spread);
+    const askTick = mid + spread;
+    return { bidTick, askTick, bidPriceUsd: bidTick / 1_000_000, askPriceUsd: askTick / 1_000_000 };
   })();
 
   const provideUsdLiquidity = async () => {
@@ -275,8 +277,8 @@ export function PoolsView() {
               const markPrice = feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
               const change  = feed ? Number(feed.change_24h_bps) / 100 : 0;
               const ob      = orderbooks[asset] || { bids: [], asks: [] };
-              const bestBid = ob.bids.length > 0 ? Number(ob.bids[0][0]) * 1000 : 0;
-              const bestAsk = ob.asks.length > 0 ? Number(ob.asks[0][0]) * 1000 : 0;
+              const bestBid = ob.bids.length > 0 ? Number(ob.bids[0][0]) / 1e6 : 0;
+              const bestAsk = ob.asks.length > 0 ? Number(ob.asks[0][0]) / 1e6 : 0;
               const totalOrders = ob.bids.length + ob.asks.length;
               return (
                 <div key={asset} style={{
@@ -400,7 +402,7 @@ export function PoolsView() {
                   let bidQty = 0, askQty = 0, totalUsd = 0;
                   const oids = orders.map((o: any) => o[0]);
                   for (const o of orders) {
-                    const price = Number(o[3]) * 1000;
+                    const price = Number(o[3]) / 1e6;
                     const remaining = (Number(o[4]) - Number(o[5])) / 1e5;
                     if ((o[1] as string) === 'Buy') bidQty += remaining; else askQty += remaining;
                     totalUsd += remaining * price;

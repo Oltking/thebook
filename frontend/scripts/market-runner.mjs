@@ -8,7 +8,8 @@
 //   VARA_SEED="<admin seed>"  PROGRAM_ID=0x…  node scripts/market-runner.mjs
 //
 // Env auto-loaded from .env.deploy then .env. INTERVAL_MS default 10000.
-// ASSETS default "BTC" (book tick = $1000/unit is too coarse for ETH/VARA).
+// Prices are micro-dollars ($1 = 1e6) on-chain, so BTC, ETH and VARA all quote
+// cleanly — ASSETS defaults to all three.
 
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,13 +24,17 @@ const SEED = process.env.VARA_SEED;
 const PROGRAM_ID = process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
 const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 10_000);
-const ASSETS = (process.env.ASSETS ?? 'BTC').split(',').map((s) => s.trim().toUpperCase());
+const ASSETS = (process.env.ASSETS ?? 'BTC,ETH,VARA').split(',').map((s) => s.trim().toUpperCase());
 const fail = (m) => { console.error(`\n  ✗ ${m}\n`); process.exit(1); };
 if (!SEED) fail('VARA_SEED is required (the DEX admin seed).');
 if (!PROGRAM_ID) fail('PROGRAM_ID is required.');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const LADDER = [{ off: 0, size: 2 }, { off: 1, size: 4 }, { off: 2, size: 8 }];
+// Ladder levels: each is (spread in basis points from mid, size in whole assets).
+// Micro-dollar prices mean a raw "+1 tick" is $0.000001 — far too tight — so we
+// step by a fraction of the price (bps) instead, which works for BTC and VARA alike.
+const LADDER = [{ bps: 5, size: 2 }, { bps: 15, size: 4 }, { bps: 30, size: 8 }];
+const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
 
 // ── price sources (keyless, CORS-free in Node) ──
 async function usdPrices() {
@@ -48,7 +53,7 @@ async function usdPrices() {
   } catch { /* leave 0 */ }
   return out;
 }
-const cents = (usd) => Math.round(usd * 100);
+const micros = (usd) => Math.round(usd * MICRO);
 
 const book = await connectTheBook({ seed: SEED, programId: PROGRAM_ID, node: NODE_ADDRESS });
 console.log(`\n  thebookdex market runner (marks + house quotes)`);
@@ -62,18 +67,19 @@ catch (e) { console.warn('  seed_house skipped:', e?.message || e); }
 
 async function tick() {
   const p = await usdPrices();
-  // 1) push marks (cents). VARA rounds to 0 cents at its price — expected.
-  await book.setMarks(cents(p.btc), cents(p.eth), cents(p.vara));
+  // 1) push marks (micro-dollars). VARA now carries full precision.
+  await book.setMarks(micros(p.btc), micros(p.eth), micros(p.vara));
   // 2) requote: clear our resting orders, then re-ladder both sides.
   const mine = await book.myOrders().catch(() => []);
   for (const o of Array.isArray(mine) ? mine : []) { try { await book.cancelOrder(o[0]); } catch { /* gone */ } }
   for (const a of ASSETS) {
     const usd = p[a.toLowerCase()];
     if (!usd || usd <= 0) continue;
-    const t = Math.max(1, Math.round(usd / 1000));
-    for (const { off, size } of LADDER) {
-      try { await book.placeLimit(Side.Sell, Asset[a], t + off, book.qty(size)); } catch { /* skip */ }
-      const bid = t - 1 - off;
+    const mid = micros(usd); // price in micro-dollars
+    for (const { bps, size } of LADDER) {
+      const spread = Math.max(1, Math.round((mid * bps) / 10_000));
+      try { await book.placeLimit(Side.Sell, Asset[a], mid + spread, book.qty(size)); } catch { /* skip */ }
+      const bid = mid - spread;
       if (bid >= 1) { try { await book.placeLimit(Side.Buy, Asset[a], bid, book.qty(size)); } catch { /* skip */ } }
     }
   }
