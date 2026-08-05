@@ -144,9 +144,8 @@ try {
 }
 
 console.log(`\n  ✓ deploy complete\n`);
-console.log(`  Next: run the keeper AND the market maker against the new program:`);
-console.log(`    node scripts/keeper.mjs`);
-console.log(`    node scripts/market-maker.mjs\n`);
+console.log(`  Next: run the combined market runner (marks + house quotes, one signer):`);
+console.log(`    node scripts/market-runner.mjs   # run as a persistent service (pm2/systemd)\n`);
 console.log(`  Put these in frontend/.env, then redeploy the frontend:\n`);
 for (const [k, v] of Object.entries(env)) console.log(`    ${k}=${v}`);
 console.log(`\n  Then start the mark-price keeper so futures work:`);

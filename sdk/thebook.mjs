@@ -159,6 +159,9 @@ export async function connectTheBook(opts = {}) {
     withdraw: (kind, amount) => send('Orderbook', 'Withdraw', [kind, amount]),
 
     // ── perps ──
+    // Admin/keeper only: publish mark prices (USD cents) for BTC/ETH/VARA.
+    setMarks: (btcCents, ethCents, varaCents) =>
+      send('Perps', 'SetMarkPrices', [btcCents, ethCents, varaCents]),
     openPosition: (asset, isLong, marginCents, leverage) =>
       send('Perps', 'OpenPosition', [asset, isLong, marginCents, leverage]),
     closePosition: (asset) => send('Perps', 'ClosePosition', [asset]),
