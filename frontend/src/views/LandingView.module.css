@@ -105,7 +105,7 @@
      pushed it past the line). It's shrunk further and still bleeds off the right. */
   .heroGrid { grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
   .phoneWrap { align-self: start; margin-top: 6px; margin-right: clamp(-90px, -18vw, -56px); }
-  .phone { width: clamp(130px, 34vw, 180px); animation: none; }
+  .phone { width: clamp(104px, 27vw, 144px); animation: none; }
 }
 
 /* Mobile only: nudge every text size down by 1px for a tighter phone read. The
