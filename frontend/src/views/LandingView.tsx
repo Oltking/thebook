@@ -105,7 +105,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
               <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
                 whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Launch app</motion.button>
               <motion.button className={`${styles.btn} ${styles.btnGhost} ${styles.btnLg}`} onClick={onEnterHive}
-                whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Enter the hive</motion.button>
+                whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Enter Agents</motion.button>
             </motion.div>
             <motion.div className={styles.heroStats} variants={rise}>
               <div><div className={styles.n}>{btc ? <CountUp value={btc} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>BTC on the book</div></div>

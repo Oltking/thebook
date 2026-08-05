@@ -100,12 +100,20 @@
    hero's overflow clips it), so the copy keeps its room and the phone reads as a
    real object running out of frame, just like the desktop composition. */
 @media (max-width: 1000px) {
-  /* Top-align the phone so it sits beside the title/lede band and its bottom stays
-     above the stats divider, instead of centering over the full column (which
-     pushed it past the line). It's shrunk further and still bleeds off the right. */
-  .heroGrid { grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
-  .phoneWrap { align-self: start; margin-top: 6px; margin-right: clamp(-90px, -18vw, -56px); }
-  .phone { width: clamp(104px, 27vw, 144px); animation: none; }
+  /* Let the copy take the full width and float the phone over the top-right so the
+     title can run its full width (and overlap the device) instead of being boxed
+     into a narrow column. The phone sits behind the text and bleeds off the right. */
+  .heroGrid { grid-template-columns: 1fr; position: relative; }
+  .heroGrid > :first-child { position: relative; z-index: 2; }
+  /* Scope to .heroGrid so these win over the base .phoneWrap/.phone rules that
+     come later in the file (equal specificity would otherwise let them override). */
+  .heroGrid .phoneWrap {
+    position: absolute; top: 30px; right: -3%; z-index: 0;
+    margin: 0; pointer-events: none;
+  }
+  /* Fade on the inner .phone (a plain div): framer-motion sets an inline opacity:1
+     on .phoneWrap that would override a class rule there. */
+  .heroGrid .phone { width: clamp(200px, 56vw, 300px); animation: none; transform: none; opacity: 0.2; }
 }
 
 /* Mobile only: nudge every text size down by 1px for a tighter phone read. The
@@ -116,7 +124,7 @@
   .btn { font-size: 11.5px; }
   .btnLg { font-size: 13px; }
   .eyebrow { font-size: 11px; }
-  .title { font-size: clamp(39px, 8vw, 91px); }
+  .title { font-size: clamp(20px, 4.1vw, 46px); }
   .lede { font-size: clamp(15px, 2vw, 19px); }
   .heroStats .n { font-size: 25px; }
   .heroStats .l { font-size: 11px; }
