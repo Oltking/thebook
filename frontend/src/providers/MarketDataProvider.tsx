@@ -125,7 +125,20 @@ async function fetchVaraOnly(): Promise<PriceFeed | null> {
     change_24h_bps: Math.round(chg * 100),
     market_cap_usd: 0, volume_24h_usd: 0, updated_at_block: 0,
   });
-  // 1 · CoinGecko
+  // 1 · CoinPaprika (keyless, CORS-enabled, and unlike CoinGecko it isn't
+  // aggressively rate-limited, so it's our most reliable VARA source).
+  try {
+    const res = await fetch(
+      'https://api.coinpaprika.com/v1/tickers/vara-vara-network',
+      { signal: AbortSignal.timeout(8_000) },
+    );
+    if (res.ok) {
+      const d = await res.json() as { quotes?: { USD?: { price?: number; percent_change_24h?: number } } };
+      const q = d.quotes?.USD;
+      if (q?.price) return make(q.price, q.percent_change_24h ?? 0);
+    }
+  } catch { /* fall through */ }
+  // 2 · CoinGecko
   try {
     const res = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=vara-network&vs_currencies=usd&include_24hr_change=true',
@@ -137,7 +150,7 @@ async function fetchVaraOnly(): Promise<PriceFeed | null> {
       if (v?.usd) return make(v.usd, v.usd_24h_change ?? 0);
     }
   } catch { /* fall through */ }
-  // 2 · CryptoCompare fallback
+  // 3 · CryptoCompare fallback
   try {
     const res = await fetch(
       'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=VARA&tsyms=USD',
@@ -292,8 +305,8 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     return () => { active = false; clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
 
-  /* VARA has no Binance pair, so poll it independently from CoinGecko (slower, to
-     respect its rate limit) - never blocking the fast BTC/ETH path above. */
+  /* VARA has no Binance pair, so poll it independently (CoinPaprika first, then
+     CoinGecko/CryptoCompare) - never blocking the fast BTC/ETH path above. */
   useEffect(() => {
     let active = true;
     let haveVara = false;

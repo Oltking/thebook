@@ -87,6 +87,14 @@
   font-family: var(--font-mono);
 }
 
+/* On phones the surrounding view header already shows the asset, price and oracle,
+   so drop the toolbar's duplicate asset-info block. That frees the row for the
+   Price/Depth tabs and the full timeframe list instead of overflowing off-screen. */
+@media (max-width: 767px) {
+  .toolbar { justify-content: space-between; gap: var(--space-xs); }
+  .assetInfo { display: none; }
+}
+
 /* ── chart area ── */
 .chartWrap {
   flex: 1;

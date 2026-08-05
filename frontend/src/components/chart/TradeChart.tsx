@@ -118,6 +118,31 @@ async function fetchMarketData(asset: string, tf: Timeframe): Promise<OHLCV[]> {
   return data;
 }
 
+/* Fallback candles built from the app's own accumulated live price series. Used
+   when no external OHLC source is available for an asset (e.g. VARA, which Binance
+   doesn't list and CoinGecko/CryptoCompare rate-limit or gate behind a key). Each
+   history point becomes a one-tick candle so the chart renders real, if coarse,
+   data instead of sitting blank until a third party cooperates. */
+function historyToOhlc(
+  history: { ts: number; BTC: number | null; ETH: number | null; VARA: number | null }[],
+  asset: string,
+): OHLCV[] {
+  const out: OHLCV[] = [];
+  let prevClose: number | null = null;
+  let lastT = -1;
+  for (const p of history) {
+    const v = (p as Record<string, number | null>)[asset];
+    if (v == null || v <= 0) continue;
+    const t = Math.floor(p.ts / 1000) as UTCTimestamp;
+    if (t <= lastT) continue; // lightweight-charts needs strictly ascending times
+    const open = prevClose ?? v;
+    out.push({ time: t, open, high: Math.max(open, v), low: Math.min(open, v), close: v, volume: 0 });
+    prevClose = v;
+    lastT = t;
+  }
+  return out;
+}
+
 /* ── Depth canvas ── */
 
 interface DepthPoint { price: number; cum: number }
@@ -206,7 +231,7 @@ function DepthCanvas({ bids, asks, chrome }: { bids: DepthPoint[]; asks: DepthPo
 
 /* ── Price chart ── */
 
-export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) {
+export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: TradeChartProps) {
   const { theme } = useTheme();
   const chrome = CHROME[theme];
 
@@ -326,27 +351,62 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
     oracleRef.current?.applyOptions({ color: chrome.primary });
   }, [chrome, theme]);
 
+  /* Last-resort candle series accumulated from the on-chain oracle mark, so an
+     asset with no external OHLC and no external price feed (VARA, when CoinGecko /
+     CryptoCompare are down) still charts from the platform's own price. Grows one
+     tick per poll; reset when the asset changes. */
+  const [oracleSeries, setOracleSeries] = useState<OHLCV[]>([]);
+  useEffect(() => { setOracleSeries([]); }, [asset]);
+  useEffect(() => {
+    if (oraclePrice <= 0) return;
+    setOracleSeries(prev => {
+      const t = Math.floor(Date.now() / 1000) as UTCTimestamp;
+      const last = prev[prev.length - 1];
+      if (last && last.time >= t) {
+        const upd = { ...last, close: oraclePrice, high: Math.max(last.high, oraclePrice), low: Math.min(last.low, oraclePrice) };
+        return [...prev.slice(0, -1), upd];
+      }
+      const open = last ? last.close : oraclePrice;
+      return [...prev.slice(-599), { time: t, open, high: Math.max(open, oraclePrice), low: Math.min(open, oraclePrice), close: oraclePrice, volume: 0 }];
+    });
+  }, [oraclePrice, asset]);
+
+  /* Prefer real external OHLC; then the app's accumulated multi-asset price
+     history; then the oracle-mark series, so assets without an external candle
+     source (VARA) still render a chart. */
+  const displayData = useMemo(() => {
+    if (ohlcData.length) return ohlcData;
+    const hist = historyToOhlc(priceHistory, asset);
+    return hist.length ? hist : oracleSeries;
+  }, [ohlcData, priceHistory, asset, oracleSeries]);
+
   /* ── Update candlestick data ── */
   useEffect(() => {
     if (!candleRef.current || !volRef.current || !oracleRef.current || !chartRef.current) return;
-    if (!ohlcData.length) return;
+    if (!displayData.length) return;
 
-    candleRef.current.setData(ohlcData);
+    candleRef.current.setData(displayData);
 
-    volRef.current.setData(ohlcData.map((d, i) => ({
+    volRef.current.setData(displayData.map((d, i) => ({
       time: d.time, value: d.volume,
       color: i > 0 && d.close >= d.open ? 'rgba(14,203,129,0.65)' : 'rgba(246,70,93,0.65)',
     })));
 
     if (oraclePrice > 0) {
-      oracleRef.current.setData([
-        { time: ohlcData[0].time, value: oraclePrice },
-        { time: ohlcData[ohlcData.length - 1].time, value: oraclePrice },
-      ]);
+      // A flat oracle line spanning the data range. When the fallback series has a
+      // single point, first === last time; lightweight-charts rejects two equal
+      // timestamps, so collapse to one point in that case.
+      const first = displayData[0].time;
+      const last = displayData[displayData.length - 1].time;
+      oracleRef.current.setData(
+        first === last
+          ? [{ time: last, value: oraclePrice }]
+          : [{ time: first, value: oraclePrice }, { time: last, value: oraclePrice }],
+      );
     }
 
     chartRef.current.timeScale().fitContent();
-  }, [ohlcData, oraclePrice]);
+  }, [displayData, oraclePrice]);
 
   return (
     <div className={styles.wrapper}>
@@ -359,13 +419,13 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
         {view === 'price' && (
           <>
             <div className={styles.assetInfo}>
-              <span className={styles.assetName}>{asset}/USD</span>
-              {ohlcData.length > 0 && (
+              <span className={styles.assetName}>{asset}/USDT</span>
+              {displayData.length > 0 && (
                 <span className={
-                  ohlcData[ohlcData.length - 1].close >= ohlcData[ohlcData.length - 1].open
+                  displayData[displayData.length - 1].close >= displayData[displayData.length - 1].open
                     ? styles.priceUp : styles.priceDown
                 }>
-                  ${ohlcData[ohlcData.length - 1].close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${displayData[displayData.length - 1].close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
               {oraclePrice > 0 && <span className={styles.oracleTag}>Oracle ${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -382,8 +442,8 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
       <div className={styles.chartWrap}>
         {view === 'price' ? (
           <>
-            <div ref={containerRef} className={styles.chartContainer} style={{ visibility: ohlcData.length ? 'visible' : 'hidden' }} />
-            {(loading || !ohlcData.length) && (
+            <div ref={containerRef} className={styles.chartContainer} style={{ visibility: displayData.length ? 'visible' : 'hidden' }} />
+            {(loading || !displayData.length) && (
               <div className={styles.emptyOverlay}>
                 {loading ? (
                   <>
@@ -400,7 +460,7 @@ export function TradeChart({ oraclePrice, bids, asks, asset }: TradeChartProps) 
                     <div className={styles.emptyOraclePrice}>
                       ${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className={styles.emptyAsset}>{asset} / USD · Oracle Price</div>
+                    <div className={styles.emptyAsset}>{asset} / USDT · Oracle Price</div>
                   </>
                 ) : (
                   <div className={styles.emptyTitle}>Loading…</div>
