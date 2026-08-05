@@ -108,7 +108,7 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
             The Hive is the first side of the app, so it sits on the left. */}
         <div className={styles.modeSwitch} role="tablist" aria-label="Mode">
           <button role="tab" className={isHive ? styles.modeOn : ''} aria-selected={isHive}
-            onClick={!isHive ? onEnterHive : undefined}>⬡ The Hive</button>
+            onClick={!isHive ? onEnterHive : undefined}>⬡ Agents</button>
           <button role="tab" className={!isHive ? styles.modeOn : ''} aria-selected={!isHive}
             onClick={isHive ? onExitHive : undefined}>Trade</button>
         </div>
@@ -136,7 +136,7 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
         )}
 
         <div className={styles.actions}>
-          <ThemeToggle />
+          <ThemeToggle className={styles.headerThemeToggle} />
           {isHive && onDeploy && (
             <button className={styles.deployHeaderBtn} onClick={onDeploy}>
               {isMobile ? '+ Agent' : '+ Deploy agent'}

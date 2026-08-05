@@ -386,6 +386,27 @@
   .connectButton {
     padding: var(--space-xs) var(--space-sm);
     font-size: 12px;
+    /* Anchor the shrink to the LEFT edge so the button's visible left stays right
+       next to the theme toggle. scale() paints smaller but keeps the full layout
+       box, so a right anchor insets the visible left ~18px and opens the gap. */
+    transform: scale(0.8);
+    transform-origin: left center;
+  }
+
+  /* Match the connect button: shrink the app-header theme toggle on mobile,
+     anchored to its right so the glyph sits close to the connect button. */
+  .headerThemeToggle {
+    transform: scale(0.8);
+    transform-origin: right center;
+    width: 30px;
+    min-width: 30px;
+  }
+
+  /* Tuck the connect button right up against the theme toggle, and nudge the whole
+     cluster toward the right edge (offsets the left-anchored scale inset). */
+  .actions {
+    gap: 5px;
+    margin-right: -15px;
   }
 }
 
