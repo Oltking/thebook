@@ -100,9 +100,12 @@
    hero's overflow clips it), so the copy keeps its room and the phone reads as a
    real object running out of frame, just like the desktop composition. */
 @media (max-width: 1000px) {
-  .heroGrid { grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
-  .phone { width: clamp(192px, 54vw, 256px); }
-  .phoneWrap { margin-right: clamp(-180px, -36vw, -120px); }
+  /* Top-align the phone so it sits beside the title/lede band and its bottom stays
+     above the stats divider, instead of centering over the full column (which
+     pushed it past the line). It's shrunk further and still bleeds off the right. */
+  .heroGrid { grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
+  .phoneWrap { align-self: start; margin-top: 6px; margin-right: clamp(-90px, -18vw, -56px); }
+  .phone { width: clamp(130px, 34vw, 180px); animation: none; }
 }
 
 /* Mobile only: nudge every text size down by 1px for a tighter phone read. The
