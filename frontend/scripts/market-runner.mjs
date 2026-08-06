@@ -136,7 +136,11 @@ async function tick() {
     const own = orders.filter((o) => String(o[2]) === a); // o[2] = asset
     const prev = lastMid[a];
     const moved = !prev || Math.abs(mid - prev) / prev > REQUOTE_BPS / 10_000;
-    if (own.length > 0 && !moved) continue; // ladder still good — leave it resting
+    // Refill when the mark moved OR the ladder isn't full (a fill swept part of it).
+    // Without the incompleteness check, a partially-filled book would sit thin until
+    // the next price move — exactly how VARA ended up with almost no depth.
+    const full = own.length >= 2 * LADDER.length;
+    if (full && !moved) continue; // ladder intact — leave it resting
 
     for (const o of own) calls.push({ service: 'Orderbook', fn: 'CancelOrder', args: [o[0]] });
     const sizes = SIZES[a] || [1, 2, 4];
