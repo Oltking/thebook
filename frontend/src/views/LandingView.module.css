@@ -259,14 +259,18 @@
 
 /* Skill-pack band: headline left, numbered install steps right. */
 .skillBand { margin-top: 34px; display: grid; grid-template-columns: 1.02fr 1.18fr; gap: 48px; align-items: center; }
-@media (max-width: 900px) { .skillBand { grid-template-columns: 1fr; gap: 30px; } }
+@media (max-width: 900px) { .skillBand { grid-template-columns: 1fr; gap: 26px; margin-top: 24px; } }
 .skillFoot { margin-top: 20px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; max-width: 46ch; }
 .skillSteps { display: flex; flex-direction: column; gap: 14px; }
-.skillStep { display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: center; }
+/* min-width:0 on the content column lets the mono command scroll inside its own box
+   on narrow screens instead of pushing the page sideways. */
+.skillStep { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; align-items: center; }
+.skillStep > div { min-width: 0; }
+@media (max-width: 480px) { .skillStep { gap: 11px; } }
 .stepDot {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center;
-  font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--accent);
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--accent-text);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-color));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
@@ -281,10 +285,13 @@
   background: var(--code-bg); border: 1px solid var(--border-color); border-left: 2px solid var(--cyan);
   padding: 11px 14px; overflow-x: auto; white-space: nowrap;
 }
+/* Deep, high-contrast green in both themes (token darkens to #15803D on light,
+   stays bright #1DB954 on dark) so the paste-this prompt reads clearly. */
 .promptQuote {
-  font-size: 13.5px; line-height: 1.55; color: var(--lime);
-  background: color-mix(in srgb, var(--lime) 8%, var(--code-bg));
-  border: 1px solid var(--border-color); border-left: 2px solid var(--lime);
+  font-size: 13.5px; line-height: 1.55; font-weight: 500; color: var(--accent-text);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-color));
+  border-left: 3px solid var(--accent); border-radius: 3px;
   padding: 11px 14px;
 }
 
