@@ -32,3 +32,4 @@ scripts/thebook.idl
 # Local agent tooling state
 .claude/
 .DS_Store
+thebook-skills/
