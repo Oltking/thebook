@@ -4,6 +4,7 @@ import { useMarketData } from '../providers/MarketDataProvider';
 import { NETWORK_NAME } from '../consts';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import styles from './LandingView.module.css';
+import { Logo } from '../components/ui/Logo';
 
 interface LandingViewProps {
   onLaunch: () => void;
@@ -75,7 +76,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
       <header className={styles.bar}>
         <div className={`${styles.wrap} ${styles.barIn}`}>
           <div className={styles.brand}>
-            <img src="/logo.png" alt="" aria-hidden="true" />
+            <Logo />
             <span><span className={styles.accent}>the</span>book</span>
           </div>
           <div className={styles.barRight}>

@@ -6,6 +6,7 @@ import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './Header.module.css';
+import { Logo } from '../ui/Logo';
 import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from '../ui/Toast';
 import { useViewport } from '../../hooks/useViewport';
@@ -100,7 +101,7 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
           </button>
         )}
         <div className={styles.logo}>
-          <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
+          <Logo className={styles.logoMark} />
           <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
         </div>
 

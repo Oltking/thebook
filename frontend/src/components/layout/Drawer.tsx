@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import styles from './Drawer.module.css';
+import { Logo } from '../ui/Logo';
 
 interface DrawerProps {
   open: boolean;
@@ -44,7 +45,7 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
       >
         <div className={styles.header}>
           <span className={styles.logo}>
-            <img src="/logo.png" alt="" className={styles.logoMark} aria-hidden="true" />
+            <Logo className={styles.logoMark} />
             <span className={styles.accent}>the</span>bookdex
           </span>
           <button onClick={onClose} className={styles.close} aria-label="Close menu">
