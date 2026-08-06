@@ -86,15 +86,40 @@ catch (e) { console.warn('  seed_house skipped:', e?.message || e); }
 const REQUOTE_BPS = Number(process.env.REQUOTE_BPS ?? 20); // 0.20%
 const lastMid = {}; // asset -> micro mid we last quoted around
 
+// Submit many calls in one shot with EXPLICIT sequential nonces (base, base+1, …).
+// Awaiting `response()` per tx doesn't stop bursts from colliding (the account nonce
+// isn't pool-aware between rapid sends → "Priority is too low" / "Transaction is
+// outdated"). Pinning each tx to its own nonce, fetched once, is collision-proof for a
+// single signer. Calls execute in nonce order, so cancels (added first) run before the
+// re-posts that reuse the freed balance. Returns {ok, fail, firstErr}.
+async function submitBatch(calls) {
+  if (calls.length === 0) return { ok: 0, fail: 0, firstErr: null };
+  const base = (await book.api.rpc.system.accountNextIndex(book.address)).toNumber();
+  const results = await Promise.allSettled(calls.map(async (c, i) => {
+    const tx = book.sails.services[c.service].functions[c.fn](...c.args);
+    tx.withAccount(book.account, { nonce: base + i });
+    await tx.calculateGas(true);
+    const { response } = await tx.signAndSend();
+    const v = await response();
+    if (v && typeof v === 'object' && 'err' in v) throw new Error(JSON.stringify(v.err));
+    return v;
+  }));
+  let ok = 0, fail = 0, firstErr = null;
+  for (const r of results) {
+    if (r.status === 'fulfilled') ok++;
+    else { fail++; if (!firstErr) firstErr = r.reason?.message || String(r.reason); }
+  }
+  return { ok, fail, firstErr };
+}
+
 async function tick() {
   const p = await usdPrices();
-  // 1) push marks (micro-dollars) — one tx, every loop.
-  await book.setMarks(micros(p.btc), micros(p.eth), micros(p.vara));
-
-  // 2) requote per asset, but only the assets whose mark actually moved (or that
-  //    have no resting orders yet). Cancel just that asset's orders, then re-ladder.
   const mine = await book.myOrders().catch(() => []);
   const orders = Array.isArray(mine) ? mine : [];
+
+  // Build one batch: the mark push, then per-asset cancel+repost for assets that moved
+  // (or have no resting orders yet). Everything shares one contiguous nonce range.
+  const calls = [{ service: 'Perps', fn: 'SetMarkPrices', args: [micros(p.btc), micros(p.eth), micros(p.vara)] }];
   const requoted = [];
   for (const a of ASSETS) {
     const usd = p[a.toLowerCase()];
@@ -103,20 +128,23 @@ async function tick() {
     const own = orders.filter((o) => String(o[2]) === a); // o[2] = asset
     const prev = lastMid[a];
     const moved = !prev || Math.abs(mid - prev) / prev > REQUOTE_BPS / 10_000;
-    if (own.length > 0 && !moved) continue; // still good — leave the ladder resting
+    if (own.length > 0 && !moved) continue; // ladder still good — leave it resting
 
-    for (const o of own) { try { await book.cancelOrder(o[0]); } catch { /* gone */ } }
+    for (const o of own) calls.push({ service: 'Orderbook', fn: 'CancelOrder', args: [o[0]] });
     for (const { bps, size } of LADDER) {
       const spread = Math.max(1, Math.round((mid * bps) / 10_000));
-      try { await book.placeLimit(Side.Sell, Asset[a], mid + spread, book.qty(size)); } catch { /* skip */ }
+      calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Sell, Asset[a], mid + spread, book.qty(size)] });
       const bid = mid - spread;
-      if (bid >= 1) { try { await book.placeLimit(Side.Buy, Asset[a], bid, book.qty(size)); } catch { /* skip */ } }
+      if (bid >= 1) calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Buy, Asset[a], bid, book.qty(size)] });
     }
     lastMid[a] = mid;
     requoted.push(a);
   }
+
+  const { ok, fail, firstErr } = await submitBatch(calls);
   const rq = requoted.length ? `requoted ${requoted.join(',')}` : 'quotes steady';
-  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${p.btc} ETH $${p.eth} VARA $${p.vara}  ·  ${rq}`);
+  const errNote = fail ? `  ✗ ${fail} failed (${firstErr})` : '';
+  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${Math.round(p.btc)} ETH $${Math.round(p.eth)} VARA $${p.vara}  ·  ${rq}  ·  ${ok}/${calls.length} tx ok${errNote}`);
 }
 
 let running = true;
