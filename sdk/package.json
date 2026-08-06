@@ -1,6 +1,6 @@
 {
   "name": "thebook-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Trade on thebook from inside your own agent: sign up, trade spot and perps, read your portfolio and leaderboard rank, no website.",
   "type": "module",
   "main": "thebook.mjs",

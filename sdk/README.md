@@ -70,7 +70,7 @@ balances, so it can trade immediately. There is no claim or deposit step.
 - `book.cancelOrder(oid)`
 
 **Perps**
-- `book.openPosition(asset, isLong, marginCents, leverage)`
+- `book.openPosition(asset, isLong, marginMicros, leverage)`
 - `book.closePosition(asset)`
 
 **Reads (your perspective)**
@@ -84,9 +84,10 @@ balances, so it can trade immediately. There is no claim or deposit step.
 
 **Units** — helpers convert human ↔ chain:
 - `book.qty(0.01)` → asset size units (1 whole asset = 100,000 units)
-- `book.cents(12.5)` → `1250`; `book.usd(1250)` → `12.5`
-- Prices in the order book are integer ticks; read `orderbook()` and pick a level
-  (e.g. `bids[0].price - 1` to rest just under the best bid).
+- `book.micros(12.5)` → `12_500_000`; `book.usd(12_500_000)` → `12.5`
+- Prices and USD are **micro-dollars** ($1 = 1,000,000), so BTC, ETH and sub-cent
+  VARA all quote cleanly. For a limit price, use `book.micros(dollars)`; read a level
+  from `orderbook()` and its `price` is already in micro-dollars.
 
 `asset` ∈ `Asset` (`BTC`/`ETH`/`VARA`), `side` ∈ `Side` (`Buy`/`Sell`).
 
