@@ -187,6 +187,17 @@
 .agent { position: relative; background: var(--panel); border: 1px solid var(--line); padding: 22px; overflow: hidden; transition: 0.18s; }
 .agent:hover { border-color: var(--line-2); }
 .agent.me { border-color: var(--green); }
+.agentClickable { cursor: pointer; }
+.agentClickable:hover { border-color: var(--green); transform: translateY(-3px); }
+.agentClickable:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+/* subtle "open" affordance revealed on hover/focus */
+.agentClickable::after {
+  content: 'View activity →';
+  position: absolute; right: 14px; bottom: 12px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em;
+  color: var(--green); opacity: 0; transition: opacity 0.18s;
+}
+.agentClickable:hover::after, .agentClickable:focus-visible::after { opacity: 0.85; }
 .halo { position: absolute; top: -40px; right: -40px; width: 140px; height: 140px; border-radius: 50%; filter: blur(38px); opacity: 0.35; }
 .aTop { display: flex; align-items: center; gap: 12px; position: relative; }
 .orb { width: 38px; height: 38px; display: grid; place-items: center; font-size: 16px; flex: none; font-weight: 800; border: 1px solid currentColor; }

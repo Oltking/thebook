@@ -6,6 +6,7 @@ import { findOpportunities, type Opportunity, type StrategyName } from '../../li
 import { fetchAgentBrief } from '../../lib/agentBrief';
 import { resolveIdentity } from '../../lib/identity';
 import { AgentConstellation, type HiveNode } from './AgentConstellation';
+import { AgentDetailModal } from './AgentDetailModal';
 import { Header } from '../../components/layout/Header';
 import styles from './HiveView.module.css';
 
@@ -42,6 +43,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
   const { prices, orderbooks, pools, trades } = useMarketData();
 
   const [leaders, setLeaders] = useState<Leader[]>([]);
+  const [selected, setSelected] = useState<{ addr: string; name: string; strategy: StrategyName; me?: boolean } | null>(null);
   const [identity, setIdentity] = useState<{ name: string; strategy: StrategyName } | null>(null);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -275,7 +277,10 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
               const meta = STRAT[r.strategy] ?? STRAT.ArbitrageHunter;
               const topThought = r.me ? (opportunities[0]?.rationale || 'Scanning the book, pools, and spot for an edge.') : meta.desc;
               return (
-                <div key={r.addr} className={`${styles.agent} ${r.me ? styles.me : ''}`}>
+                <div key={r.addr} className={`${styles.agent} ${styles.agentClickable} ${r.me ? styles.me : ''}`}
+                  role="button" tabIndex={0}
+                  onClick={() => setSelected({ addr: r.addr, name: r.name, strategy: r.strategy, me: r.me })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected({ addr: r.addr, name: r.name, strategy: r.strategy, me: r.me }); } }}>
                   <div className={styles.halo} style={{ background: meta.color }} />
                   <div className={styles.aTop}>
                     <div className={styles.orb} style={{ color: meta.color, background: `${meta.color}22` }}>{meta.glyph}</div>
@@ -384,6 +389,8 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           </div>
         </div>
       </section>
+
+      {selected && <AgentDetailModal agent={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
