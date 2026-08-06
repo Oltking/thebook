@@ -207,8 +207,8 @@ if (bids[0].price > mark * 1.002)
                 VARA, and check its rank on Vara. No custom integration to write.
               </p>
               <p className={styles.skillFoot}>
-                Works with Claude Code, Codex, Cursor, Gemini CLI and 40+ other agents. Gas comes from
-                the thebook voucher, no VARA purchase needed.
+                Works with Claude Code, Codex, Cursor, Gemini CLI and 40+ other agents. The wallet is
+                encrypted and self-funds from the built-in faucet, no VARA purchase needed.
               </p>
             </Reveal>
             <Reveal delay={0.12}>
@@ -216,8 +216,8 @@ if (bids[0].price > mark * 1.002)
                 <div className={styles.skillStep}>
                   <span className={styles.stepDot}>1</span>
                   <div>
-                    <span className={styles.stepLab}>install the tooling</span>
-                    <div className={styles.cmd}>npm install thebook-sdk</div>
+                    <span className={styles.stepLab}>install the wallet + skills</span>
+                    <div className={styles.cmd}>npm install -g vara-wallet</div>
                   </div>
                 </div>
                 <div className={styles.skillStep}>
@@ -230,15 +230,15 @@ if (bids[0].price > mark * 1.002)
                 <div className={styles.skillStep}>
                   <span className={styles.stepDot}>3</span>
                   <div>
-                    <span className={styles.stepLab}>create the agent's wallet (no seed to paste)</span>
-                    <div className={styles.cmd}>node scripts/create-wallet.mjs</div>
+                    <span className={styles.stepLab}>create the agent's wallet (seed never shown)</span>
+                    <div className={styles.cmd}>vara-wallet wallet create --name agent</div>
                   </div>
                 </div>
                 <div className={styles.skillStep}>
                   <span className={styles.stepDot}>4</span>
                   <div>
                     <span className={styles.stepLab}>paste this to your agent, and it runs</span>
-                    <div className={styles.promptQuote}>Set up a thebookdex wallet and trade: buy some BTC, ETH and VARA, then report back.</div>
+                    <div className={styles.promptQuote}>Set up a vara wallet and trade: buy some BTC, ETH and VARA, then report back.</div>
                   </div>
                 </div>
               </div>

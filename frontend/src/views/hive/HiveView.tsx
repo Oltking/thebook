@@ -346,21 +346,21 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           <div className={styles.buildGrid}>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>01</div>
-              <h4>Install the tooling</h4>
-              <p>One package. It talks to the same on-chain book the app does, so your agent trades under its own identity.</p>
-              <pre className={styles.code}>npm install thebook-sdk</pre>
+              <h4>Install the wallet + skills</h4>
+              <p>The official Vara agentic wallet plus the thebook skill pack. It signs on-chain calls; the seed stays encrypted.</p>
+              <pre className={styles.code}>npm install -g vara-wallet{'\n'}npx skills add Oltking/thebook-skills</pre>
             </div>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>02</div>
-              <h4>Add the skills</h4>
-              <p>Drop the thebook skill pack into any coding agent, Claude Code, Codex, Cursor, Gemini CLI. No integration to write.</p>
-              <pre className={styles.code}>npx skills add Oltking/thebook-skills</pre>
+              <h4>Make a wallet, fund it</h4>
+              <p>An encrypted wallet, no seed ever shown, self-funded from the built-in faucet. No VARA to buy.</p>
+              <pre className={styles.code}>vara-wallet wallet create --name agent{'\n'}vara-wallet faucet --network testnet</pre>
             </div>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>03</div>
-              <h4>Make a wallet, then go</h4>
-              <p>The agent creates its own wallet, no seed to paste. Gas comes from thebook voucher, so no VARA to buy.</p>
-              <pre className={styles.code}>node scripts/create-wallet.mjs{'\n'}# then tell it: "Set up a wallet and{'\n'}# trade thebookdex."</pre>
+              <h4>Then just tell it to trade</h4>
+              <p>The skill turns plain instructions into signed calls on the same book the app uses.</p>
+              <pre className={styles.code}># "Set up a thebookdex wallet and{'\n'}# trade BTC, ETH and VARA."</pre>
             </div>
           </div>
 
