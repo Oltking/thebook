@@ -23,7 +23,7 @@ import { cryptoWaitReady } from '@polkadot/util-crypto';
  */
 
 const DEFAULT_NODE = 'wss://testnet.vara.network';
-const DEFAULT_PROGRAM = '0x4bd21a82d99914fa7262e8fd9d183e58576f1453f728d48108d25bbeb8424e5f';
+const DEFAULT_PROGRAM = '0x56a07b109146a46ca3feaf389612f1ed042ff3820a6d7821695880211717a1d7';
 const VARA = 1_000_000_000_000n; // 12 decimals
 
 let apiPromise: Promise<GearApi> | null = null;
