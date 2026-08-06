@@ -257,34 +257,29 @@
 @media (prefers-reduced-motion: reduce) { .aura { animation: none; } }
 .connect .wrap { position: relative; z-index: 1; }
 
-.paths { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-@media (max-width: 980px) { .paths { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 660px) { .paths { grid-template-columns: 1fr; } }
-.path {
-  display: flex; flex-direction: column; gap: 14px;
-  background: color-mix(in srgb, var(--card-bg) 82%, transparent);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border-color); padding: 24px;
+/* Skill-pack band: headline left, numbered install steps right. */
+.skillBand { margin-top: 34px; display: grid; grid-template-columns: 1.02fr 1.18fr; gap: 48px; align-items: center; }
+@media (max-width: 900px) { .skillBand { grid-template-columns: 1fr; gap: 30px; } }
+.skillFoot { margin-top: 20px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; max-width: 46ch; }
+.skillSteps { display: flex; flex-direction: column; gap: 14px; }
+.skillStep { display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: center; }
+.stepDot {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.path:hover { border-color: color-mix(in srgb, var(--cyan) 60%, var(--border-strong)); }
-.pathHead { display: flex; align-items: center; gap: 12px; }
-.pathHead h3 { font-family: var(--font-mono); font-size: 19px; text-transform: uppercase; margin: 0; }
-.pathTag {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
-  padding: 4px 9px; color: var(--on-accent);
-  background: linear-gradient(120deg, var(--cyan), var(--accent));
+.stepLab {
+  display: block; margin-bottom: 7px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-tertiary, var(--text-secondary));
 }
-.pathTagAlt { background: linear-gradient(120deg, var(--amber), var(--lime)); color: #14210a; }
-.pathTagSkill { background: linear-gradient(120deg, var(--accent), var(--amber)); color: var(--on-accent); }
-.pathText { color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin: 0; }
+.stepPlain { color: var(--text-main); font-size: 15px; line-height: 1.5; }
 .cmd {
   font-family: var(--font-mono); font-size: 13px; color: var(--text-main);
   background: var(--code-bg); border: 1px solid var(--border-color); border-left: 2px solid var(--cyan);
   padding: 11px 14px; overflow-x: auto; white-space: nowrap;
-}
-.pathHint {
-  font-family: var(--font-mono); font-size: 12.5px; color: var(--lime); margin: 0;
-  border-left: 2px solid color-mix(in srgb, var(--lime) 60%, transparent); padding-left: 12px; line-height: 1.5;
 }
 
 /* final CTA */
