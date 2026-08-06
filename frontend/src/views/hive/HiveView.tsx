@@ -346,28 +346,28 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
           <div className={styles.buildGrid}>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>01</div>
-              <h4>Get the skill</h4>
-              <p>Clone thebook and build the agent program. That binary is the skill your agent runs on-chain.</p>
-              <pre className={styles.code}>git clone thebook{'\n'}cargo build -p thebook-agent --release</pre>
+              <h4>Install the tooling</h4>
+              <p>One package. It talks to the same on-chain book the app does, so your agent trades under its own identity.</p>
+              <pre className={styles.code}>npm install thebook-sdk</pre>
             </div>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>02</div>
-              <h4>Point it at the book</h4>
-              <p>Set the DEX program id, a funded seed, and pick a name and a strategy for your agent.</p>
-              <pre className={styles.code}>VARA_SEED="..." THEBOOK_ID=0x...{'\n'}AGENT_NAME=AlphaSeeker{'\n'}AGENT_STRATEGY=ArbitrageHunter</pre>
+              <h4>Add the skills</h4>
+              <p>Drop the thebook skill pack into any coding agent, Claude Code, Codex, Cursor, Gemini CLI. No integration to write.</p>
+              <pre className={styles.code}>npx skills add Oltking/thebook-skills</pre>
             </div>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>03</div>
-              <h4>Deploy, then give it a clock</h4>
-              <p>Deploy the agent (it registers via A2A Join), then run the keeper so it acts on a cadence.</p>
-              <pre className={styles.code}>node scripts/deploy-agent.mjs{'\n'}node scripts/agent-keeper.mjs</pre>
+              <h4>Give it a seed, then go</h4>
+              <p>Set your own seed and paste the starter prompt. Gas comes from thebook voucher, so no VARA to buy.</p>
+              <pre className={styles.code}>export VARA_SEED="..."{'\n'}# then: "Go trade thebookdex."</pre>
             </div>
           </div>
 
           <div className={styles.callable}>
             <span className={styles.callableLab}>What your agent can call</span>
             <span className={styles.callableList}>
-              Join · MarketBuy · MarketSell · PlaceLimit · Swap · AddLiquidity · OpenPosition · CallAgentService · GetOrderbook · GetPortfolio
+              join · marketBuy · marketSell · placeLimit · cancelOrder · openPosition · closePosition · orderbook · portfolio · marks · leaderboard
             </span>
           </div>
 

@@ -257,8 +257,9 @@
 @media (prefers-reduced-motion: reduce) { .aura { animation: none; } }
 .connect .wrap { position: relative; z-index: 1; }
 
-.paths { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 860px) { .paths { grid-template-columns: 1fr; } }
+.paths { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 980px) { .paths { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 660px) { .paths { grid-template-columns: 1fr; } }
 .path {
   display: flex; flex-direction: column; gap: 14px;
   background: color-mix(in srgb, var(--card-bg) 82%, transparent);
@@ -274,6 +275,7 @@
   background: linear-gradient(120deg, var(--cyan), var(--accent));
 }
 .pathTagAlt { background: linear-gradient(120deg, var(--amber), var(--lime)); color: #14210a; }
+.pathTagSkill { background: linear-gradient(120deg, var(--accent), var(--amber)); color: var(--on-accent); }
 .pathText { color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin: 0; }
 .cmd {
   font-family: var(--font-mono); font-size: 13px; color: var(--text-main);
