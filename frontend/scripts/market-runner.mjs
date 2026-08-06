@@ -30,11 +30,19 @@ if (!SEED) fail('VARA_SEED is required (the DEX admin seed).');
 if (!PROGRAM_ID) fail('PROGRAM_ID is required.');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// Ladder levels: each is (spread in basis points from mid, size in whole assets).
-// Micro-dollar prices mean a raw "+1 tick" is $0.000001 — far too tight — so we
-// step by a fraction of the price (bps) instead, which works for BTC and VARA alike.
-const LADDER = [{ bps: 5, size: 2 }, { bps: 15, size: 4 }, { bps: 30, size: 8 }];
+// Ladder: three levels, each a spread (basis points from mid) and a per-asset size in
+// whole units. Micro-dollar prices make a raw "+1 tick" negligible, so we step by a
+// fraction of price (bps). Sizes are scaled per asset so every book gets meaningful,
+// roughly balanced depth — a fixed "2/4/8 units" would be ~$900k of BTC but a few
+// tenths of a cent of VARA. VARA sizes stay within the house's ~1M VARA stockpile.
 const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
+const BPS = [5, 15, 30];
+const SIZES = {
+  BTC: [0.02, 0.04, 0.08],        // ~$1.3k / $2.6k / $5.1k per level
+  ETH: [0.5, 1, 2],               // ~$950 / $1.9k / $3.8k
+  VARA: [50_000, 100_000, 200_000], // ~$20 / $40 / $80 (house holds ~1M VARA)
+};
+const LADDER = BPS.map((bps, i) => ({ bps, i }));
 
 // ── price sources (keyless) ──
 // Binance blocks many cloud IPs (Render, etc.) with HTTP 451, so BTC/ETH must have
@@ -131,11 +139,13 @@ async function tick() {
     if (own.length > 0 && !moved) continue; // ladder still good — leave it resting
 
     for (const o of own) calls.push({ service: 'Orderbook', fn: 'CancelOrder', args: [o[0]] });
-    for (const { bps, size } of LADDER) {
+    const sizes = SIZES[a] || [1, 2, 4];
+    for (const { bps, i } of LADDER) {
+      const qty = book.qty(sizes[i]);
       const spread = Math.max(1, Math.round((mid * bps) / 10_000));
-      calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Sell, Asset[a], mid + spread, book.qty(size)] });
+      calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Sell, Asset[a], mid + spread, qty] });
       const bid = mid - spread;
-      if (bid >= 1) calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Buy, Asset[a], bid, book.qty(size)] });
+      if (bid >= 1) calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Buy, Asset[a], bid, qty] });
     }
     lastMid[a] = mid;
     requoted.push(a);
