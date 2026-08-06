@@ -177,10 +177,12 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
     for (const a of ['BTC', 'ETH', 'VARA'] as const) {
       for (const tr of (trades[a] || []).slice(0, 4)) {
         const px = Number(tr.price) / 1e6;
+        // Sub-cent assets like VARA round to $0 at 2dp — show more precision for them.
+        const pxStr = px.toLocaleString(undefined, { maximumFractionDigits: a === 'VARA' ? 6 : 2 });
         fills.push({
           t: tr.time || '',
           kind: 'trade',
-          text: `Filled ${(Number(tr.qty) / 1e5).toFixed(4)} ${a} at $${px.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+          text: `Filled ${(Number(tr.qty) / 1e5).toFixed(4)} ${a} at $${pxStr}`,
         });
       }
     }
