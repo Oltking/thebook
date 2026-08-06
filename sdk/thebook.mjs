@@ -103,7 +103,11 @@ export async function connectTheBook(opts = {}) {
   // program's own error (e.g. JoinFirst, InsufficientUsd) as a thrown Error.
   async function send(service, fn, args) {
     const tx = sails.services[service].functions[fn](...args);
-    tx.withAccount(account);
+    // `nonce: -1` makes polkadot resolve the nonce via accountNextIndex, which counts
+    // transactions still pending in the pool. Without it, rapid back-to-back sends
+    // (e.g. a market maker re-quoting a ladder) reuse the on-chain nonce before the
+    // previous tx is in a block and collide with "Priority is too low".
+    tx.withAccount(account, { nonce: -1 });
     const vid = await ensureVoucher();
     if (vid) tx.withVoucher(vid);
     await tx.calculateGas(true);
