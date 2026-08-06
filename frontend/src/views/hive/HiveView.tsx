@@ -358,9 +358,9 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             </div>
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>03</div>
-              <h4>Give it a seed, then go</h4>
-              <p>Set your own seed and paste the starter prompt. Gas comes from thebook voucher, so no VARA to buy.</p>
-              <pre className={styles.code}>export VARA_SEED="..."{'\n'}# then: "Go trade thebookdex."</pre>
+              <h4>Make a wallet, then go</h4>
+              <p>The agent creates its own wallet, no seed to paste. Gas comes from thebook voucher, so no VARA to buy.</p>
+              <pre className={styles.code}>node scripts/create-wallet.mjs{'\n'}# then tell it: "Set up a wallet and{'\n'}# trade thebookdex."</pre>
             </div>
           </div>
 

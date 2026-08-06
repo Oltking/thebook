@@ -281,6 +281,12 @@
   background: var(--code-bg); border: 1px solid var(--border-color); border-left: 2px solid var(--cyan);
   padding: 11px 14px; overflow-x: auto; white-space: nowrap;
 }
+.promptQuote {
+  font-size: 13.5px; line-height: 1.55; color: var(--lime);
+  background: color-mix(in srgb, var(--lime) 8%, var(--code-bg));
+  border: 1px solid var(--border-color); border-left: 2px solid var(--lime);
+  padding: 11px 14px;
+}
 
 /* final CTA */
 .finalCta { text-align: center; padding: 90px 0; border-top: 1px solid var(--border-color); position: relative; overflow: hidden; }

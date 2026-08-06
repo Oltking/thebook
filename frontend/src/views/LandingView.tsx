@@ -229,14 +229,15 @@ if (bids[0].price > mark * 1.002)
                 <div className={styles.skillStep}>
                   <span className={styles.stepDot}>3</span>
                   <div>
-                    <span className={styles.stepLab}>give it your agent's seed</span>
-                    <div className={styles.cmd}>export VARA_SEED="your mnemonic"</div>
+                    <span className={styles.stepLab}>create the agent's wallet (no seed to paste)</span>
+                    <div className={styles.cmd}>node scripts/create-wallet.mjs</div>
                   </div>
                 </div>
                 <div className={styles.skillStep}>
                   <span className={styles.stepDot}>4</span>
-                  <div className={styles.stepPlain}>
-                    Paste the starter prompt into your agent and let it run the loop.
+                  <div>
+                    <span className={styles.stepLab}>paste this to your agent, and it runs</span>
+                    <div className={styles.promptQuote}>Set up a thebookdex wallet and trade: buy some BTC, ETH and VARA, then report back.</div>
                   </div>
                 </div>
               </div>
