@@ -327,6 +327,42 @@ async fn place_limit_sell_then_cancel() {
     assert_eq!(port.1, 100_000);
 }
 
+// Regression: cancelling must REMOVE the order from state, not just mark it Cancelled.
+// A market maker that re-quotes every move cancels constantly; if cancels left dead
+// entries behind, the MAX_OPEN_ORDERS (500) cap would fill with corpses and lock the
+// whole book into BookFull (which is exactly what took the live book down). Placing +
+// cancelling well past the cap must keep working, and leave the book empty at the end.
+#[tokio::test]
+async fn cancel_prunes_orders_no_bookfull() {
+    let (env, program) = deploy().await;
+    join_alice(&env, &program).await;
+
+    for _ in 0..560u32 {
+        let oid: u64 = orderbook_svc(&program)
+            .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 6_000_000, 1))
+            .await
+            .unwrap()
+            .unwrap();
+        let _: () = orderbook_svc(&program)
+            .pending_call::<ob_io::CancelOrder>((oid,))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    // The book is back to empty and still accepts orders after 560 place/cancel cycles.
+    let (_, _, orders_len, _, _): (u32, u64, u32, bool, u32) = orderbook_svc(&program)
+        .pending_call::<ob_io::GetStatus>(())
+        .await
+        .unwrap();
+    assert_eq!(orders_len, 0, "cancelled orders were not pruned from state");
+    let _: u64 = orderbook_svc(&program)
+        .pending_call::<ob_io::PlaceLimit>((Side::Sell, Asset::BTC, 6_000_000, 1))
+        .await
+        .unwrap()
+        .unwrap();
+}
+
 #[tokio::test]
 async fn market_buy_fills_sell_order() {
     let (env, program) = deploy().await;

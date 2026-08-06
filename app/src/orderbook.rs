@@ -310,7 +310,7 @@ impl<'a> OrderbookService<'a> {
         }
 
         st.orders
-            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+            .retain(|o| !matches!(o.status, OrderStatus::Filled | OrderStatus::Cancelled));
 
         if rem > 0 {
             st.orders.push(Order {
@@ -371,7 +371,11 @@ impl<'a> OrderbookService<'a> {
                 Side::Sell => add_asset(ag, asset, rem),
             }
         }
-        st.orders[pos].status = OrderStatus::Cancelled;
+        // Remove the order outright rather than just marking it Cancelled. A marked
+        // order still occupies a slot in `orders`, so a cancel-heavy client (the house
+        // market maker re-quoting every move) would fill the MAX_OPEN_ORDERS cap with
+        // dead entries and lock the whole book into BookFull.
+        st.orders.remove(pos);
 
         self.emit_event(OrderbookEvent::OrderCancelled(OrderCancelledEvent {
             trader: caller,
@@ -475,7 +479,7 @@ impl<'a> OrderbookService<'a> {
         add_asset(st.agents.get_mut(&caller).unwrap(), asset, filled);
 
         st.orders
-            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+            .retain(|o| !matches!(o.status, OrderStatus::Filled | OrderStatus::Cancelled));
 
         trim_trades(&mut st);
         Ok(format!("Bought {} {} for {}", filled, asset.name(), cost))
@@ -572,7 +576,7 @@ impl<'a> OrderbookService<'a> {
         st.agents.get_mut(&caller).unwrap().usd += rev;
 
         st.orders
-            .retain(|o| o.status != OrderStatus::Filled || o.filled < o.qty);
+            .retain(|o| !matches!(o.status, OrderStatus::Filled | OrderStatus::Cancelled));
 
         trim_trades(&mut st);
         Ok(format!("Sold {} {} for {}", filled, asset.name(), rev))
