@@ -80,25 +80,43 @@ await book.join('House', Strategy.MarketMaker);
 try { console.log('  house stockpile:', await book.seedHouse()); }
 catch (e) { console.warn('  seed_house skipped:', e?.message || e); }
 
+// Only requote an asset when its mark moves past this fraction, so a quiet market
+// costs ~1 tx/loop (just the mark push) instead of a full cancel+repost every loop.
+// Cutting the transaction rate is what keeps us under the testnet's nonce/pool limits.
+const REQUOTE_BPS = Number(process.env.REQUOTE_BPS ?? 20); // 0.20%
+const lastMid = {}; // asset -> micro mid we last quoted around
+
 async function tick() {
   const p = await usdPrices();
-  // 1) push marks (micro-dollars). VARA now carries full precision.
+  // 1) push marks (micro-dollars) — one tx, every loop.
   await book.setMarks(micros(p.btc), micros(p.eth), micros(p.vara));
-  // 2) requote: clear our resting orders, then re-ladder both sides.
+
+  // 2) requote per asset, but only the assets whose mark actually moved (or that
+  //    have no resting orders yet). Cancel just that asset's orders, then re-ladder.
   const mine = await book.myOrders().catch(() => []);
-  for (const o of Array.isArray(mine) ? mine : []) { try { await book.cancelOrder(o[0]); } catch { /* gone */ } }
+  const orders = Array.isArray(mine) ? mine : [];
+  const requoted = [];
   for (const a of ASSETS) {
     const usd = p[a.toLowerCase()];
     if (!usd || usd <= 0) continue;
-    const mid = micros(usd); // price in micro-dollars
+    const mid = micros(usd);
+    const own = orders.filter((o) => String(o[2]) === a); // o[2] = asset
+    const prev = lastMid[a];
+    const moved = !prev || Math.abs(mid - prev) / prev > REQUOTE_BPS / 10_000;
+    if (own.length > 0 && !moved) continue; // still good — leave the ladder resting
+
+    for (const o of own) { try { await book.cancelOrder(o[0]); } catch { /* gone */ } }
     for (const { bps, size } of LADDER) {
       const spread = Math.max(1, Math.round((mid * bps) / 10_000));
       try { await book.placeLimit(Side.Sell, Asset[a], mid + spread, book.qty(size)); } catch { /* skip */ }
       const bid = mid - spread;
       if (bid >= 1) { try { await book.placeLimit(Side.Buy, Asset[a], bid, book.qty(size)); } catch { /* skip */ } }
     }
+    lastMid[a] = mid;
+    requoted.push(a);
   }
-  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${p.btc} ETH $${p.eth} VARA $${p.vara}  ·  quoted ${ASSETS.join(',')}`);
+  const rq = requoted.length ? `requoted ${requoted.join(',')}` : 'quotes steady';
+  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${p.btc} ETH $${p.eth} VARA $${p.vara}  ·  ${rq}`);
 }
 
 let running = true;
