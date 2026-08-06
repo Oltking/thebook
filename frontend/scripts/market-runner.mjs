@@ -36,22 +36,37 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LADDER = [{ bps: 5, size: 2 }, { bps: 15, size: 4 }, { bps: 30, size: 8 }];
 const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
 
-// ── price sources (keyless, CORS-free in Node) ──
+// ── price sources (keyless) ──
+// Binance blocks many cloud IPs (Render, etc.) with HTTP 451, so BTC/ETH must have
+// non-Binance fallbacks or their marks/quotes silently drop to 0. Each asset tries a
+// chain of sources and takes the first that returns a positive price.
+const asFloat = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+async function firstPrice(sources) {
+  for (const src of sources) {
+    try { const p = await src(); if (p > 0) return p; } catch { /* try next */ }
+  }
+  return 0;
+}
+const binance = (sym) => async () => {
+  const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
+  return asFloat((await r.json())?.price);
+};
+const paprika = (id) => async () => {
+  const r = await fetch(`https://api.coinpaprika.com/v1/tickers/${id}`);
+  return asFloat((await r.json())?.quotes?.USD?.price);
+};
+const coingecko = (id) => async () => {
+  const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+  return asFloat((await r.json())?.[id]?.usd);
+};
+
 async function usdPrices() {
-  const out = { btc: 0, eth: 0, vara: 0 };
-  try {
-    const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22%5D');
-    for (const row of await r.json()) {
-      if (row.symbol === 'BTCUSDT') out.btc = parseFloat(row.price);
-      if (row.symbol === 'ETHUSDT') out.eth = parseFloat(row.price);
-    }
-  } catch { /* leave 0 */ }
-  try {
-    const r = await fetch('https://api.coinpaprika.com/v1/tickers/vara-vara-network');
-    const p = (await r.json())?.quotes?.USD?.price;
-    if (p) out.vara = p;
-  } catch { /* leave 0 */ }
-  return out;
+  const [btc, eth, vara] = await Promise.all([
+    firstPrice([binance('BTCUSDT'), paprika('btc-bitcoin'), coingecko('bitcoin')]),
+    firstPrice([binance('ETHUSDT'), paprika('eth-ethereum'), coingecko('ethereum')]),
+    firstPrice([paprika('vara-vara-network'), coingecko('vara-network')]),
+  ]);
+  return { btc, eth, vara };
 }
 const micros = (usd) => Math.round(usd * MICRO);
 
