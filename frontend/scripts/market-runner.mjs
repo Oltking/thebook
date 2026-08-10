@@ -36,6 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // roughly balanced depth — a fixed "2/4/8 units" would be ~$900k of BTC but a few
 // tenths of a cent of VARA. VARA sizes stay within the house's ~1M VARA stockpile.
 const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
+const ASSET_UNIT = 100_000; // on-chain qty unit: 1 whole asset = 1e5
 const BPS = [5, 15, 30];
 const SIZES = {
   BTC: [0.02, 0.04, 0.08],        // ~$1.3k / $2.6k / $5.1k per level
@@ -124,25 +125,64 @@ async function tick() {
   const p = await usdPrices();
   const mine = await book.myOrders().catch(() => []);
   const orders = Array.isArray(mine) ? mine : [];
+  // House balances, to clamp what the mark-cross keeper can take (whole units).
+  const port = await book.portfolio().catch(() => ({ usd: 0, btc: 0, eth: 0, vara: 0 }));
 
-  // Build one batch: the mark push, then per-asset cancel+repost for assets that moved
-  // (or have no resting orders yet). Everything shares one contiguous nonce range.
+  // Build one batch: the mark push, then per-asset (mark-cross sweep + cancel+repost)
+  // for assets that moved, are thin, or have user orders the mark just crossed.
+  // Everything shares one contiguous nonce range and executes in push order.
   const calls = [{ service: 'Perps', fn: 'SetMarkPrices', args: [micros(p.btc), micros(p.eth), micros(p.vara)] }];
   const requoted = [];
+  const swept = [];
   for (const a of ASSETS) {
     const usd = p[a.toLowerCase()];
     if (!usd || usd <= 0) continue;
     const mid = micros(usd);
-    const own = orders.filter((o) => String(o[2]) === a); // o[2] = asset
+    // o = (id, side, asset, price, qty, filled, status)
+    const own = orders.filter((o) => String(o[2]) === a);
     const prev = lastMid[a];
     const moved = !prev || Math.abs(mid - prev) / prev > REQUOTE_BPS / 10_000;
-    // Refill when the mark moved OR the ladder isn't full (a fill swept part of it).
-    // Without the incompleteness check, a partially-filled book would sit thin until
-    // the next price move — exactly how VARA ended up with almost no depth.
-    const full = own.length >= 2 * LADDER.length;
-    if (full && !moved) continue; // ladder intact — leave it resting
 
+    // ── mark-cross keeper ────────────────────────────────────────────────
+    // A resting spot limit only fills when a counterparty crosses it; the mark
+    // ticking through its price is not a trade. So the house acts as taker of
+    // last resort: any USER order the mark has crossed (a buy at/above the new
+    // mark, a sell at/below it) gets filled by the house at the user's own
+    // limit price — because a crossed fill settles at the resting order's price.
+    // We fill only the user portion: the house's own resting orders are cancelled
+    // in the requote below, so sizing the sweep to (book crossed − own crossed)
+    // leaves exactly the user depth for the house's single crossing order to take.
+    const rem = (o) => Number(o[4]) - Number(o[5]);
+    const ownBuyX = own.filter((o) => String(o[1]) === 'Buy' && Number(o[3]) >= mid).reduce((s, o) => s + rem(o), 0);
+    const ownSellX = own.filter((o) => String(o[1]) === 'Sell' && Number(o[3]) <= mid).reduce((s, o) => s + rem(o), 0);
+    const ob = await book.orderbook(a).catch(() => ({ bids: [], asks: [] }));
+    const bookBuyX = ob.bids.filter((l) => l.price >= mid).reduce((s, l) => s + l.qty, 0);
+    const bookSellX = ob.asks.filter((l) => l.price <= mid).reduce((s, l) => s + l.qty, 0);
+    const assetRaw = Math.floor(Number(port[a.toLowerCase()] || 0) * ASSET_UNIT); // house asset to sell
+    const usdRaw = Math.floor(Number(port.usd || 0) * MICRO); // house usd to buy
+    const userBuyX = Math.min(Math.max(0, bookBuyX - ownBuyX), assetRaw); // house SELLS to these buyers
+    const usdBuyCap = Math.floor((usdRaw / mid) * ASSET_UNIT); // asset units the house's usd can buy at mid
+    const userSellX = Math.min(Math.max(0, bookSellX - ownSellX), usdBuyCap); // house BUYS from these sellers
+    const needSweep = userBuyX > 0 || userSellX > 0;
+
+    // Refill when the mark moved, the ladder is thin (a fill swept part of it), or
+    // there are user orders to sweep. Otherwise leave the resting ladder alone.
+    const full = own.length >= 2 * LADDER.length;
+    if (full && !moved && !needSweep) continue;
+
+    // Cancel the house's own resting orders first, so the crossing sweep below
+    // only reaches user orders (not the house trading with itself).
     for (const o of own) calls.push({ service: 'Orderbook', fn: 'CancelOrder', args: [o[0]] });
+
+    if (userBuyX > 0) {
+      calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Sell, Asset[a], mid, userBuyX] });
+      swept.push(`${a} sell ${userBuyX}`);
+    }
+    if (userSellX > 0) {
+      calls.push({ service: 'Orderbook', fn: 'PlaceLimit', args: [Side.Buy, Asset[a], mid, userSellX] });
+      swept.push(`${a} buy ${userSellX}`);
+    }
+
     const sizes = SIZES[a] || [1, 2, 4];
     for (const { bps, i } of LADDER) {
       const qty = book.qty(sizes[i]);
@@ -157,8 +197,9 @@ async function tick() {
 
   const { ok, fail, firstErr } = await submitBatch(calls);
   const rq = requoted.length ? `requoted ${requoted.join(',')}` : 'quotes steady';
+  const sw = swept.length ? `  ·  crossed ${swept.join(', ')}` : '';
   const errNote = fail ? `  ✗ ${fail} failed (${firstErr})` : '';
-  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${Math.round(p.btc)} ETH $${Math.round(p.eth)} VARA $${p.vara}  ·  ${rq}  ·  ${ok}/${calls.length} tx ok${errNote}`);
+  console.log(`  ✓ ${new Date().toISOString()}  marks BTC $${Math.round(p.btc)} ETH $${Math.round(p.eth)} VARA $${p.vara}  ·  ${rq}${sw}  ·  ${ok}/${calls.length} tx ok${errNote}`);
 }
 
 let running = true;
