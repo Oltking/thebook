@@ -45,6 +45,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Don't precache foreign chain-spec data the app never loads (Vara-only);
+        // these stay fetchable on demand but don't bloat the service-worker install.
+        globIgnores: [
+          '**/ksmcc3-*.js',
+          '**/westend2-*.js',
+          '**/rococo_v2_2-*.js',
+          '**/paseo-*.js',
+        ],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
