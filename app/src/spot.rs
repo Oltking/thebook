@@ -732,6 +732,6 @@ mod tests {
         assert_eq!(*st.claims.get(&(aid(1), aid(3))).unwrap(), 7);
         // Zero credit is a no-op (no phantom entry).
         st.credit(aid(4), aid(2), 0);
-        assert!(st.claims.get(&(aid(4), aid(2))).is_none());
+        assert!(!st.claims.contains_key(&(aid(4), aid(2))));
     }
 }
