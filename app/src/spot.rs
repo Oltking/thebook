@@ -667,3 +667,71 @@ pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
         Err(_) => false,
     }
 }
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn aid(n: u8) -> ActorId {
+        ActorId::from([n; 32])
+    }
+
+    #[test]
+    fn notional_scales_by_base_decimals() {
+        // 2 whole base (dec 5 => 200_000 units) at price 3 quote per whole = 6 quote.
+        assert_eq!(notional(3, 200_000, 5), 6);
+        // Fractional: 0.5 base at price 10 = 5.
+        assert_eq!(notional(10, 50_000, 5), 5);
+    }
+
+    #[test]
+    fn crossing_prefers_best_price_then_time() {
+        let mut st = SpotState::default();
+        // Three resting asks at prices 12, 10, 10 (ids 0,1,2).
+        for (id, price) in [(0u64, 12u128), (1, 10), (2, 10)] {
+            st.orders.push(SpotOrder {
+                id,
+                pair_id: 0,
+                trader: aid(9),
+                side: Side::Sell,
+                price,
+                qty: 100,
+                filled: 0,
+                status: SpotStatus::Open,
+            });
+        }
+        // A taker buy up to price 12 should hit 10(id1), 10(id2), then 12(id0).
+        let idxs = crossing_indices(&st, 0, Side::Buy, Some(12));
+        let ids: std::vec::Vec<u64> = idxs.iter().map(|&i| st.orders[i].id).collect();
+        assert_eq!(ids, std::vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn crossing_respects_limit_and_side() {
+        let mut st = SpotState::default();
+        st.orders.push(SpotOrder {
+            id: 0, pair_id: 0, trader: aid(9), side: Side::Sell,
+            price: 15, qty: 100, filled: 0, status: SpotStatus::Open,
+        });
+        // Buy limit 10 can't reach an ask at 15.
+        assert!(crossing_indices(&st, 0, Side::Buy, Some(10)).is_empty());
+        // Market buy (no limit) reaches it.
+        assert_eq!(crossing_indices(&st, 0, Side::Buy, None).len(), 1);
+    }
+
+    #[test]
+    fn credit_accumulates_per_user_token() {
+        let mut st = SpotState::default();
+        st.credit(aid(1), aid(2), 100);
+        st.credit(aid(1), aid(2), 50);
+        st.credit(aid(1), aid(3), 7);
+        assert_eq!(*st.claims.get(&(aid(1), aid(2))).unwrap(), 150);
+        assert_eq!(*st.claims.get(&(aid(1), aid(3))).unwrap(), 7);
+        // Zero credit is a no-op (no phantom entry).
+        st.credit(aid(4), aid(2), 0);
+        assert!(st.claims.get(&(aid(4), aid(2))).is_none());
+    }
+}

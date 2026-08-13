@@ -8,6 +8,7 @@ pub trait ThebookClient {
     fn orderbook(&self) -> sails_rs::client::Service<orderbook::OrderbookImpl, Self::Env>;
     fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env>;
     fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env>;
+    fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env>;
 }
 impl<E: sails_rs::client::GearEnv> ThebookClient
     for sails_rs::client::Actor<ThebookClientProgram, E>
@@ -21,6 +22,9 @@ impl<E: sails_rs::client::GearEnv> ThebookClient
     }
     fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env> {
         self.service(stringify!(Perps))
+    }
+    fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env> {
+        self.service(stringify!(Spot))
     }
 }
 pub trait ThebookClientCtors {
@@ -601,6 +605,191 @@ pub mod perps {
         }
     }
 }
+
+pub mod spot {
+    use super::*;
+    pub trait Spot {
+        type Env: sails_rs::client::GearEnv;
+        /// Cancel an open order and refund its unfilled escrow to the caller's claimable
+        /// balance (quote for a buy, base for a sell).
+        fn cancel_order(
+            &mut self,
+            order_id: u64,
+        ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env>;
+        /// Stop accepting new orders on a pair. Existing orders can still be cancelled and
+        /// proceeds withdrawn. Admin-only.
+        fn delist_pair(
+            &mut self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::DelistPair, Self::Env>;
+        /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet). `base_dec`
+        /// and `quote_dec` are the tokens' declared decimals; the caller supplies them so
+        /// listing stays synchronous (they are verifiable against each VFT's metadata).
+        fn list_pair(
+            &mut self,
+            base: ActorId,
+            quote: ActorId,
+            base_dec: u8,
+            quote_dec: u8,
+        ) -> sails_rs::client::PendingCall<io::ListPair, Self::Env>;
+        /// Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
+        /// the full budget up front, sweeps the asks cheapest-first, and refunds anything
+        /// unspent (including the whole budget if the book is empty) to the caller's claim.
+        /// Never rests. Requires a prior `approve` of `max_quote` on the quote token.
+        fn market_buy(
+            &mut self,
+            pair_id: u64,
+            qty: u128,
+            max_quote: u128,
+        ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env>;
+        /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
+        /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
+        /// Never rests. Requires a prior `approve` of `qty` on the base token.
+        fn market_sell(
+            &mut self,
+            pair_id: u128,
+            qty: u128,
+        ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env>;
+        /// Place a limit order. Escrows the caller's real tokens (a quote-token
+        /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
+        /// then crosses the book by price-time priority, crediting fills to claimable
+        /// balances. Any unfilled remainder rests. Reverts with no state change if the
+        /// escrow transfer fails.
+        fn place_limit(
+            &mut self,
+            pair_id: u64,
+            side: Side,
+            price: u128,
+            qty: u128,
+        ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env>;
+        /// Hand listing/admin authority to a new account (the multisig on mainnet).
+        /// Admin-only; irreversible except by the new admin.
+        fn transfer_admin(
+            &mut self,
+            new_admin: ActorId,
+        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env>;
+        /// Withdraw the caller's full claimable balance of `token` to their wallet. Debits
+        /// optimistically and restores the claim if the on-chain transfer fails.
+        fn withdraw(
+            &mut self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env>;
+        /// The caller's withdrawable balance for a given token program.
+        fn get_claim(
+            &self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetClaim, Self::Env>;
+        /// The caller's open/closed orders.
+        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env>;
+        /// Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
+        /// each level `(price, remaining_qty)`.
+        fn get_orderbook(
+            &self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env>;
+        fn get_pair(&self, pair_id: u64) -> sails_rs::client::PendingCall<io::GetPair, Self::Env>;
+        fn get_pairs(&self) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env>;
+    }
+    pub struct SpotImpl;
+    impl<E: sails_rs::client::GearEnv> Spot for sails_rs::client::Service<SpotImpl, E> {
+        type Env = E;
+        fn cancel_order(
+            &mut self,
+            order_id: u64,
+        ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env> {
+            self.pending_call((order_id,))
+        }
+        fn delist_pair(
+            &mut self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::DelistPair, Self::Env> {
+            self.pending_call((pair_id,))
+        }
+        fn list_pair(
+            &mut self,
+            base: ActorId,
+            quote: ActorId,
+            base_dec: u8,
+            quote_dec: u8,
+        ) -> sails_rs::client::PendingCall<io::ListPair, Self::Env> {
+            self.pending_call((base, quote, base_dec, quote_dec))
+        }
+        fn market_buy(
+            &mut self,
+            pair_id: u64,
+            qty: u128,
+            max_quote: u128,
+        ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env> {
+            self.pending_call((pair_id, qty, max_quote))
+        }
+        fn market_sell(
+            &mut self,
+            pair_id: u128,
+            qty: u128,
+        ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env> {
+            self.pending_call((pair_id, qty))
+        }
+        fn place_limit(
+            &mut self,
+            pair_id: u64,
+            side: Side,
+            price: u128,
+            qty: u128,
+        ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env> {
+            self.pending_call((pair_id, side, price, qty))
+        }
+        fn transfer_admin(
+            &mut self,
+            new_admin: ActorId,
+        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env> {
+            self.pending_call((new_admin,))
+        }
+        fn withdraw(
+            &mut self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env> {
+            self.pending_call((token,))
+        }
+        fn get_claim(
+            &self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetClaim, Self::Env> {
+            self.pending_call((token,))
+        }
+        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_orderbook(
+            &self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env> {
+            self.pending_call((pair_id,))
+        }
+        fn get_pair(&self, pair_id: u64) -> sails_rs::client::PendingCall<io::GetPair, Self::Env> {
+            self.pending_call((pair_id,))
+        }
+        fn get_pairs(&self) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env> {
+            self.pending_call(())
+        }
+    }
+
+    pub mod io {
+        use super::*;
+        sails_rs::io_struct_impl!(CancelOrder (order_id: u64) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(DelistPair (pair_id: u64) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(ListPair (base: ActorId, quote: ActorId, base_dec: u8, quote_dec: u8) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(MarketBuy (pair_id: u64, qty: u128, max_quote: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(MarketSell (pair_id: u128, qty: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(PlaceLimit (pair_id: u64, side: super::Side, price: u128, qty: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(Withdraw (token: ActorId) -> Result<u128, super::SpotError>);
+        sails_rs::io_struct_impl!(GetClaim (token: ActorId) -> u128);
+        sails_rs::io_struct_impl!(GetMyOrders () -> Vec<super::SpotOrder>);
+        sails_rs::io_struct_impl!(GetOrderbook (pair_id: u64) -> (Vec<(u128,u128,)>,Vec<(u128,u128,)>,));
+        sails_rs::io_struct_impl!(GetPair (pair_id: u64) -> Option<super::SpotPair>);
+        sails_rs::io_struct_impl!(GetPairs () -> Vec<super::SpotPair>);
+    }
+}
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -807,4 +996,69 @@ pub struct PerpClosedEvent {
     pub payout: u64,
     pub pnl: i64,
     pub liquidated: bool,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum SpotError {
+    /// Caller is not the admin/multisig.
+    NotAdmin,
+    /// Zero price/qty, unknown token, or other malformed input.
+    BadParams,
+    /// A pair with the same (base, quote) already exists.
+    PairExists,
+    /// No pair with that id.
+    NoPair,
+    /// Pair exists but is delisted; no new orders accepted.
+    PairInactive,
+    /// The global order cap is reached.
+    BookFull,
+    /// No order with that id.
+    NoOrder,
+    /// Caller does not own that order.
+    NotOwner,
+    /// Nothing to withdraw for that token.
+    NothingToClaim,
+    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
+    TransferFailed,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SpotOrder {
+    pub id: u64,
+    pub pair_id: u64,
+    pub trader: ActorId,
+    pub side: Side,
+    /// Quote smallest-units per one whole base token (per 10^base_dec base units).
+    pub price: u128,
+    /// Order size in base token smallest units.
+    pub qty: u128,
+    /// Filled base amount so far.
+    pub filled: u128,
+    pub status: SpotStatus,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum SpotStatus {
+    Open,
+    PartiallyFilled,
+    Filled,
+    Cancelled,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SpotPair {
+    pub id: u64,
+    /// Base token program (the asset being bought/sold).
+    pub base: ActorId,
+    /// Quote token program (USDT or USDC).
+    pub quote: ActorId,
+    /// Declared decimals of each token, read from the VFT at listing time.
+    pub base_dec: u8,
+    pub quote_dec: u8,
+    /// Delisted pairs reject new orders but still allow cancel/withdraw.
+    pub active: bool,
 }
