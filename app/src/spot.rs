@@ -262,11 +262,211 @@ impl<'a> SpotService<'a> {
             .get(&(caller, token))
             .unwrap_or(&0)
     }
+
+    /// Place a limit order. Escrows the caller's real tokens (a quote-token
+    /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
+    /// then crosses the book by price-time priority, crediting fills to claimable
+    /// balances. Any unfilled remainder rests. Reverts with no state change if the
+    /// escrow transfer fails.
+    #[export]
+    pub async fn place_limit(
+        &mut self,
+        pair_id: u64,
+        side: Side,
+        price: u128,
+        qty: u128,
+    ) -> Result<u64, SpotError> {
+        if price == 0 || qty == 0 {
+            return Err(SpotError::BadParams);
+        }
+        let caller = msg::source();
+        // Snapshot the pair and compute escrow without holding a borrow across the await.
+        let (base, quote, base_dec, escrow_token, escrow_amt) = {
+            let st = self.state.borrow();
+            if st.orders.len() >= MAX_OPEN_ORDERS {
+                return Err(SpotError::BookFull);
+            }
+            let pair = st
+                .pairs
+                .iter()
+                .find(|p| p.id == pair_id)
+                .ok_or(SpotError::NoPair)?;
+            if !pair.active {
+                return Err(SpotError::PairInactive);
+            }
+            let amt = match side {
+                Side::Buy => notional(price, qty, pair.base_dec),
+                Side::Sell => qty,
+            };
+            let tok = match side {
+                Side::Buy => pair.quote,
+                Side::Sell => pair.base,
+            };
+            (pair.base, pair.quote, pair.base_dec, tok, amt)
+        };
+        if escrow_amt == 0 {
+            return Err(SpotError::BadParams);
+        }
+        // Pull the escrow in. Reject before touching the book if it fails.
+        if !vft_transfer_from(escrow_token, caller, escrow_amt).await {
+            return Err(SpotError::TransferFailed);
+        }
+
+        let mut st = self.state.borrow_mut();
+        let oid = st.next_oid;
+        st.next_oid += 1;
+        let mut rem = qty;
+
+        // Crossing resting orders, best price first, time (id) as tie-break.
+        let mut idxs: Vec<usize> = st
+            .orders
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| {
+                o.pair_id == pair_id
+                    && o.side != side
+                    && o.status != SpotStatus::Filled
+                    && o.status != SpotStatus::Cancelled
+                    && o.filled < o.qty
+                    && if side == Side::Buy {
+                        o.price <= price
+                    } else {
+                        o.price >= price
+                    }
+            })
+            .map(|(i, _)| i)
+            .collect();
+        idxs.sort_by(|&a, &b| {
+            let (oa, ob) = (&st.orders[a], &st.orders[b]);
+            match side {
+                // Taker buy: cheapest ask first.
+                Side::Buy => oa.price.cmp(&ob.price).then(oa.id.cmp(&ob.id)),
+                // Taker sell: highest bid first.
+                Side::Sell => ob.price.cmp(&oa.price).then(oa.id.cmp(&ob.id)),
+            }
+        });
+
+        for mi in idxs {
+            if rem == 0 {
+                break;
+            }
+            let (o_price, o_avail, o_trader) = {
+                let o = &st.orders[mi];
+                (o.price, o.qty - o.filled, o.trader)
+            };
+            let fill = rem.min(o_avail);
+            if fill == 0 {
+                continue;
+            }
+            let p_match = o_price;
+            let (buyer, seller) = if side == Side::Buy {
+                (caller, o_trader)
+            } else {
+                (o_trader, caller)
+            };
+            // Buyer receives base; seller receives quote at the resting price.
+            st.credit(buyer, base, fill);
+            st.credit(seller, quote, notional(p_match, fill, base_dec));
+            // A taker buyer escrowed at their (higher) limit; refund the difference.
+            if side == Side::Buy && price > p_match {
+                st.credit(buyer, quote, notional(price - p_match, fill, base_dec));
+            }
+            {
+                let o = &mut st.orders[mi];
+                o.filled += fill;
+                o.status = if o.filled >= o.qty {
+                    SpotStatus::Filled
+                } else {
+                    SpotStatus::PartiallyFilled
+                };
+            }
+            rem -= fill;
+        }
+
+        // Record the order; the unfilled remainder (if any) rests with its escrow intact.
+        let filled = qty - rem;
+        let status = if rem == 0 {
+            SpotStatus::Filled
+        } else if filled == 0 {
+            SpotStatus::Open
+        } else {
+            SpotStatus::PartiallyFilled
+        };
+        st.orders.push(SpotOrder {
+            id: oid,
+            pair_id,
+            trader: caller,
+            side,
+            price,
+            qty,
+            filled,
+            status,
+        });
+        Ok(oid)
+    }
+
+    /// Cancel an open order and refund its unfilled escrow to the caller's claimable
+    /// balance (quote for a buy, base for a sell).
+    #[export]
+    pub fn cancel_order(&mut self, order_id: u64) -> Result<(), SpotError> {
+        let caller = msg::source();
+        let mut st = self.state.borrow_mut();
+        let pos = st
+            .orders
+            .iter()
+            .position(|o| o.id == order_id)
+            .ok_or(SpotError::NoOrder)?;
+        let (trader, side, price, unfilled, pair_id, status) = {
+            let o = &st.orders[pos];
+            (o.trader, o.side, o.price, o.qty - o.filled, o.pair_id, o.status)
+        };
+        if trader != caller {
+            return Err(SpotError::NotOwner);
+        }
+        if status == SpotStatus::Filled || status == SpotStatus::Cancelled {
+            return Err(SpotError::NoOrder);
+        }
+        let (refund_token, refund_amt) = {
+            let pair = st
+                .pairs
+                .iter()
+                .find(|p| p.id == pair_id)
+                .ok_or(SpotError::NoPair)?;
+            match side {
+                Side::Buy => (pair.quote, notional(price, unfilled, pair.base_dec)),
+                Side::Sell => (pair.base, unfilled),
+            }
+        };
+        st.orders[pos].status = SpotStatus::Cancelled;
+        st.credit(caller, refund_token, refund_amt);
+        Ok(())
+    }
+
+    /// Withdraw the caller's full claimable balance of `token` to their wallet. Debits
+    /// optimistically and restores the claim if the on-chain transfer fails.
+    #[export]
+    pub async fn withdraw(&mut self, token: ActorId) -> Result<u128, SpotError> {
+        let caller = msg::source();
+        let amount = {
+            let mut st = self.state.borrow_mut();
+            let amount = *st.claims.get(&(caller, token)).unwrap_or(&0);
+            if amount == 0 {
+                return Err(SpotError::NothingToClaim);
+            }
+            st.claims.remove(&(caller, token));
+            amount
+        };
+        if !vft_transfer(token, caller, amount).await {
+            let mut st = self.state.borrow_mut();
+            *st.claims.entry((caller, token)).or_insert(0) += amount;
+            return Err(SpotError::TransferFailed);
+        }
+        Ok(amount)
+    }
 }
 
 /// Build the SCALE route payload for a `Vft` service method call (mirrors the proven
 /// helper in `orderbook.rs`). Used by the async escrow/settlement path.
-#[allow(dead_code)]
 pub fn vft_route(method: &str, args: Vec<u8>) -> Vec<u8> {
     let mut payload = "Vft".encode();
     payload.extend(method.encode());
@@ -275,9 +475,7 @@ pub fn vft_route(method: &str, args: Vec<u8>) -> Vec<u8> {
 }
 
 /// Move `value` of `token` from `from` into the DEX via VFT `TransferFrom`. Requires a
-/// prior `approve`. Returns whether the on-chain transfer succeeded. (Wired into
-/// `place_*` in the next increment.)
-#[allow(dead_code)]
+/// prior `approve`. Returns whether the on-chain transfer succeeded.
 pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bool {
     let dex = exec::program_id();
     let payload = vft_route("TransferFrom", (from, dex, U256::from(value)).encode());
@@ -293,9 +491,7 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
     }
 }
 
-/// Transfer `value` of `token` from the DEX vault to `to` via VFT `Transfer`. (Wired
-/// into `withdraw` in the next increment.)
-#[allow(dead_code)]
+/// Transfer `value` of `token` from the DEX vault to `to` via VFT `Transfer`.
 pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
     let payload = vft_route("Transfer", (to, U256::from(value)).encode());
     let gas = exec::gas_available() / 2;
