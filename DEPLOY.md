@@ -191,11 +191,11 @@ VARA_SEED="<admin seed>" WITH_TOKENS=1 node scripts/deploy-all.mjs
 ```
 
 Put the printed VITE_PROGRAM_ID (and VITE_TOKEN_* if you used WITH_TOKENS) into
-frontend/.env, redeploy the frontend, then start the mark-price keeper (required
-for futures):
+frontend/.env, redeploy the frontend, then start the market runner (required for
+futures marks and house liquidity; one signer does both jobs):
 
 ```
-node scripts/keeper.mjs
+node scripts/market-runner.mjs
 ```
 
 Optional: fund the perps house reserve (Joins for the granted USD, then FundReserve):

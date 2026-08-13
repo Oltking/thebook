@@ -7,8 +7,8 @@
 #      have a counterparty).
 #
 # Both are admin-only and must sign as the SAME account, so this MUST be the only
-# process signing from VARA_SEED. Do not also run scripts/keeper.mjs or a local
-# market-runner against the same seed — two signers collide on the nonce.
+# process signing from VARA_SEED. Do not run a second market-runner against the
+# same seed — two signers collide on the nonce.
 #
 # It serves no HTTP, so it's a Background Worker, not a Web Service.
 #

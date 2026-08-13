@@ -8,7 +8,8 @@
 //
 // Run this once with the admin account (it becomes the DEX admin). After it, set
 // the printed VITE_* values in frontend/.env and redeploy the frontend. Then run
-// scripts/keeper.mjs so futures have on-chain mark prices.
+// scripts/market-runner.mjs so futures have on-chain mark prices and the book has
+// house liquidity (one signer does both jobs).
 //
 // Usage (from frontend/):
 //   VARA_SEED="<funded admin seed>" node scripts/deploy-all.mjs
@@ -148,8 +149,6 @@ console.log(`  Next: run the combined market runner (marks + house quotes, one s
 console.log(`    node scripts/market-runner.mjs   # run as a persistent service (pm2/systemd)\n`);
 console.log(`  Put these in frontend/.env, then redeploy the frontend:\n`);
 for (const [k, v] of Object.entries(env)) console.log(`    ${k}=${v}`);
-console.log(`\n  Then start the mark-price keeper so futures work:`);
-console.log(`    node scripts/keeper.mjs`);
 console.log(`\n  (Optional) fund the perps reserve later:`);
 console.log(`    node scripts/fund-reserve.mjs\n`);
 

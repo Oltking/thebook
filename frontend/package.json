@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.mjs",
-    "keeper": "node scripts/keeper.mjs",
+    "runner": "node scripts/market-runner.mjs",
     "test": "vitest run"
   },
   "dependencies": {
