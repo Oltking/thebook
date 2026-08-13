@@ -4,6 +4,10 @@ Research question: instead of bootstrapping our own liquidity, can thebook **rou
 third party's** liquidity — RivrDEX for swaps, and some external venue for perps — and
 just submit/fetch orders through them?
 
+> **Decision (2026-08-13):** Perps are **deferred to v2** — we are not pursuing external
+> perps routing now. Section 2 below is kept as reference for when v2 is picked up.
+> RivrDEX swap routing stays a **watch item**, not a v1 dependency.
+
 Short answer:
 - **Swaps → RivrDEX:** architecturally clean and same-chain, but **too early to rely on
   today** — only one live pair. A "watch + integrate when it grows" play, not a launch
