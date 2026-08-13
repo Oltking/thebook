@@ -7,6 +7,7 @@ use thebook::WASM_BINARY;
 use thebook_client::amm::io as amm_io;
 use thebook_client::orderbook::io as ob_io;
 use thebook_client::perps::io as perp_io;
+use thebook_client::spot::io as spot_io;
 use thebook_client::*;
 use thebook_token::WASM_BINARY as TOKEN_WASM;
 use thebook_token_client::faucet::io as tok_faucet_io;
@@ -1336,4 +1337,192 @@ async fn call_agent_service_to_nonexistent_fails() {
         Ok(Err(ContractError::AgentCallFailed)) => {}
         _ => panic!("expected AgentCallFailed, got {result:?}"),
     }
+}
+
+// ── v1 spot CLOB (real VFT escrow) ───────────────────────────────────────────────────
+
+/// The DEX actor bound to a specific caller.
+fn as_dex(
+    env: &GtestEnv,
+    dex: ActorId,
+    who: u64,
+) -> Actor<ThebookClientProgram, GtestEnv> {
+    Actor::<ThebookClientProgram, GtestEnv>::new(env.clone().with_actor_id(who.into()), dex)
+}
+
+/// A token program actor bound to a specific caller.
+fn as_tok(
+    env: &GtestEnv,
+    tid: ActorId,
+    who: u64,
+) -> Actor<ThebookTokenClientProgram, GtestEnv> {
+    Actor::<ThebookTokenClientProgram, GtestEnv>::new(env.clone().with_actor_id(who.into()), tid)
+}
+
+async fn balance_of(env: &GtestEnv, token: ActorId, who: u64) -> U256 {
+    as_tok(env, token, who)
+        .vft()
+        .pending_call::<tok_vft_io::BalanceOf>((who.into(),))
+        .await
+        .unwrap()
+}
+
+/// Claim `token`'s faucet as `who` and approve the DEX to pull `amount`.
+async fn claim_and_approve(env: &GtestEnv, token: ActorId, dex: ActorId, who: u64, amount: u128) {
+    let tok = as_tok(env, token, who);
+    let _: U256 = tok
+        .faucet()
+        .pending_call::<tok_faucet_io::Claim>(())
+        .await
+        .unwrap()
+        .unwrap();
+    let _: bool = tok
+        .vft()
+        .pending_call::<tok_vft_io::Approve>((dex, U256::from(amount)))
+        .await
+        .unwrap();
+}
+
+/// List an ETH/USD spot pair (both 6-decimal test tokens) as the admin. Returns
+/// (base=eth, quote=usd, pair_id).
+async fn list_eth_usd(
+    program: &Actor<ThebookClientProgram, GtestEnv>,
+) -> (ActorId, ActorId, u64) {
+    let (t_usd, _t_btc, t_eth, _t_vara): (ActorId, ActorId, ActorId, ActorId) = program
+        .orderbook()
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    let pair_id: u64 = program
+        .spot()
+        .pending_call::<spot_io::ListPair>((t_eth, t_usd, 6u8, 6u8))
+        .await
+        .unwrap()
+        .unwrap();
+    (t_eth, t_usd, pair_id)
+}
+
+#[tokio::test]
+async fn spot_only_admin_can_list() {
+    let (env, program) = deploy().await;
+    let (t_usd, _t_btc, t_eth, _t_vara): (ActorId, ActorId, ActorId, ActorId) = program
+        .orderbook()
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    // BOB is not the admin.
+    let denied: Result<u64, _> = as_dex(&env, program.id(), BOB)
+        .spot()
+        .pending_call::<spot_io::ListPair>((t_eth, t_usd, 6u8, 6u8))
+        .await
+        .unwrap();
+    assert!(denied.is_err(), "non-admin must not list a pair");
+}
+
+#[tokio::test]
+async fn spot_limit_cross_and_withdraw() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, quote, pair_id) = list_eth_usd(&program).await;
+    assert_eq!(pair_id, 0);
+
+    // Seller BOB: has 1_000_000 base from the faucet, escrows 500_000 in a limit sell.
+    claim_and_approve(&env, base, dex, BOB, 500_000).await;
+    let sell_oid: u64 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 100u128, 500_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sell_oid, 0);
+    // Escrow left the seller's wallet: 1_000_000 - 500_000.
+    assert_eq!(balance_of(&env, base, BOB).await, U256::from(500_000));
+
+    // Buyer ALICE: escrow = notional(100, 500_000, 6) = 50 quote.
+    claim_and_approve(&env, quote, dex, ALICE, 50).await;
+    let buy_oid: u64 = program
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Buy, 100u128, 500_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(buy_oid, 1);
+
+    // Fills credited to claimable balances at the resting price.
+    let alice_base: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    let bob_quote: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_base, 500_000, "buyer receives the base");
+    assert_eq!(bob_quote, 50, "seller receives the quote");
+
+    // Withdraw pushes real tokens back to the wallets.
+    let w1: u128 = program
+        .spot()
+        .pending_call::<spot_io::Withdraw>((base,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(w1, 500_000);
+    assert_eq!(balance_of(&env, base, ALICE).await, U256::from(500_000));
+
+    let w2: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::Withdraw>((quote,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(w2, 50);
+    assert_eq!(balance_of(&env, quote, BOB).await, U256::from(50));
+}
+
+#[tokio::test]
+async fn spot_cancel_refunds_escrow() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, _quote, pair_id) = list_eth_usd(&program).await;
+
+    // BOB rests a sell that nobody crosses; 300_000 base is escrowed, not claimable.
+    claim_and_approve(&env, base, dex, BOB, 300_000).await;
+    let oid: u64 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 200u128, 300_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+    let before: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    assert_eq!(before, 0, "escrow is not claimable while the order rests");
+
+    // Cancel refunds the unfilled escrow to the claimable balance.
+    let _: () = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::CancelOrder>((oid,))
+        .await
+        .unwrap()
+        .unwrap();
+    let after: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    assert_eq!(after, 300_000, "cancel refunds the full unfilled escrow");
+
+    // And it can be withdrawn back to the wallet in full.
+    let _: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::Withdraw>((base,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(balance_of(&env, base, BOB).await, U256::from(1_000_000));
 }
