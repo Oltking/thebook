@@ -1,23 +1,7 @@
 target/
 **/*.wasm
-thebook-clean.idl
-thebook-clean.wasm
-thebook-final.idl
-thebook-final.wasm
-thebook-fix.idl
-thebook-fix.wasm
-thebook-ob.idl
-thebook-ob.wasm
-thebook-v2.idl
-thebook-v2.wasm
-thebook-v3.idl
-thebook-v3.wasm
-thebook-v4.idl
-thebook-v4.wasm
-thebook-v41.idl
-thebook-v41.wasm
-thebook-v5.idl
-thebook-v5.wasm
+# Stale build variants (the canonical thebook.idl stays tracked)
+thebook-*.idl
 .binpath
 node_modules/
 
@@ -33,3 +17,6 @@ scripts/thebook.idl
 .claude/
 .DS_Store
 thebook-skills/
+
+# Stray screenshots dropped in the repo root
+Screenshot*.png

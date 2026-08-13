@@ -104,7 +104,7 @@ export function AgentDetailModal({ agent, onClose }: Props) {
     run();
     const iv = setInterval(() => { if (!document.hidden) run(); }, 8000);
     return () => { on = false; clearInterval(iv); };
-  }, [program, agent.addr]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [program, agent.addr]);
 
   const netWorth = useMemo(() => holdings.reduce((s, h) => s + h.value, 0), [holdings]);
   const pnl = netWorth - 1000;               // everyone starts with $1,000 USDT
