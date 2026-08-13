@@ -141,6 +141,52 @@ impl<'a> SpotService<'a> {
             Err(SpotError::NotAdmin)
         }
     }
+
+    /// Resolve a listed, active pair to `(base, quote, base_dec)`.
+    fn active_pair(&self, pair_id: u64) -> Result<(ActorId, ActorId, u8), SpotError> {
+        let st = self.state.borrow();
+        let pair = st
+            .pairs
+            .iter()
+            .find(|p| p.id == pair_id)
+            .ok_or(SpotError::NoPair)?;
+        if !pair.active {
+            return Err(SpotError::PairInactive);
+        }
+        Ok((pair.base, pair.quote, pair.base_dec))
+    }
+}
+
+/// Indices of resting orders a taker on `taker` side would cross, best price first
+/// (time as tie-break). `limit == None` means a market order (no price bound).
+fn crossing_indices(st: &SpotState, pair_id: u64, taker: Side, limit: Option<u128>) -> Vec<usize> {
+    let mut idxs: Vec<usize> = st
+        .orders
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| {
+            o.pair_id == pair_id
+                && o.side != taker
+                && o.status != SpotStatus::Filled
+                && o.status != SpotStatus::Cancelled
+                && o.filled < o.qty
+                && match (taker, limit) {
+                    (Side::Buy, Some(p)) => o.price <= p,
+                    (Side::Sell, Some(p)) => o.price >= p,
+                    (_, None) => true,
+                }
+        })
+        .map(|(i, _)| i)
+        .collect();
+    idxs.sort_by(|&a, &b| {
+        let (oa, ob) = (&st.orders[a], &st.orders[b]);
+        match taker {
+            // Taker buy: cheapest ask first. Taker sell: highest bid first.
+            Side::Buy => oa.price.cmp(&ob.price).then(oa.id.cmp(&ob.id)),
+            Side::Sell => ob.price.cmp(&oa.price).then(oa.id.cmp(&ob.id)),
+        }
+    });
+    idxs
 }
 
 #[sails_rs::service]
@@ -318,35 +364,7 @@ impl<'a> SpotService<'a> {
         let mut rem = qty;
 
         // Crossing resting orders, best price first, time (id) as tie-break.
-        let mut idxs: Vec<usize> = st
-            .orders
-            .iter()
-            .enumerate()
-            .filter(|(_, o)| {
-                o.pair_id == pair_id
-                    && o.side != side
-                    && o.status != SpotStatus::Filled
-                    && o.status != SpotStatus::Cancelled
-                    && o.filled < o.qty
-                    && if side == Side::Buy {
-                        o.price <= price
-                    } else {
-                        o.price >= price
-                    }
-            })
-            .map(|(i, _)| i)
-            .collect();
-        idxs.sort_by(|&a, &b| {
-            let (oa, ob) = (&st.orders[a], &st.orders[b]);
-            match side {
-                // Taker buy: cheapest ask first.
-                Side::Buy => oa.price.cmp(&ob.price).then(oa.id.cmp(&ob.id)),
-                // Taker sell: highest bid first.
-                Side::Sell => ob.price.cmp(&oa.price).then(oa.id.cmp(&ob.id)),
-            }
-        });
-
-        for mi in idxs {
+        for mi in crossing_indices(&st, pair_id, side, Some(price)) {
             if rem == 0 {
                 break;
             }
@@ -462,6 +480,150 @@ impl<'a> SpotService<'a> {
             return Err(SpotError::TransferFailed);
         }
         Ok(amount)
+    }
+
+    /// Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
+    /// the full budget up front, sweeps the asks cheapest-first, and refunds anything
+    /// unspent (including the whole budget if the book is empty) to the caller's claim.
+    /// Never rests. Requires a prior `approve` of `max_quote` on the quote token.
+    #[export]
+    pub async fn market_buy(
+        &mut self,
+        pair_id: u64,
+        qty: u128,
+        max_quote: u128,
+    ) -> Result<u64, SpotError> {
+        if qty == 0 || max_quote == 0 {
+            return Err(SpotError::BadParams);
+        }
+        let caller = msg::source();
+        let (base, quote, base_dec) = self.active_pair(pair_id)?;
+        if !vft_transfer_from(quote, caller, max_quote).await {
+            return Err(SpotError::TransferFailed);
+        }
+        let scale = 10u128.pow(base_dec as u32);
+        let mut st = self.state.borrow_mut();
+        let oid = st.next_oid;
+        st.next_oid += 1;
+        let mut rem = qty;
+        let mut spent = 0u128;
+        for mi in crossing_indices(&st, pair_id, Side::Buy, None) {
+            if rem == 0 {
+                break;
+            }
+            let (o_price, o_avail, o_trader) = {
+                let o = &st.orders[mi];
+                (o.price, o.qty - o.filled, o.trader)
+            };
+            let mut fill = rem.min(o_avail);
+            let mut cost = notional(o_price, fill, base_dec);
+            if spent + cost > max_quote {
+                // Cap the fill to what the remaining budget can afford at this price.
+                let budget = max_quote - spent;
+                let affordable = budget.saturating_mul(scale) / o_price;
+                fill = fill.min(affordable);
+                if fill == 0 {
+                    break;
+                }
+                cost = notional(o_price, fill, base_dec);
+            }
+            st.credit(caller, base, fill);
+            st.credit(o_trader, quote, cost);
+            spent += cost;
+            {
+                let o = &mut st.orders[mi];
+                o.filled += fill;
+                o.status = if o.filled >= o.qty {
+                    SpotStatus::Filled
+                } else {
+                    SpotStatus::PartiallyFilled
+                };
+            }
+            rem -= fill;
+        }
+        // Refund the unspent budget; a market order never rests.
+        st.credit(caller, quote, max_quote - spent);
+        st.orders.push(SpotOrder {
+            id: oid,
+            pair_id,
+            trader: caller,
+            side: Side::Buy,
+            price: 0, // 0 = market order (never rests, excluded from the book)
+            qty,
+            filled: qty - rem,
+            status: SpotStatus::Filled,
+        });
+        Ok(oid)
+    }
+
+    /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
+    /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
+    /// Never rests. Requires a prior `approve` of `qty` on the base token.
+    #[export]
+    pub async fn market_sell(&mut self, pair_id: u128, qty: u128) -> Result<u64, SpotError> {
+        if qty == 0 {
+            return Err(SpotError::BadParams);
+        }
+        let pair_id = pair_id as u64;
+        let caller = msg::source();
+        let (base, quote, base_dec) = self.active_pair(pair_id)?;
+        if !vft_transfer_from(base, caller, qty).await {
+            return Err(SpotError::TransferFailed);
+        }
+        let mut st = self.state.borrow_mut();
+        let oid = st.next_oid;
+        st.next_oid += 1;
+        let mut rem = qty;
+        for mi in crossing_indices(&st, pair_id, Side::Sell, None) {
+            if rem == 0 {
+                break;
+            }
+            let (o_price, o_avail, o_trader) = {
+                let o = &st.orders[mi];
+                (o.price, o.qty - o.filled, o.trader)
+            };
+            let fill = rem.min(o_avail);
+            if fill == 0 {
+                continue;
+            }
+            st.credit(caller, quote, notional(o_price, fill, base_dec));
+            st.credit(o_trader, base, fill);
+            {
+                let o = &mut st.orders[mi];
+                o.filled += fill;
+                o.status = if o.filled >= o.qty {
+                    SpotStatus::Filled
+                } else {
+                    SpotStatus::PartiallyFilled
+                };
+            }
+            rem -= fill;
+        }
+        // Refund whatever couldn't be sold.
+        st.credit(caller, base, rem);
+        st.orders.push(SpotOrder {
+            id: oid,
+            pair_id,
+            trader: caller,
+            side: Side::Sell,
+            price: 0,
+            qty,
+            filled: qty - rem,
+            status: SpotStatus::Filled,
+        });
+        Ok(oid)
+    }
+
+    /// Hand listing/admin authority to a new account (the multisig on mainnet).
+    /// Admin-only; irreversible except by the new admin.
+    #[export]
+    pub fn transfer_admin(&mut self, new_admin: ActorId) -> Result<(), SpotError> {
+        self.require_admin()?;
+        if new_admin == ActorId::zero() {
+            return Err(SpotError::BadParams);
+        }
+        self.state.borrow_mut().admin = new_admin;
+        Ok(())
     }
 }
 
