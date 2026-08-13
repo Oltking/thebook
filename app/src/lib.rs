@@ -11,16 +11,21 @@ use sails_rs::prelude::*;
 pub mod amm;
 pub mod orderbook;
 pub mod perps;
+pub mod spot;
 pub mod state;
 pub mod types;
 
 pub use amm::AmmService;
 pub use orderbook::OrderbookService;
 pub use perps::PerpsService;
+pub use spot::{SpotService, SpotState};
 pub use state::DexState;
 
 pub struct Program {
     state: RefCell<DexState>,
+    /// v1 mainnet spot CLOB state (real VFT escrow). Separate from the legacy
+    /// virtual-balance `state` so the two paths never entangle during the rewrite.
+    spot: RefCell<SpotState>,
 }
 
 #[sails_rs::program]
@@ -28,13 +33,20 @@ impl Program {
     // Sails constructor (route "New"); a `Default` impl would be meaningless here.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        // The deployer becomes admin for autopilot management.
+        // The deployer becomes admin for autopilot management (legacy) and the initial
+        // spot listing authority. On mainnet, admin is transferred to the multisig.
+        let deployer = msg::source();
         let state = DexState {
-            admin: msg::source(),
+            admin: deployer,
             ..DexState::default()
+        };
+        let spot = SpotState {
+            admin: deployer,
+            ..SpotState::default()
         };
         Self {
             state: RefCell::new(state),
+            spot: RefCell::new(spot),
         }
     }
 
@@ -48,5 +60,9 @@ impl Program {
 
     pub fn perps(&self) -> PerpsService<'_> {
         PerpsService::new(&self.state)
+    }
+
+    pub fn spot(&self) -> SpotService<'_> {
+        SpotService::new(&self.spot)
     }
 }
