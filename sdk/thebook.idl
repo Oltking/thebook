@@ -167,6 +167,63 @@ type PerpClosedEvent = struct {
   liquidated: bool,
 };
 
+type SpotError = enum {
+  /// Caller is not the admin/multisig.
+  NotAdmin,
+  /// Zero price/qty, unknown token, or other malformed input.
+  BadParams,
+  /// A pair with the same (base, quote) already exists.
+  PairExists,
+  /// No pair with that id.
+  NoPair,
+  /// Pair exists but is delisted; no new orders accepted.
+  PairInactive,
+  /// The global order cap is reached.
+  BookFull,
+  /// No order with that id.
+  NoOrder,
+  /// Caller does not own that order.
+  NotOwner,
+  /// Nothing to withdraw for that token.
+  NothingToClaim,
+  /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
+  TransferFailed,
+};
+
+type SpotOrder = struct {
+  id: u64,
+  pair_id: u64,
+  trader: actor_id,
+  side: Side,
+  /// Quote smallest-units per one whole base token (per 10^base_dec base units).
+  price: u128,
+  /// Order size in base token smallest units.
+  qty: u128,
+  /// Filled base amount so far.
+  filled: u128,
+  status: SpotStatus,
+};
+
+type SpotStatus = enum {
+  Open,
+  PartiallyFilled,
+  Filled,
+  Cancelled,
+};
+
+type SpotPair = struct {
+  id: u64,
+  /// Base token program (the asset being bought/sold).
+  base: actor_id,
+  /// Quote token program (USDT or USDC).
+  quote: actor_id,
+  /// Declared decimals of each token, read from the VFT at listing time.
+  base_dec: u8,
+  quote_dec: u8,
+  /// Delisted pairs reject new orders but still allow cancel/withdraw.
+  active: bool,
+};
+
 constructor {
   New : ();
 };
@@ -273,5 +330,48 @@ service Perps {
     Opened: PerpOpenedEvent;
     Closed: PerpClosedEvent;
   }
+};
+
+service Spot {
+  /// Cancel an open order and refund its unfilled escrow to the caller's claimable
+  /// balance (quote for a buy, base for a sell).
+  CancelOrder : (order_id: u64) -> result (null, SpotError);
+  /// Stop accepting new orders on a pair. Existing orders can still be cancelled and
+  /// proceeds withdrawn. Admin-only.
+  DelistPair : (pair_id: u64) -> result (null, SpotError);
+  /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet). `base_dec`
+  /// and `quote_dec` are the tokens' declared decimals; the caller supplies them so
+  /// listing stays synchronous (they are verifiable against each VFT's metadata).
+  ListPair : (base: actor_id, quote: actor_id, base_dec: u8, quote_dec: u8) -> result (u64, SpotError);
+  /// Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
+  /// the full budget up front, sweeps the asks cheapest-first, and refunds anything
+  /// unspent (including the whole budget if the book is empty) to the caller's claim.
+  /// Never rests. Requires a prior `approve` of `max_quote` on the quote token.
+  MarketBuy : (pair_id: u64, qty: u128, max_quote: u128) -> result (u64, SpotError);
+  /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
+  /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
+  /// Never rests. Requires a prior `approve` of `qty` on the base token.
+  MarketSell : (pair_id: u64, qty: u128) -> result (u64, SpotError);
+  /// Place a limit order. Escrows the caller's real tokens (a quote-token
+  /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
+  /// then crosses the book by price-time priority, crediting fills to claimable
+  /// balances. Any unfilled remainder rests. Reverts with no state change if the
+  /// escrow transfer fails.
+  PlaceLimit : (pair_id: u64, side: Side, price: u128, qty: u128) -> result (u64, SpotError);
+  /// Hand listing/admin authority to a new account (the multisig on mainnet).
+  /// Admin-only; irreversible except by the new admin.
+  TransferAdmin : (new_admin: actor_id) -> result (null, SpotError);
+  /// Withdraw the caller's full claimable balance of `token` to their wallet. Debits
+  /// optimistically and restores the claim if the on-chain transfer fails.
+  Withdraw : (token: actor_id) -> result (u128, SpotError);
+  /// The caller's withdrawable balance for a given token program.
+  query GetClaim : (token: actor_id) -> u128;
+  /// The caller's open/closed orders.
+  query GetMyOrders : () -> vec SpotOrder;
+  /// Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
+  /// each level `(price, remaining_qty)`.
+  query GetOrderbook : (pair_id: u64) -> struct { vec struct { u128, u128 }, vec struct { u128, u128 } };
+  query GetPair : (pair_id: u64) -> opt SpotPair;
+  query GetPairs : () -> vec SpotPair;
 };
 

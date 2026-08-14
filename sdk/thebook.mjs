@@ -171,6 +171,39 @@ export async function connectTheBook(opts = {}) {
       send('Perps', 'OpenPosition', [asset, isLong, marginMicro, leverage]),
     closePosition: (asset) => send('Perps', 'ClosePosition', [asset]),
 
+    // ── v1 spot CLOB: real VFT tokens over curated TOKEN/quote pairs ──
+    // Amounts and prices are token smallest-units (u128 — pass BigInt or numeric
+    // string). `price` is quote smallest-units per one whole base (per 10^baseDec).
+    // IMPORTANT: before an order can escrow your tokens, you must `approve` the DEX
+    // (programId) on the token being escrowed — quote for a buy, base for a sell.
+    // That approval is a call to the token's own VFT contract, not thebook, so it
+    // lives outside this SDK; do it with your token client (Vft/Approve(dex, amount)).
+    spot: {
+      // Admin/multisig only.
+      listPair: (base, quote, baseDec, quoteDec) =>
+        send('Spot', 'ListPair', [base, quote, baseDec, quoteDec]),
+      delistPair: (pairId) => send('Spot', 'DelistPair', [pairId]),
+      transferAdmin: (newAdmin) => send('Spot', 'TransferAdmin', [newAdmin]),
+      // Trading.
+      placeLimit: (pairId, side, price, qty) =>
+        send('Spot', 'PlaceLimit', [pairId, side, price, qty]),
+      marketBuy: (pairId, qty, maxQuote) => send('Spot', 'MarketBuy', [pairId, qty, maxQuote]),
+      marketSell: (pairId, qty) => send('Spot', 'MarketSell', [pairId, qty]),
+      cancelOrder: (oid) => send('Spot', 'CancelOrder', [oid]),
+      // Pull filled proceeds / cancelled escrow of `token` back to your wallet.
+      withdraw: (token) => send('Spot', 'Withdraw', [token]),
+      // Reads.
+      pairs: () => query('Spot', 'GetPairs'),
+      pair: (pairId) => query('Spot', 'GetPair', [pairId]),
+      async orderbook(pairId) {
+        const [bids, asks] = await query('Spot', 'GetOrderbook', [pairId]);
+        const lvl = ([p, q]) => ({ price: BigInt(p), qty: BigInt(q) });
+        return { bids: bids.map(lvl), asks: asks.map(lvl) };
+      },
+      myOrders: () => query('Spot', 'GetMyOrders'),
+      claim: (token) => query('Spot', 'GetClaim', [token]),
+    },
+
     // ── reads (your own view) ──
     async identity() {
       const r = await query('Orderbook', 'GetIdentity');
