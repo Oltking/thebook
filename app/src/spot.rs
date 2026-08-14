@@ -560,11 +560,10 @@ impl<'a> SpotService<'a> {
     /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
     /// Never rests. Requires a prior `approve` of `qty` on the base token.
     #[export]
-    pub async fn market_sell(&mut self, pair_id: u128, qty: u128) -> Result<u64, SpotError> {
+    pub async fn market_sell(&mut self, pair_id: u64, qty: u128) -> Result<u64, SpotError> {
         if qty == 0 {
             return Err(SpotError::BadParams);
         }
-        let pair_id = pair_id as u64;
         let caller = msg::source();
         let (base, quote, base_dec) = self.active_pair(pair_id)?;
         if !vft_transfer_from(base, caller, qty).await {

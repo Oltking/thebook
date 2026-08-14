@@ -1526,3 +1526,193 @@ async fn spot_cancel_refunds_escrow() {
         .unwrap();
     assert_eq!(balance_of(&env, base, BOB).await, U256::from(1_000_000));
 }
+
+#[tokio::test]
+async fn spot_partial_fill_rests_remainder() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, quote, pair_id) = list_eth_usd(&program).await;
+
+    // Seller rests 300_000 @ 100.
+    claim_and_approve(&env, base, dex, BOB, 300_000).await;
+    let _: u64 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 100u128, 300_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Buyer wants 500_000 @ 100: 300_000 fills, 200_000 rests as a bid.
+    claim_and_approve(&env, quote, dex, ALICE, 50).await;
+    let buy_oid: u64 = program
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Buy, 100u128, 500_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Buyer got the 300_000 that filled; seller got its quote.
+    let alice_base: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    let bob_quote: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_base, 300_000);
+    assert_eq!(bob_quote, 30); // notional(100, 300_000, 6)
+
+    // A 200_000 bid rests at 100.
+    let (bids, asks): (Vec<(u128, u128)>, Vec<(u128, u128)>) = program
+        .spot()
+        .pending_call::<spot_io::GetOrderbook>((pair_id,))
+        .await
+        .unwrap();
+    assert_eq!(bids, vec![(100, 200_000)]);
+    assert!(asks.is_empty());
+
+    // Cancelling the remainder refunds its escrow: notional(100, 200_000, 6) = 20.
+    let _: () = program
+        .spot()
+        .pending_call::<spot_io::CancelOrder>((buy_oid,))
+        .await
+        .unwrap()
+        .unwrap();
+    let alice_quote: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_quote, 20);
+}
+
+#[tokio::test]
+async fn spot_multi_level_sweep_refunds_overpay() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, quote, pair_id) = list_eth_usd(&program).await;
+
+    // Two asks: 100_000 @ 100 and 100_000 @ 120.
+    claim_and_approve(&env, base, dex, BOB, 200_000).await;
+    for price in [100u128, 120u128] {
+        let _: u64 = as_dex(&env, dex, BOB)
+            .spot()
+            .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, price, 100_000u128))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    // Buyer crosses both with a limit of 150; escrow = notional(150, 200_000, 6) = 30.
+    claim_and_approve(&env, quote, dex, ALICE, 30).await;
+    let _: u64 = program
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Buy, 150u128, 200_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Buyer receives all 200_000 base; overpay refunded: (150-100)*0.1 + (150-120)*0.1 = 5 + 3.
+    let alice_base: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    let alice_quote: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    let bob_quote: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_base, 200_000);
+    assert_eq!(alice_quote, 8, "overpay refund at each level");
+    assert_eq!(bob_quote, 22, "seller paid at each resting price: 10 + 12");
+}
+
+#[tokio::test]
+async fn spot_market_buy_refunds_unspent_budget() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, quote, pair_id) = list_eth_usd(&program).await;
+
+    claim_and_approve(&env, base, dex, BOB, 100_000).await;
+    let _: u64 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 100u128, 100_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Budget 1000, only 10 is spent (notional(100, 100_000, 6)); 990 refunded.
+    claim_and_approve(&env, quote, dex, ALICE, 1000).await;
+    let _: u64 = program
+        .spot()
+        .pending_call::<spot_io::MarketBuy>((pair_id, 100_000u128, 1000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let alice_base: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    let alice_quote: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    let bob_quote: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_base, 100_000);
+    assert_eq!(alice_quote, 990, "unspent budget refunded");
+    assert_eq!(bob_quote, 10);
+}
+
+#[tokio::test]
+async fn spot_market_sell_into_bids() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, quote, pair_id) = list_eth_usd(&program).await;
+
+    // BOB rests a buy 100_000 @ 100; escrow quote = notional(100, 100_000, 6) = 10.
+    claim_and_approve(&env, quote, dex, BOB, 10).await;
+    let _: u64 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Buy, 100u128, 100_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // ALICE market-sells 100_000 base into that bid.
+    claim_and_approve(&env, base, dex, ALICE, 100_000).await;
+    let _: u64 = program
+        .spot()
+        .pending_call::<spot_io::MarketSell>((pair_id, 100_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let alice_quote: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    let bob_base: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((base,))
+        .await
+        .unwrap();
+    assert_eq!(alice_quote, 10, "seller receives quote proceeds");
+    assert_eq!(bob_base, 100_000, "resting buyer receives the base");
+}

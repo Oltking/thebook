@@ -647,7 +647,7 @@ pub mod spot {
         /// Never rests. Requires a prior `approve` of `qty` on the base token.
         fn market_sell(
             &mut self,
-            pair_id: u128,
+            pair_id: u64,
             qty: u128,
         ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env>;
         /// Place a limit order. Escrows the caller's real tokens (a quote-token
@@ -724,7 +724,7 @@ pub mod spot {
         }
         fn market_sell(
             &mut self,
-            pair_id: u128,
+            pair_id: u64,
             qty: u128,
         ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env> {
             self.pending_call((pair_id, qty))
@@ -779,7 +779,7 @@ pub mod spot {
         sails_rs::io_struct_impl!(DelistPair (pair_id: u64) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(ListPair (base: ActorId, quote: ActorId, base_dec: u8, quote_dec: u8) -> Result<u64, super::SpotError>);
         sails_rs::io_struct_impl!(MarketBuy (pair_id: u64, qty: u128, max_quote: u128) -> Result<u64, super::SpotError>);
-        sails_rs::io_struct_impl!(MarketSell (pair_id: u128, qty: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(MarketSell (pair_id: u64, qty: u128) -> Result<u64, super::SpotError>);
         sails_rs::io_struct_impl!(PlaceLimit (pair_id: u64, side: super::Side, price: u128, qty: u128) -> Result<u64, super::SpotError>);
         sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(Withdraw (token: ActorId) -> Result<u128, super::SpotError>);

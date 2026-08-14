@@ -351,7 +351,7 @@ service Spot {
   /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
   /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
   /// Never rests. Requires a prior `approve` of `qty` on the base token.
-  MarketSell : (pair_id: u128, qty: u128) -> result (u64, SpotError);
+  MarketSell : (pair_id: u64, qty: u128) -> result (u64, SpotError);
   /// Place a limit order. Escrows the caller's real tokens (a quote-token
   /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
   /// then crosses the book by price-time priority, crediting fills to claimable
