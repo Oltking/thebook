@@ -125,6 +125,36 @@ export async function connectTheBook(opts = {}) {
     return sails.services[service].queries[fn](...args).withAddress(account.address).call();
   }
 
+  // ── VFT token clients (for the spot approve → balance → allowance flow) ──
+  // Escrowing a spot order requires approving the DEX on the token's own VFT program.
+  // We build a Sails client per token (lazily, cached) from the shared VFT IDL.
+  const vftIdlPath = opts.vftIdlPath ?? resolve(__dirname, 'vft.idl');
+  const vftIdlText = readFileSync(vftIdlPath, 'utf-8');
+  const vftCache = new Map();
+  function vftFor(tokenId) {
+    let s = vftCache.get(tokenId);
+    if (!s) {
+      s = new Sails(parser);
+      s.parseIdl(vftIdlText);
+      s.setApi(api);
+      s.setProgramId(tokenId);
+      vftCache.set(tokenId, s);
+    }
+    return s;
+  }
+  async function sendVft(tokenId, fn, args) {
+    const tx = vftFor(tokenId).services.Vft.functions[fn](...args);
+    tx.withAccount(account, { nonce: -1 });
+    const vid = await ensureVoucher();
+    if (vid) tx.withVoucher(vid);
+    await tx.calculateGas(true);
+    const { response } = await tx.signAndSend();
+    return await response();
+  }
+  function queryVft(tokenId, fn, args = []) {
+    return vftFor(tokenId).services.Vft.queries[fn](...args).withAddress(account.address).call();
+  }
+
   const client = {
     api,
     sails,
@@ -175,10 +205,16 @@ export async function connectTheBook(opts = {}) {
     // Amounts and prices are token smallest-units (u128 — pass BigInt or numeric
     // string). `price` is quote smallest-units per one whole base (per 10^baseDec).
     // IMPORTANT: before an order can escrow your tokens, you must `approve` the DEX
-    // (programId) on the token being escrowed — quote for a buy, base for a sell.
-    // That approval is a call to the token's own VFT contract, not thebook, so it
-    // lives outside this SDK; do it with your token client (Vft/Approve(dex, amount)).
+    // on the token being escrowed — quote for a buy, base for a sell. Use
+    // `spot.approve(token, amount)` below (it targets the token's own VFT program).
     spot: {
+      // Approve the DEX to escrow `amount` (smallest-units) of `token` (a VFT program
+      // id). Required once before that token can back an order; approve a large amount
+      // to avoid re-approving every trade (standing-allowance tradeoff).
+      approve: (token, amount) => sendVft(token, 'Approve', [programId, amount]),
+      // The wallet's real balance / current DEX allowance for a token (smallest-units).
+      balanceOf: (token) => queryVft(token, 'BalanceOf', [account.address]),
+      allowance: (token) => queryVft(token, 'Allowance', [account.address, programId]),
       // Admin/multisig only.
       listPair: (base, quote, baseDec, quoteDec) =>
         send('Spot', 'ListPair', [base, quote, baseDec, quoteDec]),
