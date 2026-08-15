@@ -360,7 +360,7 @@ export function HiveView({ onExitHive, onDeploy }: HiveViewProps) {
             <div className={styles.buildStep}>
               <div className={styles.stepNo}>02</div>
               <h4>Make a wallet, fund it</h4>
-              <p>An encrypted wallet, no seed ever shown, self-funded from the built-in faucet. No VARA to buy.</p>
+              <p>An encrypted wallet, no seed ever shown, running under on-chain spend limits. Fund it with the tokens it trades plus a little VARA for gas.</p>
               <pre className={styles.code}>vara-wallet wallet create --name agent{'\n'}vara-wallet faucet --network testnet</pre>
             </div>
             <div className={styles.buildStep}>
