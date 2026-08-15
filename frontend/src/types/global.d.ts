@@ -1,8 +1,6 @@
 import { ActorId } from 'sails-js';
 
 declare global {
-  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable" | "StaleMark";
-
   // Off-chain price snapshot (sourced from Binance/CoinGecko, not the contract).
   export interface PriceFeed {
     symbol: string;
@@ -13,13 +11,24 @@ declare global {
     updated_at_block: number;
   }
 
-  export type Asset = "BTC" | "ETH" | "VARA";
+  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable" | "StaleMark";
 
+  /**
+   * The four balances the DEX custodies, each backed by a real VFT on-chain.
+   * `Usd` is a separate kind because the orderbook denominates in USD but the
+   * `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+  */
   export type TokenKind = "Usd" | "Btc" | "Eth" | "Vara";
 
-  export type Side = "Buy" | "Sell";
-
+  /**
+   * The trading persona a user picks when creating their agent. Display/behaviour
+   * hint today; drives autopilot strategy selection in a later phase.
+  */
   export type AgentStrategy = "ArbitrageHunter" | "MarketMaker" | "Momentum";
+
+  export type Asset = "BTC" | "ETH" | "VARA";
+
+  export type Side = "Buy" | "Sell";
 
   export interface LeaderEntry {
     id: ActorId;
@@ -104,4 +113,73 @@ declare global {
     amount_out: number | string | bigint;
     fee: number | string | bigint;
   }
-}
+
+  export interface MarkPriceEvent {
+    asset: Asset;
+    price: number | string | bigint;
+  }
+
+  export interface PerpOpenedEvent {
+    owner: ActorId;
+    asset: Asset;
+    is_long: boolean;
+    size: number | string | bigint;
+    entry: number | string | bigint;
+    margin: number | string | bigint;
+    leverage: number;
+  }
+
+  export interface PerpClosedEvent {
+    owner: ActorId;
+    asset: Asset;
+    exit: number | string | bigint;
+    payout: number | string | bigint;
+    pnl: number | string | bigint;
+    liquidated: boolean;
+  }
+
+  export type SpotError = "NotAdmin" | "BadParams" | "PairExists" | "NoPair" | "PairInactive" | "BookFull" | "NoOrder" | "NotOwner" | "NothingToClaim" | "TransferFailed";
+
+  export interface SpotOrder {
+    id: number | string | bigint;
+    pair_id: number | string | bigint;
+    trader: ActorId;
+    side: Side;
+    /**
+     * Quote smallest-units per one whole base token (per 10^base_dec base units).
+    */
+    price: number | string | bigint;
+    /**
+     * Order size in base token smallest units.
+    */
+    qty: number | string | bigint;
+    /**
+     * Filled base amount so far.
+    */
+    filled: number | string | bigint;
+    status: SpotStatus;
+  }
+
+  export type SpotStatus = "Open" | "PartiallyFilled" | "Filled" | "Cancelled";
+
+  export interface SpotPair {
+    id: number | string | bigint;
+    /**
+     * Base token program (the asset being bought/sold).
+    */
+    base: ActorId;
+    /**
+     * Quote token program (USDT or USDC).
+    */
+    quote: ActorId;
+    /**
+     * Declared decimals of each token, read from the VFT at listing time.
+    */
+    base_dec: number;
+    quote_dec: number;
+    /**
+     * Delisted pairs reject new orders but still allow cancel/withdraw.
+    */
+    active: boolean;
+  }
+};

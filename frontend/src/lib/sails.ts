@@ -1,24 +1,25 @@
 /* eslint-disable */
 
 import { GearApi, BaseGearProgram } from '@gear-js/api';
+import type { HexString } from '@gear-js/api';
 import { TypeRegistry } from '@polkadot/types';
-import { TransactionBuilder, QueryBuilder, getServiceNamePrefix, getFnNamePrefix, ZERO_ADDRESS } from 'sails-js';
-import type { ActorId } from 'sails-js';
+import { TransactionBuilder, ActorId, QueryBuilder, getServiceNamePrefix, getFnNamePrefix, ZERO_ADDRESS } from 'sails-js';
 
 export class SailsProgram {
   public readonly registry: TypeRegistry;
   public readonly orderbook: Orderbook;
   public readonly amm: Amm;
   public readonly perps: Perps;
+  public readonly spot: Spot;
   private _program?: BaseGearProgram;
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
       ContractError: {"_enum":["NotAuthorized","NotAdmin","BadParams","JoinFirst","InsufficientUsd","InsufficientAsset","OrderNotFound","OrderAlreadyDone","NoLiquidity","NoBuyers","PoolExists","PoolNotFound","SameAssetPool","InsufficientLiquidity","SlippageExceeded","ZeroAmount","AgentCallFailed","BookFull","NoMarkPrice","LeverageTooHigh","PositionNotFound","WrongDirection","NotLiquidatable","StaleMark"]},
-      Asset: {"_enum":["BTC","ETH","VARA"]},
       TokenKind: {"_enum":["Usd","Btc","Eth","Vara"]},
-      Side: {"_enum":["Buy","Sell"]},
       AgentStrategy: {"_enum":["ArbitrageHunter","MarketMaker","Momentum"]},
+      Asset: {"_enum":["BTC","ETH","VARA"]},
+      Side: {"_enum":["Buy","Sell"]},
       LeaderEntry: {"id":"[u8;32]","name":"String","strategy":"AgentStrategy","usd":"u64","net_worth":"u64"},
       OrderStatus: {"_enum":["Open","Partial","Filled","Cancelled"]},
       OrderPlacedEvent: {"trader":"[u8;32]","side":"Side","asset":"Asset","price":"u64","qty":"u64","order_id":"u64"},
@@ -30,6 +31,13 @@ export class SailsProgram {
       LiquidityAddedEvent: {"pool_id":"u64","provider":"[u8;32]","amount_a":"u64","amount_b":"u64","lp_minted":"u64"},
       LiquidityRemovedEvent: {"pool_id":"u64","provider":"[u8;32]","amount_a":"u64","amount_b":"u64","lp_burned":"u64"},
       SwapExecutedEvent: {"pool_id":"u64","trader":"[u8;32]","asset_in":"Asset","amount_in":"u64","asset_out":"Asset","amount_out":"u64","fee":"u64"},
+      MarkPriceEvent: {"asset":"Asset","price":"u64"},
+      PerpOpenedEvent: {"owner":"[u8;32]","asset":"Asset","is_long":"bool","size":"u64","entry":"u64","margin":"u64","leverage":"u32"},
+      PerpClosedEvent: {"owner":"[u8;32]","asset":"Asset","exit":"u64","payout":"u64","pnl":"i64","liquidated":"bool"},
+      SpotError: {"_enum":["NotAdmin","BadParams","PairExists","NoPair","PairInactive","BookFull","NoOrder","NotOwner","NothingToClaim","TransferFailed"]},
+      SpotOrder: {"id":"u64","pair_id":"u64","trader":"[u8;32]","side":"Side","price":"u128","qty":"u128","filled":"u128","status":"SpotStatus"},
+      SpotStatus: {"_enum":["Open","PartiallyFilled","Filled","Cancelled"]},
+      SpotPair: {"id":"u64","base":"[u8;32]","quote":"[u8;32]","base_dec":"u8","quote_dec":"u8","active":"bool"},
     }
 
     this.registry = new TypeRegistry();
@@ -42,6 +50,7 @@ export class SailsProgram {
     this.orderbook = new Orderbook(this);
     this.amm = new Amm(this);
     this.perps = new Perps(this);
+    this.spot = new Spot(this);
   }
 
   public get programId(): `0x${string}` {
@@ -49,7 +58,7 @@ export class SailsProgram {
     return this._program.id;
   }
 
-  newCtorFromCode(code: Uint8Array): TransactionBuilder<null> {
+  newCtorFromCode(code: Uint8Array | Buffer | HexString): TransactionBuilder<null> {
     const builder = new TransactionBuilder<null>(
       this.api,
       this.registry,
@@ -119,6 +128,34 @@ export class Orderbook {
     );
   }
 
+  /**
+   * Move real VFT tokens from the caller into the DEX vault, crediting their
+   * internal balance. The caller must have `approve`d the DEX on the token
+   * program for at least `amount` first. Credits only after the on-chain
+   * transfer succeeds, so the internal balance stays fully token-backed.
+  */
+  public deposit(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Orderbook',
+      'Deposit',
+      [kind, amount],
+      '(TokenKind, u64)',
+      'Result<u64, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Register the caller's agent identity (name + strategy) and grant the
+   * starting balances. This is the virtual-balance model: an agent is funded
+   * the instant it joins, so it can trade immediately with no token custody,
+   * approve, or deposit step. Idempotent: re-joining returns the existing
+   * balances and keeps the original identity (no double funding).
+  */
   public join(name: string, strategy: AgentStrategy): TransactionBuilder<[number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint]> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<[number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint]>(
@@ -131,19 +168,6 @@ export class Orderbook {
       '(String, AgentStrategy)',
       '(u64, u64, u64, u64)',
       this._program.programId,
-    );
-  }
-
-  public getIdentity(): QueryBuilder<[string, AgentStrategy] | null> {
-    return new QueryBuilder<[string, AgentStrategy] | null>(
-      this._program.api,
-      this._program.registry,
-      this._program.programId,
-      'Orderbook',
-      'GetIdentity',
-      null,
-      null,
-      'Option<(String, AgentStrategy)>',
     );
   }
 
@@ -192,36 +216,30 @@ export class Orderbook {
     );
   }
 
-  public deposit(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+  /**
+   * Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
+   * so the market maker can quote both sides and USDT-only agents always have a
+   * counterparty. Idempotent — after the first call it just returns the balances.
+  */
+  public seedHouse(): TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint] } | { err: ContractError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+    return new TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint, number | string | bigint, number | string | bigint] } | { err: ContractError }>(
       this._program.api,
       this._program.registry,
       'send_message',
       'Orderbook',
-      'Deposit',
-      [kind, amount],
-      '(TokenKind, u64)',
-      'Result<u64, ContractError>',
+      'SeedHouse',
+      null,
+      null,
+      'Result<(u64, u64, u64, u64), ContractError>',
       this._program.programId,
     );
   }
 
-  public withdraw(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
-      this._program.api,
-      this._program.registry,
-      'send_message',
-      'Orderbook',
-      'Withdraw',
-      [kind, amount],
-      '(TokenKind, u64)',
-      'Result<u64, ContractError>',
-      this._program.programId,
-    );
-  }
-
+  /**
+   * Admin-only: register the VFT program ID that backs a custodied balance.
+   * Must be set before deposit/withdraw can move real tokens for that kind.
+  */
   public setToken(kind: TokenKind, address: ActorId): TransactionBuilder<{ ok: null } | { err: ContractError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
@@ -234,32 +252,6 @@ export class Orderbook {
       '(TokenKind, [u8;32])',
       'Result<Null, ContractError>',
       this._program.programId,
-    );
-  }
-
-  public getToken(kind: TokenKind): QueryBuilder<ActorId> {
-    return new QueryBuilder<ActorId>(
-      this._program.api,
-      this._program.registry,
-      this._program.programId,
-      'Orderbook',
-      'GetToken',
-      kind,
-      'TokenKind',
-      '[u8;32]',
-    );
-  }
-
-  public getTokens(): QueryBuilder<[ActorId, ActorId, ActorId, ActorId]> {
-    return new QueryBuilder<[ActorId, ActorId, ActorId, ActorId]>(
-      this._program.api,
-      this._program.registry,
-      this._program.programId,
-      'Orderbook',
-      'GetTokens',
-      null,
-      null,
-      '([u8;32], [u8;32], [u8;32], [u8;32])',
     );
   }
 
@@ -290,6 +282,43 @@ export class Orderbook {
       null,
       'Result<String, ContractError>',
       this._program.programId,
+    );
+  }
+
+  /**
+   * Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
+   * internal balance first, then transfers on-chain; if the transfer fails the
+   * debit is reverted so funds are never silently lost.
+  */
+  public withdraw(kind: TokenKind, amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Orderbook',
+      'Withdraw',
+      [kind, amount],
+      '(TokenKind, u64)',
+      'Result<u64, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Caller's agent identity, or None if they haven't joined. Used by the UI to
+   * decide whether to show the "Create your Agent" onboarding.
+  */
+  public getIdentity(): QueryBuilder<[string, AgentStrategy] | null> {
+    return new QueryBuilder<[string, AgentStrategy] | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetIdentity',
+      null,
+      null,
+      'Option<(String, AgentStrategy)>',
     );
   }
 
@@ -358,6 +387,35 @@ export class Orderbook {
     );
   }
 
+  public getToken(kind: TokenKind): QueryBuilder<ActorId> {
+    return new QueryBuilder<ActorId>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetToken',
+      kind,
+      'TokenKind',
+      '[u8;32]',
+    );
+  }
+
+  /**
+   * All four token registrations as (usd, btc, eth, vara) for the UI/agents.
+  */
+  public getTokens(): QueryBuilder<[ActorId, ActorId, ActorId, ActorId]> {
+    return new QueryBuilder<[ActorId, ActorId, ActorId, ActorId]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Orderbook',
+      'GetTokens',
+      null,
+      null,
+      '([u8;32], [u8;32], [u8;32], [u8;32])',
+    );
+  }
+
   public getTrades(asset: Asset, limit: number): QueryBuilder<Array<[number | string | bigint, number | string | bigint, number | string | bigint, ActorId, ActorId]>> {
     return new QueryBuilder<Array<[number | string | bigint, number | string | bigint, number | string | bigint, ActorId, ActorId]>>(
       this._program.api,
@@ -372,7 +430,7 @@ export class Orderbook {
   }
 
   public subscribeToOrderPlacedEvent(callback: (data: OrderPlacedEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -385,7 +443,7 @@ export class Orderbook {
   }
 
   public subscribeToOrderCancelledEvent(callback: (data: OrderCancelledEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -398,7 +456,7 @@ export class Orderbook {
   }
 
   public subscribeToTradeEvent(callback: (data: TradeEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -514,7 +572,7 @@ export class Amm {
   }
 
   public subscribeToPoolCreatedEvent(callback: (data: PoolCreatedEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -527,7 +585,7 @@ export class Amm {
   }
 
   public subscribeToLiquidityAddedEvent(callback: (data: LiquidityAddedEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -540,7 +598,7 @@ export class Amm {
   }
 
   public subscribeToLiquidityRemovedEvent(callback: (data: LiquidityRemovedEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -553,7 +611,7 @@ export class Amm {
   }
 
   public subscribeToSwapExecutedEvent(callback: (data: SwapExecutedEvent) => void | Promise<void>): Promise<() => void> {
-    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
       if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
         return;
       }
@@ -565,96 +623,472 @@ export class Amm {
     });
   }
 }
+
 export class Perps {
   constructor(private _program: SailsProgram) {}
 
-  public setMarkPrice(asset: Asset, price: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'SetMarkPrice', [asset, price], '(Asset, u64)',
-      'Result<Null, ContractError>', this._program.programId,
-    );
-  }
-
-  public setMarkPrices(btc: number | string | bigint, eth: number | string | bigint, vara: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'SetMarkPrices', [btc, eth, vara], '(u64, u64, u64)',
-      'Result<Null, ContractError>', this._program.programId,
-    );
-  }
-
-  public fundReserve(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'FundReserve', amount, 'u64',
-      'Result<u64, ContractError>', this._program.programId,
-    );
-  }
-
-  public openPosition(asset: Asset, is_long: boolean, margin: number | string | bigint, leverage: number): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
-    if (!this._program.programId) throw new Error('Program ID is not set');
-    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'OpenPosition', [asset, is_long, margin, leverage], '(Asset, bool, u64, u32)',
-      'Result<u64, ContractError>', this._program.programId,
-    );
-  }
-
+  /**
+   * Close your whole position at the current mark price, settling PnL against the
+   * house reserve. Returns `(payout_cents, pnl_cents_signed)`.
+  */
   public closePosition(asset: Asset): TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: ContractError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'ClosePosition', asset, 'Asset',
-      'Result<(u64, i64), ContractError>', this._program.programId,
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'ClosePosition',
+      asset,
+      'Asset',
+      'Result<(u64, i64), ContractError>',
+      this._program.programId,
     );
   }
 
+  /**
+   * Admin: move USD (cents) from your own balance into the house reserve that
+   * pays trader profits. Never mints — total custodied USD is unchanged.
+  */
+  public fundReserve(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'FundReserve',
+      amount,
+      'u64',
+      'Result<u64, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Permissionless liquidation: if a position's equity has fallen to the
+   * maintenance margin, anyone may close it at the mark. The liquidator earns a
+   * small fee from the residual equity; the rest flows to the reserve.
+  */
   public liquidate(owner: ActorId, asset: Asset): TransactionBuilder<{ ok: null } | { err: ContractError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
-      this._program.api, this._program.registry, 'send_message',
-      'Perps', 'Liquidate', [owner, asset], '([u8;32], Asset)',
-      'Result<Null, ContractError>', this._program.programId,
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'Liquidate',
+      [owner, asset],
+      '([u8;32], Asset)',
+      'Result<Null, ContractError>',
+      this._program.programId,
     );
   }
 
-  public getMarkPrice(asset: Asset): QueryBuilder<number | string | bigint> {
-    return new QueryBuilder<number | string | bigint>(
-      this._program.api, this._program.registry, this._program.programId,
-      'Perps', 'GetMarkPrice', asset, 'Asset', 'u64',
+  /**
+   * Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
+   * cents from your balance; position size = margin * leverage at the mark price.
+  */
+  public openPosition(asset: Asset, is_long: boolean, margin: number | string | bigint, leverage: number): TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'OpenPosition',
+      [asset, is_long, margin, leverage],
+      '(Asset, bool, u64, u32)',
+      'Result<u64, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Keeper-only: publish the mark price (USD cents) for an asset. This is the
+   * price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
+  */
+  public setMarkPrice(asset: Asset, price: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'SetMarkPrice',
+      [asset, price],
+      '(Asset, u64)',
+      'Result<Null, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
+   * USD cents. A zero leaves that asset's mark unchanged.
+  */
+  public setMarkPrices(btc: number | string | bigint, eth: number | string | bigint, vara: number | string | bigint): TransactionBuilder<{ ok: null } | { err: ContractError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: ContractError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Perps',
+      'SetMarkPrices',
+      [btc, eth, vara],
+      '(u64, u64, u64)',
+      'Result<Null, ContractError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Liquidation price (USD cents) for a position, i.e. the mark at which equity
+   * hits maintenance margin. 0 if there is no such position.
+  */
+  public getLiqPrice(owner: ActorId, asset: Asset): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Perps',
+      'GetLiqPrice',
+      [owner, asset],
+      '([u8;32], Asset)',
+      'u64',
+    );
+  }
+
+  public getMarkPrice(asset: Asset): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Perps',
+      'GetMarkPrice',
+      asset,
+      'Asset',
+      'u64',
     );
   }
 
   public getMarkPrices(): QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]> {
     return new QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]>(
-      this._program.api, this._program.registry, this._program.programId,
-      'Perps', 'GetMarkPrices', null, null, '(u64, u64, u64)',
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Perps',
+      'GetMarkPrices',
+      null,
+      null,
+      '(u64, u64, u64)',
     );
   }
 
-  public getReserve(): QueryBuilder<number | string | bigint> {
-    return new QueryBuilder<number | string | bigint>(
-      this._program.api, this._program.registry, this._program.programId,
-      'Perps', 'GetReserve', null, null, 'u64',
-    );
-  }
-
+  /**
+   * A trader's open positions as
+   * `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
+  */
   public getPositions(owner: ActorId): QueryBuilder<Array<[Asset, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>> {
     return new QueryBuilder<Array<[Asset, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>>(
-      this._program.api, this._program.registry, this._program.programId,
-      'Perps', 'GetPositions', owner, '[u8;32]',
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Perps',
+      'GetPositions',
+      owner,
+      '[u8;32]',
       'Vec<(Asset, bool, u64, u64, u64, u32, i64)>',
     );
   }
 
-  public getLiqPrice(owner: ActorId, asset: Asset): QueryBuilder<number | string | bigint> {
-    return new QueryBuilder<number | string | bigint>(
-      this._program.api, this._program.registry, this._program.programId,
-      'Perps', 'GetLiqPrice', [owner, asset], '([u8;32], Asset)', 'u64',
+  public getReserve(): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Perps',
+      'GetReserve',
+      null,
+      null,
+      'u64',
+    );
+  }
+
+  public subscribeToMarkPriceEvent(callback: (data: MarkPriceEvent) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Perps' && getFnNamePrefix(payload) === 'MarkPrice') {
+        callback(this._program.registry.createType('(String, String, MarkPriceEvent)', message.payload)[2].toJSON() as unknown as MarkPriceEvent);
+      }
+    });
+  }
+
+  public subscribeToOpenedEvent(callback: (data: PerpOpenedEvent) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Perps' && getFnNamePrefix(payload) === 'Opened') {
+        callback(this._program.registry.createType('(String, String, PerpOpenedEvent)', message.payload)[2].toJSON() as unknown as PerpOpenedEvent);
+      }
+    });
+  }
+
+  public subscribeToClosedEvent(callback: (data: PerpClosedEvent) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Perps' && getFnNamePrefix(payload) === 'Closed') {
+        callback(this._program.registry.createType('(String, String, PerpClosedEvent)', message.payload)[2].toJSON() as unknown as PerpClosedEvent);
+      }
+    });
+  }
+}
+
+export class Spot {
+  constructor(private _program: SailsProgram) {}
+
+  /**
+   * Cancel an open order and refund its unfilled escrow to the caller's claimable
+   * balance (quote for a buy, base for a sell).
+  */
+  public cancelOrder(order_id: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'CancelOrder',
+      order_id,
+      'u64',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Stop accepting new orders on a pair. Existing orders can still be cancelled and
+   * proceeds withdrawn. Admin-only.
+  */
+  public delistPair(pair_id: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'DelistPair',
+      pair_id,
+      'u64',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Curate a new TOKEN/quote market. Admin-only (multisig on mainnet). `base_dec`
+   * and `quote_dec` are the tokens' declared decimals; the caller supplies them so
+   * listing stays synchronous (they are verifiable against each VFT's metadata).
+  */
+  public listPair(base: ActorId, quote: ActorId, base_dec: number, quote_dec: number): TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'ListPair',
+      [base, quote, base_dec, quote_dec],
+      '([u8;32], [u8;32], u8, u8)',
+      'Result<u64, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
+   * the full budget up front, sweeps the asks cheapest-first, and refunds anything
+   * unspent (including the whole budget if the book is empty) to the caller's claim.
+   * Never rests. Requires a prior `approve` of `max_quote` on the quote token.
+  */
+  public marketBuy(pair_id: number | string | bigint, qty: number | string | bigint, max_quote: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'MarketBuy',
+      [pair_id, qty, max_quote],
+      '(u64, u128, u128)',
+      'Result<u64, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Market sell `qty` base into the bids, highest-first. Escrows the base up front,
+   * credits quote proceeds, and refunds any unfilled base to the caller's claim.
+   * Never rests. Requires a prior `approve` of `qty` on the base token.
+  */
+  public marketSell(pair_id: number | string | bigint, qty: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'MarketSell',
+      [pair_id, qty],
+      '(u64, u128)',
+      'Result<u64, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Place a limit order. Escrows the caller's real tokens (a quote-token
+   * `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
+   * then crosses the book by price-time priority, crediting fills to claimable
+   * balances. Any unfilled remainder rests. Reverts with no state change if the
+   * escrow transfer fails.
+  */
+  public placeLimit(pair_id: number | string | bigint, side: Side, price: number | string | bigint, qty: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'PlaceLimit',
+      [pair_id, side, price, qty],
+      '(u64, Side, u128, u128)',
+      'Result<u64, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Hand listing/admin authority to a new account (the multisig on mainnet).
+   * Admin-only; irreversible except by the new admin.
+  */
+  public transferAdmin(new_admin: ActorId): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'TransferAdmin',
+      new_admin,
+      '[u8;32]',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Withdraw the caller's full claimable balance of `token` to their wallet. Debits
+   * optimistically and restores the claim if the on-chain transfer fails.
+  */
+  public withdraw(token: ActorId): TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'Withdraw',
+      token,
+      '[u8;32]',
+      'Result<u128, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * The caller's withdrawable balance for a given token program.
+  */
+  public getClaim(token: ActorId): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Spot',
+      'GetClaim',
+      token,
+      '[u8;32]',
+      'u128',
+    );
+  }
+
+  /**
+   * The caller's open/closed orders.
+  */
+  public getMyOrders(): QueryBuilder<Array<SpotOrder>> {
+    return new QueryBuilder<Array<SpotOrder>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Spot',
+      'GetMyOrders',
+      null,
+      null,
+      'Vec<SpotOrder>',
+    );
+  }
+
+  /**
+   * Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
+   * each level `(price, remaining_qty)`.
+  */
+  public getOrderbook(pair_id: number | string | bigint): QueryBuilder<[Array<[number | string | bigint, number | string | bigint]>, Array<[number | string | bigint, number | string | bigint]>]> {
+    return new QueryBuilder<[Array<[number | string | bigint, number | string | bigint]>, Array<[number | string | bigint, number | string | bigint]>]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Spot',
+      'GetOrderbook',
+      pair_id,
+      'u64',
+      '(Vec<(u128, u128)>, Vec<(u128, u128)>)',
+    );
+  }
+
+  public getPair(pair_id: number | string | bigint): QueryBuilder<SpotPair | null> {
+    return new QueryBuilder<SpotPair | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Spot',
+      'GetPair',
+      pair_id,
+      'u64',
+      'Option<SpotPair>',
+    );
+  }
+
+  public getPairs(): QueryBuilder<Array<SpotPair>> {
+    return new QueryBuilder<Array<SpotPair>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Spot',
+      'GetPairs',
+      null,
+      null,
+      'Vec<SpotPair>',
     );
   }
 }

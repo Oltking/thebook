@@ -1,0 +1,15 @@
+{
+  "name": "SailsProgram",
+  "type": "module",
+  "dependencies": {
+    "@gear-js/api": "^0.44.1",
+    "@polkadot/api": "^16.4.1",
+    "sails-js": "0.5.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}
