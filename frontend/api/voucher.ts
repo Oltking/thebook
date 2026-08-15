@@ -54,8 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const node = process.env.NODE_ADDRESS || DEFAULT_NODE;
   const programId = (process.env.PROGRAM_ID || DEFAULT_PROGRAM) as `0x${string}`;
-  const value = BigInt(process.env.VOUCHER_VARA || '5') * VARA;
-  const duration = Number(process.env.VOUCHER_BLOCKS || '1000000');
+  // Per-account gas allowance. Kept small on purpose: a voucher pays transaction FEES
+  // ONLY (never the sponsor's balance), and this caps how much gas any single account
+  // can consume before it must be re-issued. Vara gas is cheap, so 1 VARA is many trades.
+  const value = BigInt(process.env.VOUCHER_VARA || '1') * VARA;
+  const duration = Number(process.env.VOUCHER_BLOCKS || '216000'); // ~30 days at 12s blocks
 
   const body = (req.body || {}) as { account?: string };
   const account = body.account;
