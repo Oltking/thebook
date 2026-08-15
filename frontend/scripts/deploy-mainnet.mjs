@@ -26,6 +26,7 @@ import { dirname, resolve } from 'node:path';
 import { GearApi } from '@gear-js/api';
 import { Keyring } from '@polkadot/api';
 import { u8aToHex } from '@polkadot/util';
+import { decodeAddress } from '@polkadot/util-crypto';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
@@ -133,8 +134,10 @@ for (const sym of PERP_MARKETS) {
   const id = await call('PerpsV1', 'AddMarket', sym);
   console.log(`    market ${sym.padEnd(5)} id=${id}`);
 }
-await call('PerpsV1', 'SetKeeper', KEEPER ?? admin.address);
-console.log(`    keeper = ${KEEPER ?? admin.address}`);
+// actor_id args must be 32-byte hex, not an SS58 string.
+const keeperHex = KEEPER ? u8aToHex(decodeAddress(KEEPER)) : sourceId;
+await call('PerpsV1', 'SetKeeper', keeperHex);
+console.log(`    keeper = ${keeperHex}`);
 
 console.log(`\n  ✓ deploy complete\n`);
 console.log(`  Put this in frontend/.env, then redeploy the frontend:`);
