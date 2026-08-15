@@ -1809,3 +1809,138 @@ async fn spot_unknown_pair_rejects() {
         .unwrap();
     assert!(res.is_err(), "unknown pair id must be rejected");
 }
+
+// ── v1 perps (cash-settled, real collateral) ─────────────────────────────────────────
+use thebook_client::perps_v_1::io as perp1_io;
+
+/// Set up perps: USDT collateral, one market, a funded reserve. Returns (collateral, market_id).
+async fn setup_perps_v1(
+    env: &GtestEnv,
+    program: &Actor<ThebookClientProgram, GtestEnv>,
+) -> (ActorId, u64) {
+    let dex = program.id();
+    let (t_usd, _b, _e, _v): (ActorId, ActorId, ActorId, ActorId) = program
+        .orderbook()
+        .pending_call::<ob_io::GetTokens>(())
+        .await
+        .unwrap();
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetCollateral>((t_usd,))
+        .await
+        .unwrap()
+        .unwrap();
+    let market: u64 = program
+        .perps_v_1()
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(),))
+        .await
+        .unwrap()
+        .unwrap();
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetMark>((market, 2000u128))
+        .await
+        .unwrap()
+        .unwrap();
+    // Admin funds the reserve with real collateral.
+    claim_and_approve(env, t_usd, dex, ALICE, 50_000).await;
+    let _: u128 = program
+        .perps_v_1()
+        .pending_call::<perp1_io::FundReserve>((50_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+    (t_usd, market)
+}
+
+#[tokio::test]
+async fn perps_open_close_profit_settles_to_claim() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (usd, market) = setup_perps_v1(&env, &program).await;
+
+    // BOB opens a 2x long: margin 10_000, notional 20_000, entry 2000.
+    claim_and_approve(&env, usd, dex, BOB, 10_000).await;
+    let pos: u64 = as_dex(&env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .await
+        .unwrap()
+        .unwrap();
+    // Mark rises 10%: pnl = 20_000 * 200 / 2000 = 2_000.
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetMark>((market, 2200u128))
+        .await
+        .unwrap()
+        .unwrap();
+    let (payout, pnl): (u128, i128) = as_dex(&env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::ClosePosition>((pos,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pnl, 2_000);
+    assert_eq!(payout, 12_000, "margin + profit");
+
+    // Payout is claimable collateral, withdrawable via the spot withdraw path.
+    let claim: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((usd,))
+        .await
+        .unwrap();
+    assert_eq!(claim, 12_000);
+    let w: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::Withdraw>((usd,))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(w, 12_000);
+}
+
+#[tokio::test]
+async fn perps_liquidation_splits_residual() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (usd, market) = setup_perps_v1(&env, &program).await;
+
+    // BOB opens a 10x long: margin 10_000, notional 100_000, entry 2000.
+    claim_and_approve(&env, usd, dex, BOB, 10_000).await;
+    let pos: u64 = as_dex(&env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 10u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Drop to 1810: pnl = 100_000*(1810-2000)/2000 = -9_500 → equity 500 = maintenance.
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetMark>((market, 1810u128))
+        .await
+        .unwrap()
+        .unwrap();
+    // ALICE liquidates. residual eq 500: fee = min(500, margin*1%) = 100 → owner 400.
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::Liquidate>((pos,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let bob_claim: u128 = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetClaim>((usd,))
+        .await
+        .unwrap();
+    assert_eq!(bob_claim, 400, "owner gets residual equity minus liquidator fee");
+
+    // The position is gone; a second liquidation finds nothing.
+    let again: Result<(), _> = program
+        .perps_v_1()
+        .pending_call::<perp1_io::Liquidate>((pos,))
+        .await
+        .unwrap();
+    assert!(again.is_err());
+}

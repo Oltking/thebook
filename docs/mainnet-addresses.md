@@ -9,8 +9,11 @@ Ethereum-side bridge addresses are NOT used here.
 | Symbol | Vara program ID | Decimals | Source |
 |---|---|---|---|
 | wVARA | `0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17` | 12 | RivrDEX contracts doc |
+| wETH | `0xde45bdbb0345919a11561d43a5082e0b25061d4a2c6eb80009c1cfbccb80d0de` | 18 (⚠ confirm) | user-provided |
 | wUSDT | `0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e` | 6 | RivrDEX contracts doc |
 | wUSDC | `0xd1de816d7dce6439504552686ab333e5b7302b1549763656b30af1f8a5871b6a` | 6 (⚠ confirm) | user-provided |
+
+Base assets to trade: **ETH** and **VARA**, each quoted against wUSDT and wUSDC.
 
 > **wVARA on Ethereum** (`0xb67010f2246814e5c39593ac23a925d9e9d7e5ad`) is the 20-byte
 > bridge counterpart — kept here for reference only, never passed to the contract.
