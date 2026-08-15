@@ -224,6 +224,32 @@ type SpotPair = struct {
   active: bool,
 };
 
+type PerpsError = enum {
+  NotAdmin,
+  NotKeeper,
+  BadParams,
+  NoMarket,
+  MarketInactive,
+  StaleMark,
+  LeverageTooHigh,
+  InsufficientMargin,
+  PositionNotFound,
+  NotLiquidatable,
+  BookFull,
+  TransferFailed,
+  NoCollateral,
+};
+
+type PerpMarket = struct {
+  id: u64,
+  symbol: str,
+  /// Mark price (arbitrary consistent units; PnL uses price ratios so the unit cancels).
+  mark: u128,
+  /// Block the mark was last published.
+  mark_block: u32,
+  active: bool,
+};
+
 constructor {
   New : ();
 };
@@ -373,5 +399,34 @@ service Spot {
   query GetOrderbook : (pair_id: u64) -> struct { vec struct { u128, u128 }, vec struct { u128, u128 } };
   query GetPair : (pair_id: u64) -> opt SpotPair;
   query GetPairs : () -> vec SpotPair;
+};
+
+service PerpsV1 {
+  /// Admin: list a perp market by symbol. Returns its id.
+  AddMarket : (symbol: str) -> result (u64, PerpsError);
+  /// Close your position at the current mark, settling PnL against the reserve and
+  /// crediting the payout to your claimable collateral (withdraw via `Spot/Withdraw`).
+  ClosePosition : (position_id: u64) -> result (struct { u128, i128 }, PerpsError);
+  /// Admin: fund the house reserve with real collateral (requires a prior `approve`).
+  FundReserve : (amount: u128) -> result (u128, PerpsError);
+  /// Permissionless liquidation once equity falls to maintenance margin. The
+  /// liquidator earns a fee from residual equity; the rest is settled to the owner.
+  Liquidate : (position_id: u64) -> result (null, PerpsError);
+  /// Open an isolated-margin position. Escrows `margin` of the collateral token
+  /// (requires a prior `approve`); notional = margin * leverage at the mark.
+  OpenPosition : (market_id: u64, is_long: bool, margin: u128, leverage: u32) -> result (u64, PerpsError);
+  /// Admin: set the collateral (settlement) token — the USDT VFT program.
+  SetCollateral : (token: actor_id) -> result (null, PerpsError);
+  /// Admin: set the keeper account allowed to push mark prices.
+  SetKeeper : (keeper: actor_id) -> result (null, PerpsError);
+  /// Keeper: publish the mark price for a market.
+  SetMark : (market_id: u64, price: u128) -> result (null, PerpsError);
+  /// Liquidation price for a position (0 if none).
+  query GetLiqPrice : (position_id: u64) -> u128;
+  query GetMarkets : () -> vec PerpMarket;
+  /// A trader's open positions with PnL at the current mark:
+  /// `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
+  query GetPositions : (owner: actor_id) -> vec struct { u64, u64, bool, u128, u128, u128, u32, i128 };
+  query GetReserve : () -> u128;
 };
 

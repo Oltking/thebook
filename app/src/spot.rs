@@ -105,6 +105,18 @@ pub struct SpotState {
     pub next_oid: u64,
     /// Withdrawable proceeds, keyed by (user, token program). Backed 1:1 by held tokens.
     pub claims: BTreeMap<(ActorId, ActorId), u128>,
+
+    // ── Perps (cash-settled in the collateral token; PnL flows through `claims`) ──
+    /// Settlement/collateral token for perps (the USDT VFT program).
+    pub perp_collateral: ActorId,
+    /// Account allowed to push mark prices (the keeper).
+    pub perp_keeper: ActorId,
+    /// Real collateral held as the house reserve that pays trader profit.
+    pub perp_reserve: u128,
+    pub perp_markets: Vec<crate::perps_spot::PerpMarket>,
+    pub next_perp_market: u64,
+    pub perp_positions: Vec<crate::perps_spot::PerpPosition>,
+    pub next_perp_pos: u64,
 }
 
 impl SpotState {

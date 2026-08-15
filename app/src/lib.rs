@@ -11,6 +11,7 @@ use sails_rs::prelude::*;
 pub mod amm;
 pub mod orderbook;
 pub mod perps;
+pub mod perps_spot;
 pub mod spot;
 pub mod state;
 pub mod types;
@@ -18,6 +19,7 @@ pub mod types;
 pub use amm::AmmService;
 pub use orderbook::OrderbookService;
 pub use perps::PerpsService;
+pub use perps_spot::PerpsService as SpotPerpsService;
 pub use spot::{SpotService, SpotState};
 pub use state::DexState;
 
@@ -64,5 +66,11 @@ impl Program {
 
     pub fn spot(&self) -> SpotService<'_> {
         SpotService::new(&self.spot)
+    }
+
+    // Perps share the spot state so margin/PnL settle through the same claimable
+    // balances (withdraw via Spot/Withdraw).
+    pub fn perps_v1(&self) -> SpotPerpsService<'_> {
+        SpotPerpsService::new(&self.spot)
     }
 }
