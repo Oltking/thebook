@@ -240,6 +240,32 @@ export async function connectTheBook(opts = {}) {
       claim: (token) => query('Spot', 'GetClaim', [token]),
     },
 
+    // ── v1 perps: cash-settled, real USDT collateral, settles to spot claims ──
+    // Margin/amounts are collateral smallest-units (u128). `price` (mark) is any
+    // consistent unit (PnL uses price ratios). Margin escrow needs a prior
+    // `spot.approve(collateralToken, amount)`; payouts withdraw via `spot.withdraw`.
+    perps: {
+      // Admin/multisig.
+      setCollateral: (token) => send('PerpsV1', 'SetCollateral', [token]),
+      setKeeper: (who) => send('PerpsV1', 'SetKeeper', [who]),
+      addMarket: (symbol) => send('PerpsV1', 'AddMarket', [symbol]),
+      setMarketCap: (marketId, maxOi) => send('PerpsV1', 'SetMarketCap', [marketId, maxOi]),
+      fundReserve: (amount) => send('PerpsV1', 'FundReserve', [amount]),
+      withdrawReserve: (amount) => send('PerpsV1', 'WithdrawReserve', [amount]),
+      // Keeper: publish a market's mark price.
+      setMark: (marketId, price) => send('PerpsV1', 'SetMark', [marketId, price]),
+      // Trading.
+      open: (marketId, isLong, margin, leverage) =>
+        send('PerpsV1', 'OpenPosition', [marketId, isLong, margin, leverage]),
+      close: (positionId) => send('PerpsV1', 'ClosePosition', [positionId]),
+      liquidate: (positionId) => send('PerpsV1', 'Liquidate', [positionId]),
+      // Reads.
+      markets: () => query('PerpsV1', 'GetMarkets'),
+      reserve: () => query('PerpsV1', 'GetReserve'),
+      positions: (owner) => query('PerpsV1', 'GetPositions', [owner ?? account.address]),
+      liqPrice: (positionId) => query('PerpsV1', 'GetLiqPrice', [positionId]),
+    },
+
     // ── reads (your own view) ──
     async identity() {
       const r = await query('Orderbook', 'GetIdentity');
