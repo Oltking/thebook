@@ -5,10 +5,7 @@ import { SkeletonCard } from './components/ui/Skeleton';
 import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
-const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m.TradeView })));
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
-const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
-const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const SpotPortfolioView = lazy(() => import('./views/SpotPortfolioView').then(m => ({ default: m.SpotPortfolioView })));
 const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
@@ -96,16 +93,10 @@ function App() {
     switch (activeTab) {
       case 'trade':
         return <SpotTradeView />;
-      case 'futures':
-        return <TradeView mode="futures" />;
-      case 'swap':
-        return <SwapView />;
-      case 'pools':
-        return <PoolsView />;
       case 'portfolio':
         return <SpotPortfolioView />;
       default:
-        return <TradeView mode="spot" />;
+        return <SpotTradeView />;
     }
   };
 

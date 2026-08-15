@@ -1,4 +1,4 @@
-import { TrendingUp, ArrowLeftRight, Droplets, User, BarChart2 } from 'lucide-react';
+import { User, BarChart2 } from 'lucide-react';
 
 // Network + program are environment-driven so the same build can target testnet,
 // mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
@@ -50,17 +50,16 @@ export interface NavItem {
   icon: React.ElementType;
 }
 
+// v1 is spot-only: Futures/Swap/Pools (the virtual-balance surfaces) are parked
+// until v2. Their view files remain in the repo but are not routed.
 export const NAV_ITEMS: NavItem[] = [
   { id: 'trade',     label: 'Trade',     icon: BarChart2 },
-  { id: 'futures',   label: 'Futures',   icon: TrendingUp },
-  { id: 'swap',      label: 'Swap',      icon: ArrowLeftRight },
-  { id: 'pools',     label: 'Pools',     icon: Droplets },
   { id: 'portfolio', label: 'Portfolio', icon: User },
 ];
 
-// The phone bottom bar shows the core five so labels never cram/clip. The Hive
+// The phone bottom bar mirrors the (currently two) desktop tabs. The Hive
 // (agent world) is reached from the header switch, not the bottom bar.
-const MOBILE_NAV_IDS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
+const MOBILE_NAV_IDS = ['trade', 'portfolio'];
 export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_IDS
   .map((id) => NAV_ITEMS.find((n) => n.id === id)!)
   .filter(Boolean);
