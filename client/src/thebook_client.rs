@@ -846,6 +846,19 @@ pub mod perps_v_1 {
             market_id: u64,
             price: u128,
         ) -> sails_rs::client::PendingCall<io::SetMark, Self::Env>;
+        /// Admin: cap open interest per side on a market, bounding the reserve's max loss.
+        fn set_market_cap(
+            &mut self,
+            market_id: u64,
+            max_oi: u128,
+        ) -> sails_rs::client::PendingCall<io::SetMarketCap, Self::Env>;
+        /// Admin: withdraw reserve profit (fees + net trader losses) to the admin's
+        /// claimable collateral. The operator is responsible for leaving enough to cover
+        /// open positions — withdraw profit, not the whole book.
+        fn withdraw_reserve(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::WithdrawReserve, Self::Env>;
         /// Liquidation price for a position (0 if none).
         fn get_liq_price(
             &self,
@@ -915,6 +928,19 @@ pub mod perps_v_1 {
         ) -> sails_rs::client::PendingCall<io::SetMark, Self::Env> {
             self.pending_call((market_id, price))
         }
+        fn set_market_cap(
+            &mut self,
+            market_id: u64,
+            max_oi: u128,
+        ) -> sails_rs::client::PendingCall<io::SetMarketCap, Self::Env> {
+            self.pending_call((market_id, max_oi))
+        }
+        fn withdraw_reserve(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::WithdrawReserve, Self::Env> {
+            self.pending_call((amount,))
+        }
         fn get_liq_price(
             &self,
             position_id: u64,
@@ -945,6 +971,8 @@ pub mod perps_v_1 {
         sails_rs::io_struct_impl!(SetCollateral (token: ActorId) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetKeeper (keeper: ActorId) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetMark (market_id: u64, price: u128) -> Result<(), super::PerpsError>);
+        sails_rs::io_struct_impl!(SetMarketCap (market_id: u64, max_oi: u128) -> Result<(), super::PerpsError>);
+        sails_rs::io_struct_impl!(WithdrawReserve (amount: u128) -> Result<u128, super::PerpsError>);
         sails_rs::io_struct_impl!(GetLiqPrice (position_id: u64) -> u128);
         sails_rs::io_struct_impl!(GetMarkets () -> Vec<super::PerpMarket>);
         sails_rs::io_struct_impl!(GetPositions (owner: ActorId) -> Vec<(u64,u64,bool,u128,u128,u128,u32,i128,)>);
@@ -1240,6 +1268,8 @@ pub enum PerpsError {
     BookFull,
     TransferFailed,
     NoCollateral,
+    /// Opening would push this side's open interest past the market cap.
+    OiCapExceeded,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1252,4 +1282,10 @@ pub struct PerpMarket {
     /// Block the mark was last published.
     pub mark_block: u32,
     pub active: bool,
+    /// Open interest (sum of position notional) per side — the house's directional
+    /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
+    pub long_oi: u128,
+    pub short_oi: u128,
+    /// Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+    pub max_oi: u128,
 }

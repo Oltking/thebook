@@ -1880,8 +1880,10 @@ async fn perps_open_close_profit_settles_to_claim() {
         .await
         .unwrap()
         .unwrap();
+    // notional 20_000 → open fee 20 (margin 9_980); pnl = 20_000*200/2000 = 2_000;
+    // gross payout 11_980; close fee 20 → net 11_960.
     assert_eq!(pnl, 2_000);
-    assert_eq!(payout, 12_000, "margin + profit");
+    assert_eq!(payout, 11_960, "margin + profit − 0.1%/side fees");
 
     // Payout is claimable collateral, withdrawable via the spot withdraw path.
     let claim: u128 = as_dex(&env, dex, BOB)
@@ -1889,14 +1891,14 @@ async fn perps_open_close_profit_settles_to_claim() {
         .pending_call::<spot_io::GetClaim>((usd,))
         .await
         .unwrap();
-    assert_eq!(claim, 12_000);
+    assert_eq!(claim, 11_960);
     let w: u128 = as_dex(&env, dex, BOB)
         .spot()
         .pending_call::<spot_io::Withdraw>((usd,))
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(w, 12_000);
+    assert_eq!(w, 11_960);
 }
 
 #[tokio::test]
@@ -1929,12 +1931,14 @@ async fn perps_liquidation_splits_residual() {
         .unwrap()
         .unwrap();
 
+    // notional 100_000 → open fee 100 (margin 9_900); at 1810 equity = 9_900 − 9_500 = 400
+    // ≤ maintenance 500. Residual 400: liquidator fee 99 → owner 301.
     let bob_claim: u128 = as_dex(&env, dex, BOB)
         .spot()
         .pending_call::<spot_io::GetClaim>((usd,))
         .await
         .unwrap();
-    assert_eq!(bob_claim, 400, "owner gets residual equity minus liquidator fee");
+    assert_eq!(bob_claim, 301, "owner gets residual equity minus liquidator fee");
 
     // The position is gone; a second liquidation finds nothing.
     let again: Result<(), _> = program
@@ -1943,4 +1947,42 @@ async fn perps_liquidation_splits_residual() {
         .await
         .unwrap();
     assert!(again.is_err());
+}
+
+#[tokio::test]
+async fn perps_oi_cap_and_fee_revenue() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (usd, market) = setup_perps_v1(&env, &program).await;
+
+    // Cap this market at 25_000 notional per side.
+    let _: () = program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetMarketCap>((market, 25_000u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    claim_and_approve(&env, usd, dex, BOB, 20_000).await;
+    // First open: notional 20_000 within cap. Reserve grows by the 20 open fee.
+    let _: u64 = as_dex(&env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .await
+        .unwrap()
+        .unwrap();
+    let reserve: u128 = program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetReserve>(())
+        .await
+        .unwrap();
+    assert_eq!(reserve, 50_020, "reserve grew by the open fee");
+
+    // Second open would push long OI to 40_000 over the 25_000 cap: rejected.
+    let res: Result<u64, _> = as_dex(&env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .await
+        .unwrap();
+    assert!(res.is_err(), "open interest cap must reject the second position");
 }

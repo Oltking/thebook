@@ -18,6 +18,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 pub const MAX_LEVERAGE: u32 = 20;
+/// Trading fee per side (open and close), in basis points of notional. Fees accrue to
+/// the house reserve — that's the perps revenue on top of trader losses.
+pub const FEE_BPS: u128 = 10; // 0.1%
 /// Maintenance-margin requirement, in basis points of notional.
 pub const MAINTENANCE_BPS: u128 = 50; // 0.5%
 /// Liquidator's cut of residual equity, in basis points of margin.
@@ -43,6 +46,8 @@ pub enum PerpsError {
     BookFull,
     TransferFailed,
     NoCollateral,
+    /// Opening would push this side's open interest past the market cap.
+    OiCapExceeded,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -56,6 +61,12 @@ pub struct PerpMarket {
     /// Block the mark was last published.
     pub mark_block: u32,
     pub active: bool,
+    /// Open interest (sum of position notional) per side — the house's directional
+    /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
+    pub long_oi: u128,
+    pub short_oi: u128,
+    /// Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+    pub max_oi: u128,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -200,8 +211,25 @@ impl<'a> PerpsService<'a> {
             mark: 0,
             mark_block: 0,
             active: true,
+            long_oi: 0,
+            short_oi: 0,
+            max_oi: u128::MAX,
         });
         Ok(id)
+    }
+
+    /// Admin: cap open interest per side on a market, bounding the reserve's max loss.
+    #[export]
+    pub fn set_market_cap(&mut self, market_id: u64, max_oi: u128) -> Result<(), PerpsError> {
+        self.require_admin()?;
+        let mut st = self.state.borrow_mut();
+        let m = st
+            .perp_markets
+            .iter_mut()
+            .find(|m| m.id == market_id)
+            .ok_or(PerpsError::NoMarket)?;
+        m.max_oi = max_oi;
+        Ok(())
     }
 
     /// Keeper: publish the mark price for a market.
@@ -273,6 +301,32 @@ impl<'a> PerpsService<'a> {
             return Err(PerpsError::TransferFailed);
         }
         let mut st = self.state.borrow_mut();
+        let notional = margin * leverage as u128;
+        // Trading fee (charged on notional, taken from the posted margin).
+        let open_fee = notional * FEE_BPS / 10_000;
+        if margin <= open_fee {
+            return Err(PerpsError::InsufficientMargin);
+        }
+        // Open-interest cap: bound the reserve's directional exposure per side.
+        {
+            let m = st
+                .perp_markets
+                .iter()
+                .find(|m| m.id == market_id)
+                .ok_or(PerpsError::NoMarket)?;
+            let side_oi = if is_long { m.long_oi } else { m.short_oi };
+            if side_oi.saturating_add(notional) > m.max_oi {
+                return Err(PerpsError::OiCapExceeded);
+            }
+        }
+        st.perp_reserve += open_fee; // fee revenue to the house reserve
+        if let Some(m) = st.perp_markets.iter_mut().find(|m| m.id == market_id) {
+            if is_long {
+                m.long_oi += notional;
+            } else {
+                m.short_oi += notional;
+            }
+        }
         let id = st.next_perp_pos;
         st.next_perp_pos += 1;
         st.perp_positions.push(PerpPosition {
@@ -280,9 +334,9 @@ impl<'a> PerpsService<'a> {
             owner: caller,
             market_id,
             is_long,
-            notional: margin * leverage as u128,
+            notional,
             entry,
-            margin,
+            margin: margin - open_fee,
             leverage,
         });
         Ok(id)
@@ -304,10 +358,22 @@ impl<'a> PerpsService<'a> {
         let pnl = pnl_of(&pos, mark);
         let (payout, reserve_delta) = settle(pos.margin, pnl, st.perp_reserve);
         st.perp_reserve = (st.perp_reserve as i128 + reserve_delta) as u128;
+        // Close fee (on notional), taken from the payout, accrues to the reserve.
+        let close_fee = (pos.notional * FEE_BPS / 10_000).min(payout);
+        let net_payout = payout - close_fee;
+        st.perp_reserve += close_fee;
+        // Release the position's open interest.
+        if let Some(m) = st.perp_markets.iter_mut().find(|m| m.id == pos.market_id) {
+            if pos.is_long {
+                m.long_oi = m.long_oi.saturating_sub(pos.notional);
+            } else {
+                m.short_oi = m.short_oi.saturating_sub(pos.notional);
+            }
+        }
         let collateral = st.perp_collateral;
-        st.credit(caller, collateral, payout);
+        st.credit(caller, collateral, net_payout);
         st.perp_positions.remove(idx);
-        Ok((payout, pnl))
+        Ok((net_payout, pnl))
     }
 
     /// Permissionless liquidation once equity falls to maintenance margin. The
@@ -334,6 +400,14 @@ impl<'a> PerpsService<'a> {
         let to_owner = eq_pos - fee;
         // Whatever the margin didn't cover flows into the reserve.
         st.perp_reserve = (st.perp_reserve as i128 + pos.margin as i128 - eq_pos as i128) as u128;
+        // Release the position's open interest.
+        if let Some(m) = st.perp_markets.iter_mut().find(|m| m.id == pos.market_id) {
+            if pos.is_long {
+                m.long_oi = m.long_oi.saturating_sub(pos.notional);
+            } else {
+                m.short_oi = m.short_oi.saturating_sub(pos.notional);
+            }
+        }
         let collateral = st.perp_collateral;
         st.credit(pos.owner, collateral, to_owner);
         if fee > 0 {
@@ -341,6 +415,22 @@ impl<'a> PerpsService<'a> {
         }
         st.perp_positions.remove(idx);
         Ok(())
+    }
+
+    /// Admin: withdraw reserve profit (fees + net trader losses) to the admin's
+    /// claimable collateral. The operator is responsible for leaving enough to cover
+    /// open positions — withdraw profit, not the whole book.
+    #[export]
+    pub fn withdraw_reserve(&mut self, amount: u128) -> Result<u128, PerpsError> {
+        self.require_admin()?;
+        let mut st = self.state.borrow_mut();
+        if amount == 0 || amount > st.perp_reserve {
+            return Err(PerpsError::BadParams);
+        }
+        st.perp_reserve -= amount;
+        let (admin, collateral) = (st.admin, st.perp_collateral);
+        st.credit(admin, collateral, amount);
+        Ok(st.perp_reserve)
     }
 
     // ── Reads ──
