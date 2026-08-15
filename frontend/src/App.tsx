@@ -35,8 +35,11 @@ function readLocation(): { entered: boolean; mode: 'trade' | 'hive'; tab: string
   if (!inApp) return { entered: false, mode: 'trade', tab: 'trade' };
   // On an app host the app segments start at 0; on a path they start after 'app'.
   const rest = onAppHost ? seg : seg.slice(1);
-  // Bare "/app" (or the app host root) lands on the Hive, the first side.
-  if (!rest[0] || rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
+  // v1: the trade app is the default face. The Hive (agent world) still assumes the
+  // legacy virtual-balance model, so it's parked behind an explicit "/hive" path
+  // rather than being the landing side (see task: rework/park the Hive).
+  if (rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
+  if (!rest[0]) return { entered: true, mode: 'trade', tab: 'trade' };
   const tab = TABS.includes(rest[0]) ? rest[0] : 'trade';
   return { entered: true, mode: 'trade', tab };
 }
@@ -57,9 +60,9 @@ function App() {
   // item crosses into the Hive; the Hive's own switch crosses back.
   const [mode, setMode] = useState<'trade' | 'hive'>(initial.mode);
   // Public landing is the front door; entering the app moves the URL to /app so
-  // a refresh stays put. The Hive is the first side, so entering lands there.
+  // a refresh stays put. v1 enters the trade app by default (the Hive is parked).
   const [entered, setEntered] = useState(initial.entered);
-  const enterApp = (toHive = true) => {
+  const enterApp = (toHive = false) => {
     setMode(toHive ? 'hive' : 'trade');
     setEntered(true);
   };
