@@ -22,8 +22,16 @@ import { cryptoWaitReady } from '@polkadot/util-crypto';
  *   VOUCHER_BLOCKS — voucher validity in blocks (default: 1_000_000 ≈ weeks)
  */
 
-const DEFAULT_NODE = 'wss://testnet.vara.network';
+const DEFAULT_NODE = 'wss://rpc.vara.network';
 const DEFAULT_PROGRAM = '0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484';
+// The voucher must also cover the token VFT programs, because a spot order's `approve`
+// tx is sent to the token program (not the DEX). Without these, approvals aren't gasless.
+const TOKEN_PROGRAMS = [
+  '0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17', // wVARA
+  '0xde45bdbb0345919a11561d43a5082e0b25061d4a2c6eb80009c1cfbccb80d0de', // wETH
+  '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e', // wUSDT
+  '0xd1de816d7dce6439504552686ab333e5b7302b1549763656b30af1f8a5871b6a', // wUSDC
+];
 const VARA = 1_000_000_000_000n; // 12 decimals
 
 let apiPromise: Promise<GearApi> | null = null;
@@ -85,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       spender,
       value,
       dur,
-      [programId],
+      [programId, ...TOKEN_PROGRAMS], // DEX + token programs (approve is on the token)
       false, // no code uploading
     );
 
