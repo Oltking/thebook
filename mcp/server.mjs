@@ -9,15 +9,15 @@
 // Config (via env in your MCP client config):
 //   VARA_SEED           the agent's account seed / mnemonic (its identity)
 //   THEBOOK_PROGRAM_ID  thebook contract id (0x…)
-//   NODE_ADDRESS        Vara RPC ws endpoint (default wss://testnet.vara.network)
+//   NODE_ADDRESS        Vara RPC ws endpoint (default wss://rpc.vara.network — mainnet)
 //
-// Testnet only. The seed controls test funds; never point this at an account
-// holding real value.
+// MAINNET / real value. The seed controls a wallet holding real tokens — keep it under
+// spend limits and only fund it with what the agent may trade.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { connectTheBook, Asset, Side, Strategy } from 'thebook-sdk';
+import { connectTheBook } from 'thebook-sdk';
 
 // Connect lazily and once: the first tool call opens the chain connection so the
 // server starts instantly even if the node is momentarily unreachable.
@@ -35,64 +35,64 @@ async function book() {
 }
 
 // Format any result as MCP text content, stringifying objects readably.
-const ok = (v) => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v, null, 2) }] });
+const bigintReplacer = (_k, val) => (typeof val === 'bigint' ? val.toString() : val);
+const ok = (v) => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v, bigintReplacer, 2) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: `Error: ${e?.message || String(e)}` }], isError: true });
 // Wrap a handler so thrown errors come back as tool errors, not crashes.
 const tool = (fn) => async (args) => { try { return ok(await fn(await book(), args)); } catch (e) { return fail(e); } };
 
-const assetEnum = z.enum(['BTC', 'ETH', 'VARA']);
-const strategyEnum = z.enum(['ArbitrageHunter', 'MarketMaker', 'Momentum']);
+// Amounts/prices are token smallest-units (u128) — pass as decimal strings so 18-decimal
+// tokens don't overflow JS numbers. Pair/order ids are small integers.
+const bnStr = z.string().regex(/^\d+$/, 'a whole number as a string (smallest-units)');
 
 const server = new McpServer({ name: 'thebook', version: '0.1.0' });
 
-// ── Identity ──
-server.tool('thebook_join', 'Sign up this agent on thebook AND get its starting balances (idempotent). Call once; the agent can trade immediately after.',
-  { name: z.string().describe('Display name for the agent'), strategy: strategyEnum.default('ArbitrageHunter').describe('Trading style shown on the leaderboard') },
-  tool((b, { name, strategy }) => b.join(name, Strategy[strategy]).then(() => `Joined thebook as "${name}" (${strategy}).`)),
+// ── Markets ──
+server.tool('thebook_pairs', 'List the curated spot markets (pair id, base/quote token ids, decimals). Read this first to get a pairId.',
+  {}, tool((b) => b.spot.pairs()),
 );
-server.tool('thebook_identity', "This agent's on-chain identity (name + strategy), or null if it hasn't joined.",
-  {}, tool((b) => b.identity()),
+server.tool('thebook_orderbook', 'The current bids and asks for a market (price levels + sizes).',
+  { pairId: z.number().int().describe('Pair id from thebook_pairs') },
+  tool((b, { pairId }) => b.spot.orderbook(BigInt(pairId))),
+);
+
+// ── Approvals (required before an order can escrow a token) ──
+server.tool('thebook_approve', 'Approve the exchange to escrow a token before trading it (quote token for a buy, base token for a sell). Amount is smallest-units.',
+  { token: z.string().describe('Token VFT program id (0x…) from thebook_pairs'), amount: bnStr.describe('Smallest-units to approve; use a large value to avoid re-approving') },
+  tool((b, { token, amount }) => b.spot.approve(token, BigInt(amount)).then(() => `Approved ${amount} of ${token}.`)),
+);
+server.tool('thebook_allowance', "This wallet's current allowance to the exchange for a token, and its balance.",
+  { token: z.string().describe('Token VFT program id (0x…)') },
+  tool(async (b, { token }) => ({ allowance: (await b.spot.allowance(token)).toString(), balance: (await b.spot.balanceOf(token)).toString() })),
 );
 
 // ── Spot trading ──
-server.tool('thebook_market_buy', 'Market-buy an asset for immediate fill at the best available price.',
-  { asset: assetEnum, qty: z.number().positive().describe('Amount in whole units, e.g. 0.01 = 0.01 BTC') },
-  tool((b, { asset, qty }) => b.marketBuy(Asset[asset], b.qty(qty)).then(() => `Market bought ${qty} ${asset}.`)),
+server.tool('thebook_place_limit', 'Place a resting limit order. Approve the escrow token first (quote for Buy, base for Sell).',
+  { pairId: z.number().int(), side: z.enum(['Buy', 'Sell']), price: bnStr.describe('Quote smallest-units per whole base'), qty: bnStr.describe('Base smallest-units') },
+  tool((b, { pairId, side, price, qty }) => b.spot.placeLimit(BigInt(pairId), side, BigInt(price), BigInt(qty)).then((oid) => ({ orderId: oid?.toString?.() ?? oid }))),
 );
-server.tool('thebook_market_sell', 'Market-sell an asset for immediate fill at the best available price.',
-  { asset: assetEnum, qty: z.number().positive().describe('Amount in whole units, e.g. 0.01 = 0.01 BTC') },
-  tool((b, { asset, qty }) => b.marketSell(Asset[asset], b.qty(qty)).then(() => `Market sold ${qty} ${asset}.`)),
+server.tool('thebook_market_buy', 'Market-buy base tokens, spending at most maxQuote. Approve the quote token for maxQuote first.',
+  { pairId: z.number().int(), qty: bnStr.describe('Base smallest-units to buy'), maxQuote: bnStr.describe('Max quote smallest-units to spend') },
+  tool((b, { pairId, qty, maxQuote }) => b.spot.marketBuy(BigInt(pairId), BigInt(qty), BigInt(maxQuote)).then((oid) => ({ orderId: oid?.toString?.() ?? oid }))),
 );
-server.tool('thebook_place_limit', 'Place a resting limit order. Read thebook_orderbook first to pick a price level (integer tick).',
-  { side: z.enum(['Buy', 'Sell']), asset: assetEnum, price: z.number().int().describe('Price in book ticks (see thebook_orderbook levels)'), qty: z.number().positive().describe('Amount in whole units') },
-  tool((b, { side, asset, price, qty }) => b.placeLimit(Side[side], Asset[asset], price, b.qty(qty)).then((oid) => ({ orderId: oid?.toString?.() ?? oid }))),
+server.tool('thebook_market_sell', 'Market-sell base tokens into the bids. Approve the base token for qty first.',
+  { pairId: z.number().int(), qty: bnStr.describe('Base smallest-units to sell') },
+  tool((b, { pairId, qty }) => b.spot.marketSell(BigInt(pairId), BigInt(qty)).then((oid) => ({ orderId: oid?.toString?.() ?? oid }))),
 );
-server.tool('thebook_cancel_order', 'Cancel one of this agent\'s resting orders by id.',
-  { orderId: z.number().int().describe('Order id from thebook_my_orders or place_limit') },
-  tool((b, { orderId }) => b.cancelOrder(orderId).then(() => `Cancelled order ${orderId}.`)),
+server.tool('thebook_cancel_order', "Cancel one of this wallet's resting orders by id (refunds unfilled escrow to your claimable balance).",
+  { orderId: z.number().int() },
+  tool((b, { orderId }) => b.spot.cancelOrder(BigInt(orderId)).then(() => `Cancelled order ${orderId}.`)),
 );
-server.tool('thebook_my_orders', "This agent's open resting orders.", {}, tool((b) => b.myOrders()));
+server.tool('thebook_my_orders', "This wallet's open and recent orders.", {}, tool((b) => b.spot.myOrders()));
 
-// ── Perps ──
-server.tool('thebook_open_position', 'Open (or add to) an isolated-margin perpetual position.',
-  { asset: assetEnum, isLong: z.boolean().describe('true = long, false = short'), marginUsd: z.number().positive().describe('Margin in USD, e.g. 50 = $50'), leverage: z.number().int().min(1).max(20) },
-  tool((b, { asset, isLong, marginUsd, leverage }) => b.openPosition(Asset[asset], isLong, b.cents(marginUsd), leverage).then(() => `Opened ${isLong ? 'long' : 'short'} ${asset} ${leverage}x on $${marginUsd} margin.`)),
+// ── Settlement ──
+server.tool('thebook_claim', 'Your withdrawable balance (fills + cancelled escrow) for a token, in smallest-units.',
+  { token: z.string().describe('Token VFT program id (0x…)') },
+  tool(async (b, { token }) => ({ claim: (await b.spot.claim(token)).toString() })),
 );
-server.tool('thebook_close_position', 'Close this agent\'s whole position in an asset at the current mark price.',
-  { asset: assetEnum }, tool((b, { asset }) => b.closePosition(Asset[asset]).then(() => `Closed ${asset} position.`)),
-);
-server.tool('thebook_marks', 'Current perp mark prices (USD) for BTC, ETH, VARA.', {}, tool((b) => b.marks()));
-
-// ── Reads ──
-server.tool('thebook_portfolio', "This agent's balances (usd, btc, eth, vara) in human units.", {}, tool((b) => b.portfolio()));
-server.tool('thebook_orderbook', 'The current bids and asks for an asset (price levels + sizes).',
-  { asset: assetEnum }, tool((b, { asset }) => b.orderbook(Asset[asset])),
-);
-server.tool('thebook_leaderboard', 'The thebook leaderboard: top agents by net worth.',
-  { limit: z.number().int().min(1).max(100).default(25) }, tool((b, { limit }) => b.leaderboard(limit)),
-);
-server.tool('thebook_my_rank', "Where this agent currently sits on the leaderboard (rank + net worth), or null if unranked.",
-  {}, tool((b) => b.myRank()),
+server.tool('thebook_withdraw', 'Withdraw your full claimable balance of a token back to your wallet.',
+  { token: z.string().describe('Token VFT program id (0x…)') },
+  tool((b, { token }) => b.spot.withdraw(token).then((amt) => `Withdrew ${amt?.toString?.() ?? amt} of ${token}.`)),
 );
 
 const transport = new StdioServerTransport();
