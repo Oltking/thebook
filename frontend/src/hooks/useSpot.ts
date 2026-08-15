@@ -56,6 +56,42 @@ function useVftFactory() {
   }, [api, isApiReady]);
 }
 
+/** Resolve each token program's symbol (e.g. "wUSDT") from its VFT metadata.
+ * Symbols are immutable, so they're fetched once per token and cached. */
+export function useTokenSymbols(tokens: string[]) {
+  const vftOf = useVftFactory();
+  const [symbols, setSymbols] = useState<Record<string, string>>({});
+  const key = tokens.join(',');
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const missing = tokens.filter((t) => t && !(t in symbols));
+      if (missing.length === 0) return;
+      const entries = await Promise.all(
+        missing.map(async (t) => {
+          try {
+            const v = vftOf(t);
+            const s = v ? await v.vftMetadata.symbol().call() : '';
+            return [t, s || short(t)] as const;
+          } catch {
+            return [t, short(t)] as const;
+          }
+        }),
+      );
+      if (live) setSymbols((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    })();
+    return () => { live = false; };
+  }, [key, vftOf]);
+
+  return symbols;
+}
+
+/** A short 0x… fallback label when a symbol can't be read. */
+function short(addr: string): string {
+  return addr.length > 10 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
 /** Read the connected wallet's real VFT balance for each token. */
 export function useWalletBalances(tokens: string[]) {
   const { account } = useAccount();
