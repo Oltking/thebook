@@ -12,15 +12,15 @@ interface LandingViewProps {
 }
 
 const PRIMITIVES = [
-  { no: '01', name: 'Spot', body: 'Trade BTC, ETH and VARA on a real on-chain order book. Market and limit orders, settled on Vara.', meta: <>maker / taker <b>book</b></> },
-  { no: '02', name: 'Pools', body: 'Provide liquidity to AMM pools or quote both sides of the book. Earn the spread and the fees.', meta: <>up to <b>0.3%</b> fee</> },
-  { no: '03', name: 'Perps', body: 'Real on-chain perpetual futures. Isolated margin, keeper mark price, permissionless liquidations.', meta: <>up to <b>20x</b> leverage</> },
+  { no: '01', name: 'Spot', body: 'Trade real Vara tokens against USDT and USDC on an on-chain order book. Market and limit orders, escrowed and settled non-custodially on Vara.', meta: <>maker / taker <b>book</b></> },
+  { no: '02', name: 'Pools', body: 'AMM liquidity pools to quote and earn the spread. On the v2 roadmap.', meta: <><b>v2</b> roadmap</> },
+  { no: '03', name: 'Perps', body: 'On-chain perpetual futures with isolated margin. On the v2 roadmap.', meta: <><b>v2</b> roadmap</> },
 ];
 
 const AGENT_STEPS = [
-  { no: '01', t: 'Register', b: 'Your agent joins thebook via Vara A2A and is funded with starting balances on the spot, ready to trade.' },
-  { no: '02', t: 'Read', b: 'It queries the live book, pools and mark prices on-chain. Everything it needs to decide is deterministic.' },
-  { no: '03', t: 'Trade', b: 'It sends typed intents that settle on the same vault as human trades. No special path, no black box.' },
+  { no: '01', t: 'Connect', b: 'You or your agent connect a wallet and trade the real tokens it holds. Agents run on an encrypted key with on-chain spend limits, so a compromised agent can’t drain you.' },
+  { no: '02', t: 'Read', b: 'Query the live order book and your own balances on-chain. Everything you need to decide is deterministic.' },
+  { no: '03', t: 'Trade', b: 'Approve the token, then send typed orders that escrow and settle on the same vault for humans and agents alike. No special path, no black box.' },
 ];
 
 // Motion presets.
@@ -96,11 +96,11 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
         <div className={styles.scan} aria-hidden="true" />
         <div className={`${styles.wrap} ${styles.heroGrid}`}>
           <motion.div variants={stagger} initial="hidden" animate="show">
-            <motion.span className={styles.eyebrow} variants={rise}>On-chain exchange, agent-native, on {NETWORK_NAME}</motion.span>
-            <motion.h1 className={styles.title} variants={rise}>The order book your <em>agent</em> can trade.</motion.h1>
+            <motion.span className={styles.eyebrow} variants={rise}>On-chain exchange for people and agents, on {NETWORK_NAME}</motion.span>
+            <motion.h1 className={styles.title} variants={rise}>The order book you <em>and your agent</em> can trade.</motion.h1>
             <motion.p className={styles.lede} variants={rise}>
-              On-chain spot, liquidity and real perpetuals on Vara. Built for humans and the autonomous
-              agents that trade for them, through one shared order book.
+              A non-custodial spot exchange on Vara. Trade the real tokens in your wallet — as a
+              person or through an autonomous agent — on one shared order book.
             </motion.p>
             <motion.div className={styles.heroActions} variants={rise}>
               <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
@@ -203,12 +203,12 @@ if (bids[0].price > mark * 1.002)
               <span className={styles.kicker}>Deploy an agent</span>
               <h2 className={styles.h2}>Hand your agent the thebook skills.</h2>
               <p className={styles.sub}>
-                An open skill pack that teaches any coding agent to read the book, trade BTC, ETH and
-                VARA, and check its rank on Vara. No custom integration to write.
+                An open skill pack that teaches any coding agent to read the book, trade real Vara
+                tokens against USDT and USDC, and manage its orders. No custom integration to write.
               </p>
               <p className={styles.skillFoot}>
                 Works with Claude Code, Codex, Cursor, Gemini CLI and 40+ other agents. The wallet is
-                encrypted and self-funds from the built-in faucet, no VARA purchase needed.
+                encrypted and runs under on-chain spend limits, so the agent trades only what you allow.
               </p>
             </Reveal>
             <Reveal delay={0.12}>
@@ -252,8 +252,8 @@ if (bids[0].price > mark * 1.002)
         <div className={styles.scan} aria-hidden="true" />
         <div className={styles.wrap}>
           <Reveal>
-            <h2>Give your agent a market to <em>trade</em>.</h2>
-            <p>Live on {NETWORK_NAME}. Real book, real prices, real perps, and an intent layer any agent can call.</p>
+            <h2>A market for you and your <em>agent</em>.</h2>
+            <p>Live on {NETWORK_NAME}. A real non-custodial order book, real tokens, and an order layer both people and agents can call.</p>
             <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
               whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Launch app</motion.button>
           </Reveal>

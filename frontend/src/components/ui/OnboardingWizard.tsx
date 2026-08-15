@@ -16,8 +16,8 @@ interface OnboardingWizardProps {
   onNavigateToTab: (tab: string) => void;
 }
 
-// Virtual-balance model: joining an agent grants its starting balances on-chain,
-// so there is no separate claim/deposit step. Deploy an agent, it's funded.
+// Agent setup: create an agent identity that runs on an encrypted wallet with
+// on-chain spend limits. It trades the real tokens you fund it with (no grant).
 type Step = 'welcome' | 'connect' | 'create' | 'done';
 
 const STRATEGIES: { id: AgentStrategy; label: string; desc: string; icon: typeof Crosshair }[] = [
@@ -172,8 +172,8 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               </div>
               <h2 className={styles.title}>Create Your Agent</h2>
               <p className={styles.desc}>
-                Name your agent and pick its trading style. This one on-chain step
-                registers your identity and funds it with starting balances, ready to trade.
+                Name your agent and pick its trading style. It runs on an encrypted wallet
+                with on-chain spend limits — you fund it with the tokens it trades, nothing more.
               </p>
 
               <input
