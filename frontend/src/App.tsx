@@ -6,6 +6,7 @@ import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
 const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m.TradeView })));
+const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
@@ -94,7 +95,7 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'trade':
-        return <TradeView mode="spot" />;
+        return <SpotTradeView />;
       case 'futures':
         return <TradeView mode="futures" />;
       case 'swap':
