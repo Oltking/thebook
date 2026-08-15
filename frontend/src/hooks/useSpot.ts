@@ -1,0 +1,160 @@
+// Data hooks for the v1 spot CLOB: curated pairs, real wallet balances, token
+// allowances to the DEX, and withdrawable claim balances. All amounts are bigint
+// (u128/u256 on-chain); format by each token's decimals from its pair.
+import { useApi, useAccount } from '@gear-js/react-hooks';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSails } from './useSails';
+import { VftProgram } from '../lib/vft';
+import { PROGRAM_ID } from '../consts';
+
+const POLL_MS = 8_000;
+
+/** The curated market list. Pairs change rarely, so this polls slowly. */
+export function useSpotPairs() {
+  const { program, isReady } = useSails();
+  const [pairs, setPairs] = useState<SpotPair[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    try {
+      const rows = await program.spot.getPairs().call();
+      setPairs(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error('useSpotPairs: failed to read pairs', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [program]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS * 4);
+    return () => clearInterval(iv);
+  }, [isReady, refresh]);
+
+  return { pairs, loading, refresh };
+}
+
+// A VftProgram is cheap to build but we memoize per (api, token) so repeated reads
+// don't re-instantiate the registry on every poll.
+function useVftFactory() {
+  const { api, isApiReady } = useApi();
+  return useMemo(() => {
+    const cache = new Map<string, VftProgram>();
+    return (token: string): VftProgram | null => {
+      if (!isApiReady || !api) return null;
+      let vft = cache.get(token);
+      if (!vft) {
+        vft = new VftProgram(api, token as `0x${string}`);
+        cache.set(token, vft);
+      }
+      return vft;
+    };
+  }, [api, isApiReady]);
+}
+
+/** Read the connected wallet's real VFT balance for each token. */
+export function useWalletBalances(tokens: string[]) {
+  const { account } = useAccount();
+  const vftOf = useVftFactory();
+  const [balances, setBalances] = useState<Record<string, bigint>>({});
+  const key = tokens.join(',');
+
+  const refresh = useCallback(async () => {
+    if (!account || tokens.length === 0) return;
+    const owner = account.decodedAddress;
+    const entries = await Promise.all(
+      tokens.map(async (t) => {
+        try {
+          const v = vftOf(t);
+          if (!v) return [t, 0n] as const;
+          const bal = await v.vft.balanceOf(owner).call();
+          return [t, BigInt(bal?.toString() ?? '0')] as const;
+        } catch {
+          return [t, 0n] as const;
+        }
+      }),
+    );
+    setBalances(Object.fromEntries(entries));
+  }, [account, key, vftOf]);
+
+  useEffect(() => {
+    if (!account) { setBalances({}); return; }
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [account, refresh]);
+
+  return { balances, refresh };
+}
+
+/** Read the wallet's approved allowance to the DEX for each token. */
+export function useAllowances(tokens: string[]) {
+  const { account } = useAccount();
+  const vftOf = useVftFactory();
+  const [allowances, setAllowances] = useState<Record<string, bigint>>({});
+  const key = tokens.join(',');
+
+  const refresh = useCallback(async () => {
+    if (!account || tokens.length === 0) return;
+    const owner = account.decodedAddress;
+    const entries = await Promise.all(
+      tokens.map(async (t) => {
+        try {
+          const v = vftOf(t);
+          if (!v) return [t, 0n] as const;
+          const a = await v.vft.allowance(owner, PROGRAM_ID as `0x${string}`).call();
+          return [t, BigInt(a?.toString() ?? '0')] as const;
+        } catch {
+          return [t, 0n] as const;
+        }
+      }),
+    );
+    setAllowances(Object.fromEntries(entries));
+  }, [account, key, vftOf]);
+
+  useEffect(() => {
+    if (!account) { setAllowances({}); return; }
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [account, refresh]);
+
+  return { allowances, refresh };
+}
+
+/** Read the caller's withdrawable claim balance for each token. */
+export function useClaims(tokens: string[]) {
+  const { program } = useSails();
+  const { account } = useAccount();
+  const [claims, setClaims] = useState<Record<string, bigint>>({});
+  const key = tokens.join(',');
+
+  const refresh = useCallback(async () => {
+    if (!program || !account || tokens.length === 0) return;
+    const addr = account.decodedAddress;
+    const entries = await Promise.all(
+      tokens.map(async (t) => {
+        try {
+          const c = await program.spot.getClaim(t as `0x${string}`).withAddress(addr).call();
+          return [t, BigInt(c?.toString() ?? '0')] as const;
+        } catch {
+          return [t, 0n] as const;
+        }
+      }),
+    );
+    setClaims(Object.fromEntries(entries));
+  }, [program, account, key]);
+
+  useEffect(() => {
+    if (!program || !account) { setClaims({}); return; }
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [program, account, refresh]);
+
+  return { claims, refresh };
+}
