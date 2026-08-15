@@ -33,11 +33,14 @@ import { SailsIdlParser } from 'sails-js-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
+// An explicitly-passed NODE_ADDRESS (CLI env) must win over the .env files, so a
+// testnet value in frontend/.env can't silently redirect a mainnet deploy.
+const CLI_NODE = process.env.NODE_ADDRESS;
 for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.env.deploy')]) {
   if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
-const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
+const NODE_ADDRESS = CLI_NODE ?? process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
 const SEED = process.env.VARA_SEED;
 const KEEPER = process.env.KEEPER;
 const DEX_WASM = process.env.DEX_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook.opt.wasm');

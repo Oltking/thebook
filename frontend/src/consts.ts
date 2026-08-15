@@ -4,17 +4,18 @@ import { User, BarChart2 } from 'lucide-react';
 // mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
 // Set these in `.env` (see frontend/.env.example) or in your Vercel project settings.
 export const NODE_ADDRESS =
-  import.meta.env.VITE_NODE_ADDRESS ?? 'wss://testnet.vara.network';
+  import.meta.env.VITE_NODE_ADDRESS ?? 'wss://rpc.vara.network';
 
+// thebook v1 on Vara mainnet.
 export const PROGRAM_ID = (import.meta.env.VITE_PROGRAM_ID ??
-  '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`;
+  '0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484') as `0x${string}`;
 
 // True until a real program ID is wired in - used to surface a setup banner instead
 // of silently talking to the zero address.
 export const PROGRAM_ID_CONFIGURED =
   PROGRAM_ID !== '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-export const NETWORK_NAME = import.meta.env.VITE_NETWORK_NAME ?? 'Vara Testnet';
+export const NETWORK_NAME = import.meta.env.VITE_NETWORK_NAME ?? 'Vara Mainnet';
 
 const ZERO_ADDR =
   '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;

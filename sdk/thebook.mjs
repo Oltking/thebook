@@ -57,7 +57,7 @@ const ASSET_UNIT = 100_000;
 export async function connectTheBook(opts = {}) {
   const seed = opts.seed ?? process.env.VARA_SEED;
   const programId = opts.programId ?? process.env.THEBOOK_PROGRAM_ID;
-  const node = opts.node ?? process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
+  const node = opts.node ?? process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
   const idlPath = opts.idlPath ?? resolve(__dirname, 'thebook.idl');
   // Optional gasless voucher endpoint (the same /api/voucher the web app uses). When
   // set, the agent's transactions are paid by the sponsor account, so the agent
