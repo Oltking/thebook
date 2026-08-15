@@ -11,6 +11,7 @@ export class SailsProgram {
   public readonly amm: Amm;
   public readonly perps: Perps;
   public readonly spot: Spot;
+  public readonly perpsV1: PerpsV1;
   private _program?: BaseGearProgram;
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
@@ -38,6 +39,8 @@ export class SailsProgram {
       SpotOrder: {"id":"u64","pair_id":"u64","trader":"[u8;32]","side":"Side","price":"u128","qty":"u128","filled":"u128","status":"SpotStatus"},
       SpotStatus: {"_enum":["Open","PartiallyFilled","Filled","Cancelled"]},
       SpotPair: {"id":"u64","base":"[u8;32]","quote":"[u8;32]","base_dec":"u8","quote_dec":"u8","active":"bool"},
+      PerpsError: {"_enum":["NotAdmin","NotKeeper","BadParams","NoMarket","MarketInactive","StaleMark","LeverageTooHigh","InsufficientMargin","PositionNotFound","NotLiquidatable","BookFull","TransferFailed","NoCollateral","OiCapExceeded"]},
+      PerpMarket: {"id":"u64","symbol":"String","mark":"u128","mark_block":"u32","active":"bool","long_oi":"u128","short_oi":"u128","max_oi":"u128"},
     }
 
     this.registry = new TypeRegistry();
@@ -51,6 +54,7 @@ export class SailsProgram {
     this.amm = new Amm(this);
     this.perps = new Perps(this);
     this.spot = new Spot(this);
+    this.perpsV1 = new PerpsV1(this);
   }
 
   public get programId(): `0x${string}` {
@@ -1089,6 +1093,254 @@ export class Spot {
       null,
       null,
       'Vec<SpotPair>',
+    );
+  }
+}
+
+export class PerpsV1 {
+  constructor(private _program: SailsProgram) {}
+
+  /**
+   * Admin: list a perp market by symbol. Returns its id.
+  */
+  public addMarket($symbol: string): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'AddMarket',
+      $symbol,
+      'String',
+      'Result<u64, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Close your position at the current mark, settling PnL against the reserve and
+   * crediting the payout to your claimable collateral (withdraw via `Spot/Withdraw`).
+  */
+  public closePosition(position_id: number | string | bigint): TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'ClosePosition',
+      position_id,
+      'u64',
+      'Result<(u128, i128), PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: fund the house reserve with real collateral (requires a prior `approve`).
+  */
+  public fundReserve(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'FundReserve',
+      amount,
+      'u128',
+      'Result<u128, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Permissionless liquidation once equity falls to maintenance margin. The
+   * liquidator earns a fee from residual equity; the rest is settled to the owner.
+  */
+  public liquidate(position_id: number | string | bigint): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'Liquidate',
+      position_id,
+      'u64',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Open an isolated-margin position. Escrows `margin` of the collateral token
+   * (requires a prior `approve`); notional = margin * leverage at the mark.
+  */
+  public openPosition(market_id: number | string | bigint, is_long: boolean, margin: number | string | bigint, leverage: number): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'OpenPosition',
+      [market_id, is_long, margin, leverage],
+      '(u64, bool, u128, u32)',
+      'Result<u64, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: set the collateral (settlement) token — the USDT VFT program.
+  */
+  public setCollateral(token: ActorId): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'SetCollateral',
+      token,
+      '[u8;32]',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: set the keeper account allowed to push mark prices.
+  */
+  public setKeeper(keeper: ActorId): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'SetKeeper',
+      keeper,
+      '[u8;32]',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Keeper: publish the mark price for a market.
+  */
+  public setMark(market_id: number | string | bigint, price: number | string | bigint): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'SetMark',
+      [market_id, price],
+      '(u64, u128)',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: cap open interest per side on a market, bounding the reserve's max loss.
+  */
+  public setMarketCap(market_id: number | string | bigint, max_oi: number | string | bigint): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'SetMarketCap',
+      [market_id, max_oi],
+      '(u64, u128)',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: withdraw reserve profit (fees + net trader losses) to the admin's
+   * claimable collateral. The operator is responsible for leaving enough to cover
+   * open positions — withdraw profit, not the whole book.
+  */
+  public withdrawReserve(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'WithdrawReserve',
+      amount,
+      'u128',
+      'Result<u128, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Liquidation price for a position (0 if none).
+  */
+  public getLiqPrice(position_id: number | string | bigint): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetLiqPrice',
+      position_id,
+      'u64',
+      'u128',
+    );
+  }
+
+  public getMarkets(): QueryBuilder<Array<PerpMarket>> {
+    return new QueryBuilder<Array<PerpMarket>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetMarkets',
+      null,
+      null,
+      'Vec<PerpMarket>',
+    );
+  }
+
+  /**
+   * A trader's open positions with PnL at the current mark:
+   * `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
+  */
+  public getPositions(owner: ActorId): QueryBuilder<Array<[number | string | bigint, number | string | bigint, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>> {
+    return new QueryBuilder<Array<[number | string | bigint, number | string | bigint, boolean, number | string | bigint, number | string | bigint, number | string | bigint, number, number | string | bigint]>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetPositions',
+      owner,
+      '[u8;32]',
+      'Vec<(u64, u64, bool, u128, u128, u128, u32, i128)>',
+    );
+  }
+
+  public getReserve(): QueryBuilder<bigint> {
+    return new QueryBuilder<bigint>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetReserve',
+      null,
+      null,
+      'u128',
     );
   }
 }

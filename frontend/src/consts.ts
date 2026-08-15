@@ -1,4 +1,4 @@
-import { User, BarChart2 } from 'lucide-react';
+import { User, BarChart2, TrendingUp } from 'lucide-react';
 
 // Network + program are environment-driven so the same build can target testnet,
 // mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
@@ -55,12 +55,12 @@ export interface NavItem {
 // until v2. Their view files remain in the repo but are not routed.
 export const NAV_ITEMS: NavItem[] = [
   { id: 'trade',     label: 'Trade',     icon: BarChart2 },
+  { id: 'perps',     label: 'Perps',     icon: TrendingUp },
   { id: 'portfolio', label: 'Portfolio', icon: User },
 ];
 
-// The phone bottom bar mirrors the (currently two) desktop tabs. The Hive
-// (agent world) is reached from the header switch, not the bottom bar.
-const MOBILE_NAV_IDS = ['trade', 'portfolio'];
+// The phone bottom bar mirrors the desktop tabs.
+const MOBILE_NAV_IDS = ['trade', 'perps', 'portfolio'];
 export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_IDS
   .map((id) => NAV_ITEMS.find((n) => n.id === id)!)
   .filter(Boolean);

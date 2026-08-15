@@ -6,6 +6,7 @@ import { OnboardingWizard } from './components/ui/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
+const PerpsTradeView = lazy(() => import('./views/PerpsTradeView').then(m => ({ default: m.PerpsTradeView })));
 const SpotPortfolioView = lazy(() => import('./views/SpotPortfolioView').then(m => ({ default: m.SpotPortfolioView })));
 const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
@@ -93,6 +94,8 @@ function App() {
     switch (activeTab) {
       case 'trade':
         return <SpotTradeView />;
+      case 'perps':
+        return <PerpsTradeView />;
       case 'portfolio':
         return <SpotPortfolioView />;
       default:

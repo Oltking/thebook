@@ -1,14 +1,7 @@
 import { ActorId } from 'sails-js';
 
 declare global {
-  // ── VFT token program types (from the token client) ──
-  export interface Pagination {
-    offset: number;
-    limit: number;
-  }
-  export type FaucetError = "AlreadyClaimed" | "MintFailed";
-
-  // Off-chain price snapshot (sourced from Binance/CoinGecko, not the contract).
+  // ── Custom app + VFT globals (not from the thebook IDL; re-added after codegen) ──
   export interface PriceFeed {
     symbol: string;
     price_usd_micro: number | string | bigint;
@@ -17,6 +10,8 @@ declare global {
     volume_24h_usd: number | string | bigint;
     updated_at_block: number;
   }
+  export interface Pagination { offset: number; limit: number; }
+  export type FaucetError = "AlreadyClaimed" | "MintFailed";
 
   export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable" | "StaleMark";
 
@@ -188,5 +183,31 @@ declare global {
      * Delisted pairs reject new orders but still allow cancel/withdraw.
     */
     active: boolean;
+  }
+
+  export type PerpsError = "NotAdmin" | "NotKeeper" | "BadParams" | "NoMarket" | "MarketInactive" | "StaleMark" | "LeverageTooHigh" | "InsufficientMargin" | "PositionNotFound" | "NotLiquidatable" | "BookFull" | "TransferFailed" | "NoCollateral" | "OiCapExceeded";
+
+  export interface PerpMarket {
+    id: number | string | bigint;
+    symbol: string;
+    /**
+     * Mark price (arbitrary consistent units; PnL uses price ratios so the unit cancels).
+    */
+    mark: number | string | bigint;
+    /**
+     * Block the mark was last published.
+    */
+    mark_block: number;
+    active: boolean;
+    /**
+     * Open interest (sum of position notional) per side — the house's directional
+     * exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
+    */
+    long_oi: number | string | bigint;
+    short_oi: number | string | bigint;
+    /**
+     * Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+    */
+    max_oi: number | string | bigint;
   }
 };

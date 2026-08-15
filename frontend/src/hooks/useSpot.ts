@@ -162,6 +162,56 @@ export function useAllowances(tokens: string[]) {
   return { allowances, refresh };
 }
 
+/** The perp markets (id, symbol, mark, OI, caps). Polls for the live mark. */
+export function usePerpMarkets() {
+  const { program, isReady } = useSails();
+  const [markets, setMarkets] = useState<PerpMarket[]>([]);
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    try {
+      const rows = await program.perpsV1.getMarkets().call();
+      setMarkets(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error('usePerpMarkets: failed', e);
+    }
+  }, [program]);
+  useEffect(() => {
+    if (!isReady) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [isReady, refresh]);
+  return { markets, refresh };
+}
+
+/** The caller's open perp positions as decoded objects, with live PnL. */
+export interface PerpPos {
+  id: bigint; marketId: bigint; isLong: boolean; notional: bigint;
+  entry: bigint; margin: bigint; leverage: number; pnl: bigint;
+}
+export function usePerpPositions() {
+  const { program } = useSails();
+  const { account } = useAccount();
+  const [positions, setPositions] = useState<PerpPos[]>([]);
+  const refresh = useCallback(async () => {
+    if (!program || !account) { setPositions([]); return; }
+    try {
+      const rows = await program.perpsV1.getPositions(account.decodedAddress).call();
+      setPositions((Array.isArray(rows) ? rows : []).map((r: any) => ({
+        id: BigInt(r[0]), marketId: BigInt(r[1]), isLong: !!r[2], notional: BigInt(r[3]),
+        entry: BigInt(r[4]), margin: BigInt(r[5]), leverage: Number(r[6]), pnl: BigInt(r[7]),
+      })));
+    } catch { /* keep last */ }
+  }, [program, account]);
+  useEffect(() => {
+    if (!account) { setPositions([]); return; }
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [account, refresh]);
+  return { positions, refresh };
+}
+
 /** Read the caller's withdrawable claim balance for each token. */
 export function useClaims(tokens: string[]) {
   const { program } = useSails();

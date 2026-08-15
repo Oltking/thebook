@@ -88,5 +88,13 @@ export function useSpotActions() {
       call<null>(() => program!.spot.cancelOrder(orderId)),
     withdraw: (token: string) =>
       call<bigint>(() => program!.spot.withdraw(token as `0x${string}`)),
+
+    // Perps (margin escrowed in the collateral token; needs a prior approve of it).
+    openPosition: (marketId: bigint, isLong: boolean, margin: bigint, leverage: number) =>
+      call<bigint>(() => program!.perpsV1.openPosition(marketId, isLong, margin, leverage)),
+    closePosition: (positionId: bigint) =>
+      call<[bigint, bigint]>(() => program!.perpsV1.closePosition(positionId)),
+    liquidate: (positionId: bigint) =>
+      call<null>(() => program!.perpsV1.liquidate(positionId)),
   };
 }
