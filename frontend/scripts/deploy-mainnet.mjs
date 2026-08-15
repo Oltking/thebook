@@ -1,0 +1,148 @@
+// Mainnet deploy + init for thebook v1 (spot + perps).
+//
+// Deploys the new spot/perps program, then curates the markets and wires perps. The
+// quote/base tokens are EXISTING bridged VFTs on Vara mainnet (RivrDEX's wUSDT/wUSDC/
+// wVARA/wETH) — we only reference their addresses, we do NOT deploy them.
+//
+// Run ONCE with the admin seed (it becomes the DEX admin; transfer to the multisig
+// afterwards with Spot/TransferAdmin + PerpsV1/SetKeeper as needed).
+//
+// Usage (from frontend/):
+//   VARA_SEED="<funded mainnet admin seed>" node scripts/deploy-mainnet.mjs
+//
+// Env (auto-loaded from .env / .env.deploy):
+//   VARA_SEED     admin/deployer seed (required; must hold mainnet VARA for gas)
+//   NODE_ADDRESS  Vara RPC (default wss://rpc.vara.network — MAINNET)
+//   KEEPER        optional ss58/hex account allowed to push perp marks (default: admin)
+//   DEX_WASM      default ../../target/wasm32-gear/release/thebook.opt.wasm
+//   IDL_PATH      default ../../client/thebook_client.idl (has New + all services)
+//
+// After it prints VITE_PROGRAM_ID, put that in frontend/.env and redeploy the frontend,
+// then fund the perps reserve (approve wUSDT to the DEX, then PerpsV1/FundReserve).
+
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { GearApi } from '@gear-js/api';
+import { Keyring } from '@polkadot/api';
+import { u8aToHex } from '@polkadot/util';
+import { waitReady } from '@polkadot/wasm-crypto';
+import { Sails } from 'sails-js';
+import { SailsIdlParser } from 'sails-js-parser';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, '..', '..');
+for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.env.deploy')]) {
+  if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
+}
+
+const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
+const SEED = process.env.VARA_SEED;
+const KEEPER = process.env.KEEPER;
+const DEX_WASM = process.env.DEX_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook.opt.wasm');
+const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
+
+function fail(m) { console.error(`\n  ✗ ${m}\n`); process.exit(1); }
+if (!SEED) fail('VARA_SEED is required (a funded mainnet admin seed).');
+if (!existsSync(DEX_WASM)) fail(`DEX WASM not found at ${DEX_WASM}. Build: cargo build --release`);
+if (!existsSync(IDL_PATH)) fail(`IDL not found at ${IDL_PATH}.`);
+
+// Confirmed Vara-side token program ids + decimals (see docs/mainnet-addresses.md).
+const T = {
+  wVARA: { addr: '0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17', dec: 12 },
+  wETH:  { addr: '0xde45bdbb0345919a11561d43a5082e0b25061d4a2c6eb80009c1cfbccb80d0de', dec: 18 },
+  wUSDT: { addr: '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e', dec: 6 },
+  wUSDC: { addr: '0xd1de816d7dce6439504552686ab333e5b7302b1549763656b30af1f8a5871b6a', dec: 6 },
+};
+
+// Spot markets to list: base ETH and VARA, each vs USDT and USDC.
+const MARKETS = [
+  { name: 'ETH/USDT',  base: T.wETH,  quote: T.wUSDT },
+  { name: 'ETH/USDC',  base: T.wETH,  quote: T.wUSDC },
+  { name: 'VARA/USDT', base: T.wVARA, quote: T.wUSDT },
+  { name: 'VARA/USDC', base: T.wVARA, quote: T.wUSDC },
+];
+// Perp markets (mark feed by symbol). Collateral = wUSDT.
+const PERP_MARKETS = ['ETH', 'VARA'];
+
+await waitReady();
+const api = await GearApi.create({ providerAddress: NODE_ADDRESS });
+const keyring = new Keyring({ type: 'sr25519' });
+const admin = keyring.addFromUri(SEED);
+const sourceId = u8aToHex(admin.addressRaw);
+const blockMax = api.blockGasLimit.toBigInt();
+
+const parser = await SailsIdlParser.new();
+const sails = new Sails(parser);
+sails.parseIdl(readFileSync(IDL_PATH, 'utf-8'));
+sails.setApi(api);
+
+console.log(`\n  thebook v1 mainnet deploy`);
+console.log(`  ─────────────────────────`);
+console.log(`  node:  ${NODE_ADDRESS}`);
+console.log(`  admin: ${admin.address}\n`);
+
+async function upload(code, payload, label) {
+  const gas = await api.program.calculateGas.initUpload(sourceId, code, payload, 0, true);
+  let limit = gas.min_limit.toBigInt() * 3n;
+  if (limit > blockMax) limit = blockMax;
+  const { programId, extrinsic } = api.program.upload({ code, gasLimit: limit, value: 0, initPayload: payload });
+  await new Promise((res, rej) => {
+    extrinsic.signAndSend(admin, ({ status, events, dispatchError }) => {
+      if (dispatchError) return rej(new Error(dispatchError.toString()));
+      if (status.isInBlock || status.isFinalized) {
+        const failed = events.find(({ event }) => api.events.system.ExtrinsicFailed.is(event));
+        failed ? rej(new Error(`${label}: upload failed on-chain`)) : res();
+      }
+    }).catch(rej);
+  });
+  return programId;
+}
+
+async function call(service, fn, ...args) {
+  const tx = sails.services[service].functions[fn](...args);
+  tx.withAccount(admin);
+  await tx.calculateGas(true);
+  const { response } = await tx.signAndSend();
+  const value = await response();
+  if (value && typeof value === 'object' && 'err' in value) {
+    throw new Error(`${service}.${fn} rejected: ${JSON.stringify(value.err)}`);
+  }
+  return value && typeof value === 'object' && 'ok' in value ? value.ok : value;
+}
+
+// 1 · deploy the program
+process.stdout.write('  deploying thebook v1 … ');
+const dexInit = u8aToHex(api.createType('String', 'New').toU8a());
+const PROGRAM_ID = await upload(readFileSync(DEX_WASM), dexInit, 'thebook');
+console.log(PROGRAM_ID);
+sails.setProgramId(PROGRAM_ID);
+
+// 2 · list spot markets
+console.log('\n  listing spot markets:');
+for (const m of MARKETS) {
+  const id = await call('Spot', 'ListPair', m.base.addr, m.quote.addr, m.base.dec, m.quote.dec);
+  console.log(`    ${m.name.padEnd(10)} pair_id=${id}`);
+}
+
+// 3 · wire perps: collateral, markets, keeper
+console.log('\n  wiring perps:');
+await call('PerpsV1', 'SetCollateral', T.wUSDT.addr);
+console.log(`    collateral = wUSDT`);
+for (const sym of PERP_MARKETS) {
+  const id = await call('PerpsV1', 'AddMarket', sym);
+  console.log(`    market ${sym.padEnd(5)} id=${id}`);
+}
+await call('PerpsV1', 'SetKeeper', KEEPER ?? admin.address);
+console.log(`    keeper = ${KEEPER ?? admin.address}`);
+
+console.log(`\n  ✓ deploy complete\n`);
+console.log(`  Put this in frontend/.env, then redeploy the frontend:`);
+console.log(`    VITE_PROGRAM_ID=${PROGRAM_ID}\n`);
+console.log(`  Next:`);
+console.log(`    • fund the perps reserve: approve wUSDT to the DEX, then PerpsV1/FundReserve`);
+console.log(`    • start the mark keeper (PerpsV1/SetMark for ETH, VARA)`);
+console.log(`    • transfer admin to the multisig: Spot/TransferAdmin\n`);
+
+await api.disconnect();
+process.exit(0);
