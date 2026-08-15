@@ -9,7 +9,7 @@ const TradeView = lazy(() => import('./views/TradeView').then(m => ({ default: m
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const SwapView = lazy(() => import('./views/SwapView').then(m => ({ default: m.SwapView })));
 const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
-const PortfolioView = lazy(() => import('./views/PortfolioView').then(m => ({ default: m.PortfolioView })));
+const SpotPortfolioView = lazy(() => import('./views/SpotPortfolioView').then(m => ({ default: m.SpotPortfolioView })));
 const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
 
@@ -103,7 +103,7 @@ function App() {
       case 'pools':
         return <PoolsView />;
       case 'portfolio':
-        return <PortfolioView />;
+        return <SpotPortfolioView />;
       default:
         return <TradeView mode="spot" />;
     }
