@@ -1716,3 +1716,96 @@ async fn spot_market_sell_into_bids() {
     assert_eq!(alice_quote, 10, "seller receives quote proceeds");
     assert_eq!(bob_base, 100_000, "resting buyer receives the base");
 }
+
+#[tokio::test]
+async fn spot_delist_blocks_new_orders() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, _quote, pair_id) = list_eth_usd(&program).await;
+
+    // Admin delists the pair.
+    let _: () = program
+        .spot()
+        .pending_call::<spot_io::DelistPair>((pair_id,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // New orders are rejected on an inactive pair.
+    claim_and_approve(&env, base, dex, BOB, 100_000).await;
+    let res: Result<u64, _> = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 100u128, 100_000u128))
+        .await
+        .unwrap();
+    assert!(res.is_err(), "delisted pair must reject new orders");
+}
+
+#[tokio::test]
+async fn spot_place_without_approval_reverts() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (base, _quote, pair_id) = list_eth_usd(&program).await;
+
+    // BOB has base tokens (faucet) but never approves the DEX.
+    let tok = as_tok(&env, base, BOB);
+    let _: U256 = tok
+        .faucet()
+        .pending_call::<tok_faucet_io::Claim>(())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let res: Result<u64, _> = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair_id, Side::Sell, 100u128, 100_000u128))
+        .await
+        .unwrap();
+    assert!(res.is_err(), "placing without approval must fail on escrow");
+
+    // No order was recorded and no tokens moved.
+    let mine = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::GetMyOrders>(())
+        .await
+        .unwrap();
+    assert!(mine.is_empty(), "failed escrow must leave no resting order");
+    assert_eq!(balance_of(&env, base, BOB).await, U256::from(1_000_000));
+}
+
+#[tokio::test]
+async fn spot_market_buy_empty_book_refunds_all() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let (_base, quote, pair_id) = list_eth_usd(&program).await;
+
+    // No asks exist; the whole budget must come back as claimable quote.
+    claim_and_approve(&env, quote, dex, ALICE, 500).await;
+    let _: u64 = program
+        .spot()
+        .pending_call::<spot_io::MarketBuy>((pair_id, 100_000u128, 500u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let alice_quote: u128 = program
+        .spot()
+        .pending_call::<spot_io::GetClaim>((quote,))
+        .await
+        .unwrap();
+    assert_eq!(alice_quote, 500, "empty book refunds the full budget");
+}
+
+#[tokio::test]
+async fn spot_unknown_pair_rejects() {
+    let (env, program) = deploy().await;
+    let dex = program.id();
+    let _ = list_eth_usd(&program).await;
+
+    let res: Result<u64, _> = as_dex(&env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((999u64, Side::Buy, 100u128, 100u128))
+        .await
+        .unwrap();
+    assert!(res.is_err(), "unknown pair id must be rejected");
+}
