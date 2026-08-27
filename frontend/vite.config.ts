@@ -44,6 +44,14 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // A new deploy changes chunk hashes; without these, the old service worker
+        // keeps serving a cached shell that points at chunks the deploy deleted,
+        // which blanks the app for returning visitors until a hard refresh. Take
+        // control of open pages immediately and purge the stale precache so the
+        // fresh shell + chunks load on the next visit.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // Don't precache foreign chain-spec data the app never loads (Vara-only);
         // these stay fetchable on demand but don't bloat the service-worker install.
