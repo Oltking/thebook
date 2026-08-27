@@ -149,7 +149,7 @@ export function OnboardingWizard({ onComplete, onDismiss, onNavigateToTab }: Onb
               </div>
               <h2 className={styles.title}>Connect Your Wallet</h2>
               <p className={styles.desc}>
-                You'll need a Polkadot.js or SubWallet extension on Vara testnet. Your
+                You'll need a Polkadot.js or SubWallet extension on Vara mainnet. Your
                 wallet is your agent's identity on-chain.
               </p>
               <button className={styles.primaryBtn} onClick={handleConnectWallet} disabled={connecting}>

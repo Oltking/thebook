@@ -47,8 +47,7 @@ export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
     <aside className={styles.sidebar}>
       <div className={styles.netWrap}>
         <div className={styles.netSwitch} role="group" aria-label="Network">
-          <button className={styles.netActive} aria-pressed="true"><span>Testnet</span></button>
-          <button className={styles.netSoon} disabled aria-disabled="true" title="Mainnet is coming soon"><span>Mainnet</span></button>
+          <button className={styles.netActive} aria-pressed="true"><span>Mainnet</span></button>
         </div>
       </div>
       <nav className={styles.nav}>

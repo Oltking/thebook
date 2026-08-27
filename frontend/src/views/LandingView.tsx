@@ -81,8 +81,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
           </div>
           <div className={styles.barRight}>
             <div className={styles.net} aria-hidden="true">
-              <span className={styles.on}><i>Testnet</i></span>
-              <span className={styles.soon}><i>Mainnet</i></span>
+              <span className={styles.on}><i>Mainnet</i></span>
             </div>
             <ThemeToggle />
             <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={onLaunch}>Launch app</button>
