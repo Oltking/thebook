@@ -9,14 +9,14 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 42px;
+  padding: 9px 14px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md, 11px);
   background: var(--card-bg-hover);
   color: var(--text-main);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;

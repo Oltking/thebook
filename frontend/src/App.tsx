@@ -2,8 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { SkeletonCard } from './components/ui/Skeleton';
-import { OnboardingWizard } from './components/ui/OnboardingWizard';
-import { useOnboarding } from './hooks/useOnboarding';
 
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const PerpsTradeView = lazy(() => import('./views/PerpsTradeView').then(m => ({ default: m.PerpsTradeView })));
@@ -66,7 +64,6 @@ function App() {
     setMode(toHive ? 'hive' : 'trade');
     setEntered(true);
   };
-  const { showWizard, completeOnboarding, dismissWizard } = useOnboarding();
 
   const navigate = (tab: string) => {
     if (tab === 'agent') { setMode('hive'); return; }
@@ -149,15 +146,6 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Onboarding only belongs inside the app, never over the public landing. */}
-      {entered && showWizard && (
-        <OnboardingWizard
-          onComplete={completeOnboarding}
-          onDismiss={dismissWizard}
-          onNavigateToTab={(t) => { if (t === 'agent') { setMode('hive'); } else { setMode('trade'); setActiveTab(t); } }}
-        />
-      )}
     </>
   );
 }

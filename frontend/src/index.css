@@ -37,8 +37,8 @@
   /* Up = green, down = brown (the palette carries no red). Market semantics are
      theme-invariant: a green candle is green on paper too. */
   --buy-green: #1DB954;
-  --sell-red: #9A784B;
-  --sell-soft: rgba(154, 120, 75, 0.16);
+  --sell-red: #F6465D;
+  --sell-soft: rgba(246, 70, 93, 0.16);
 
   /* Raised surface tints. These replace the old rgba(255,255,255,0.03/0.04)
      overlays, which vanish on a light ground. */
@@ -172,8 +172,8 @@
   --accent-text: #15803D;
   --brown: #7A5B32;
   --brown-soft: rgba(122, 91, 50, 0.14);
-  --sell-red: #7A5B32;
-  --sell-soft: rgba(122, 91, 50, 0.14);
+  --sell-red: #E0293C;
+  --sell-soft: rgba(224, 41, 60, 0.12);
   --surface-subtle: rgba(20, 26, 20, 0.045);
   --surface-subtle-hover: rgba(20, 26, 20, 0.075);
   --code-bg: #F0EEE6;
