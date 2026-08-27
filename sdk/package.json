@@ -10,6 +10,7 @@
   "files": [
     "thebook.mjs",
     "thebook.idl",
+    "vft.idl",
     "README.md"
   ],
   "scripts": {
