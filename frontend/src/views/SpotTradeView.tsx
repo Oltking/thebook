@@ -106,6 +106,67 @@ export function SpotTradeView() {
     return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
   }, [prices, chartAsset]);
 
+  // ── price reference (raw quote-units per whole base) used for % sizing, the
+  //    market-price hint, and estimates. Prefer the entered limit price, then the
+  //    book mid, then the real market price from the feed. ──
+  const oracleRaw = useMemo(
+    () => (oraclePrice > 0 ? BigInt(Math.round(oraclePrice * 10 ** quoteDec)) : 0n),
+    [oraclePrice, quoteDec],
+  );
+  const bestBid = book.bids[0]?.[0] ?? 0n;
+  const bestAsk = book.asks[0]?.[0] ?? 0n;
+  const midRaw = bestBid > 0n && bestAsk > 0n ? (bestBid + bestAsk) / 2n : 0n;
+  const effPrice =
+    otype === 'Limit' && priceRaw > 0n ? priceRaw : midRaw > 0n ? midRaw : oracleRaw;
+
+  const baseUnit = 10n ** BigInt(baseDec);
+  const baseBal = balances[base] ?? 0n;
+  const quoteBal = balances[quote] ?? 0n;
+
+  // Set the amount / max-spend to `pct`% of the balance that funds this order:
+  // selling spends base; buying spends quote (converted to base at effPrice).
+  const applyPercent = useCallback(
+    (pct: number) => {
+      if (!pair) return;
+      const p = BigInt(Math.max(0, Math.min(100, Math.round(pct))));
+      const baseFrac = Math.min(baseDec, 8);
+      const quoteFrac = Math.min(quoteDec, 6);
+      if (side === 'Sell') {
+        setQtyStr(formatUnits((baseBal * p) / 100n, baseDec, baseFrac));
+      } else {
+        const spend = (quoteBal * p) / 100n;
+        if (otype === 'Market') setMaxSpendStr(formatUnits(spend, quoteDec, quoteFrac));
+        if (effPrice > 0n) setQtyStr(formatUnits((spend * baseUnit) / effPrice, baseDec, baseFrac));
+      }
+    },
+    [pair, side, otype, baseBal, quoteBal, baseDec, quoteDec, effPrice, baseUnit],
+  );
+
+  // Slider position derived from what's entered vs. the available balance.
+  const currentPct = useMemo(() => {
+    if (!pair) return 0;
+    let used: bigint;
+    let bal: bigint;
+    if (side === 'Sell') { used = qtyRaw; bal = baseBal; }
+    else { used = otype === 'Market' ? maxSpendRaw : notional(priceRaw, qtyRaw, baseDec); bal = quoteBal; }
+    if (bal <= 0n) return 0;
+    return Math.max(0, Math.min(100, Number((used * 100n) / bal)));
+  }, [pair, side, otype, qtyRaw, maxSpendRaw, priceRaw, baseBal, quoteBal, baseDec]);
+
+  // Estimated counter-amount, shown under the primary input.
+  const estimate = useMemo(() => {
+    if (!pair || effPrice <= 0n) return null;
+    if (side === 'Buy' && otype === 'Market') {
+      // spending maxSpend quote gets roughly this much base
+      return maxSpendRaw > 0n
+        ? `≈ ${formatUnits((maxSpendRaw * baseUnit) / effPrice, baseDec, 6)} ${baseSym}`
+        : null;
+    }
+    // proceeds / cost in quote
+    const q = notional(otype === 'Limit' ? priceRaw : effPrice, qtyRaw, baseDec);
+    return q > 0n ? `≈ ${formatUnits(q, quoteDec, 4)} ${quoteSym}` : null;
+  }, [pair, side, otype, effPrice, maxSpendRaw, priceRaw, qtyRaw, baseDec, quoteDec, baseUnit, baseSym, quoteSym]);
+
   // On phones the chart is collapsed behind a toggle so the order form leads; on
   // larger screens it always shows.
   const { isMobile } = useViewport();
@@ -121,8 +182,14 @@ export function SpotTradeView() {
         if (priceRaw <= 0n || qtyRaw <= 0n) throw new Error('Enter a price and amount');
         await actions.placeLimit(id, side, priceRaw, qtyRaw);
       } else if (side === 'Buy') {
-        if (qtyRaw <= 0n || maxSpendRaw <= 0n) throw new Error('Enter an amount and max spend');
-        await actions.marketBuy(id, qtyRaw, maxSpendRaw);
+        if (maxSpendRaw <= 0n) throw new Error('Enter a max spend');
+        // Derive the base qty ceiling from the budget at the reference price (with a
+        // small buffer so max-spend is the true limiter); the contract still caps
+        // spend at maxSpendRaw, so an over-estimate only means we spend a bit less.
+        const buyQty =
+          effPrice > 0n ? (maxSpendRaw * baseUnit * 102n) / (effPrice * 100n) : qtyRaw;
+        if (buyQty <= 0n) throw new Error('Enter a max spend');
+        await actions.marketBuy(id, buyQty, maxSpendRaw);
       } else {
         if (qtyRaw <= 0n) throw new Error('Enter an amount');
         await actions.marketSell(id, qtyRaw);
@@ -206,40 +273,48 @@ export function SpotTradeView() {
 
             {otype === 'Limit' && (
               <div className={styles.field}>
-                <span className={styles.label}>Price ({quoteSym})</span>
+                <span className={styles.label}>
+                  <span>Price</span>
+                  <span className={styles.hint}>{quoteSym} per {baseSym}</span>
+                </span>
                 <input
                   className={styles.input}
                   inputMode="decimal"
-                  placeholder="0.00"
+                  placeholder={oracleRaw > 0n ? formatUnits(oracleRaw, quoteDec, 2) : '0.00'}
                   value={priceStr}
                   onChange={(e) => setPriceStr(e.target.value)}
                 />
+                <div className={styles.chips}>
+                  {bestBid > 0n && (
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestBid, quoteDec, 6))}>
+                      Bid {formatUnits(bestBid, quoteDec, 2)}
+                    </button>
+                  )}
+                  {midRaw > 0n && (
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(midRaw, quoteDec, 6))}>
+                      Mid {formatUnits(midRaw, quoteDec, 2)}
+                    </button>
+                  )}
+                  {bestAsk > 0n && (
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestAsk, quoteDec, 6))}>
+                      Ask {formatUnits(bestAsk, quoteDec, 2)}
+                    </button>
+                  )}
+                  {midRaw === 0n && oracleRaw > 0n && (
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(oracleRaw, quoteDec, 2))}>
+                      Market ≈ {formatUnits(oracleRaw, quoteDec, 2)} {quoteSym}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-            <div className={styles.field}>
-              <span className={styles.label}>
-                <span>Amount ({baseSym})</span>
-                <span>
-                  Balance: {formatUnits(balances[base] ?? 0n, baseDec)} {baseSym}
-                </span>
-              </span>
-              <input
-                className={styles.input}
-                inputMode="decimal"
-                placeholder="0.00"
-                value={qtyStr}
-                onChange={(e) => setQtyStr(e.target.value)}
-              />
-            </div>
-
-            {otype === 'Market' && side === 'Buy' && (
+            {/* Primary size input: a quote budget for a market buy, else a base amount. */}
+            {otype === 'Market' && side === 'Buy' ? (
               <div className={styles.field}>
                 <span className={styles.label}>
                   <span>Max spend ({quoteSym})</span>
-                  <span>
-                    Balance: {formatUnits(balances[quote] ?? 0n, quoteDec)} {quoteSym}
-                  </span>
+                  <span className={styles.hint}>Avail {formatUnits(quoteBal, quoteDec, 4)} {quoteSym}</span>
                 </span>
                 <input
                   className={styles.input}
@@ -249,14 +324,57 @@ export function SpotTradeView() {
                   onChange={(e) => setMaxSpendStr(e.target.value)}
                 />
               </div>
+            ) : (
+              <div className={styles.field}>
+                <span className={styles.label}>
+                  <span>Amount ({baseSym})</span>
+                  <span className={styles.hint}>
+                    {side === 'Buy'
+                      ? `Avail ${formatUnits(quoteBal, quoteDec, 4)} ${quoteSym}`
+                      : `Avail ${formatUnits(baseBal, baseDec, 6)} ${baseSym}`}
+                  </span>
+                </span>
+                <input
+                  className={styles.input}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={qtyStr}
+                  onChange={(e) => setQtyStr(e.target.value)}
+                />
+              </div>
             )}
 
-            {otype === 'Limit' && (
+            {/* Percentage-of-balance slider + quick chips. */}
+            <div className={styles.sizer}>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(currentPct)}
+                onChange={(e) => applyPercent(Number(e.target.value))}
+                className={`${styles.slider} ${side === 'Buy' ? styles.sliderBuy : styles.sliderSell}`}
+                style={{ ['--pct' as never]: `${Math.round(currentPct)}%` }}
+                aria-label="Percent of balance"
+              />
+              <div className={styles.chips}>
+                {[25, 50, 75, 100].map((p) => (
+                  <button
+                    type="button"
+                    key={p}
+                    className={`${styles.chip} ${Math.round(currentPct) === p ? styles.chipOn : ''}`}
+                    onClick={() => applyPercent(p)}
+                  >
+                    {p === 100 ? 'Max' : `${p}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {estimate && (
               <div className={styles.total}>
-                <span>Total</span>
-                <span>
-                  {formatUnits(needed, quoteDec)} {quoteSym}
-                </span>
+                <span>{side === 'Buy' && otype === 'Limit' ? 'Total' : 'You get'}</span>
+                <span>{estimate}</span>
               </div>
             )}
 
