@@ -1,7 +1,7 @@
 import { User, BarChart2, TrendingUp } from 'lucide-react';
 
 // Network + program are environment-driven so the same build can target testnet,
-// mainnet, or a local node. Defaults point at Vara testnet for the testnet launch.
+// mainnet, or a local node. Defaults point at Vara mainnet (v1 launch).
 // Set these in `.env` (see frontend/.env.example) or in your Vercel project settings.
 export const NODE_ADDRESS =
   import.meta.env.VITE_NODE_ADDRESS ?? 'wss://rpc.vara.network';
