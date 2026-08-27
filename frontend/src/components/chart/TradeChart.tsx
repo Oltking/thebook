@@ -428,6 +428,11 @@ export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: Tra
           ? [{ time: last, value: oraclePrice }]
           : [{ time: first, value: oraclePrice }, { time: last, value: oraclePrice }],
       );
+    } else {
+      // No live price for this asset: clear any prior line so a previous market's
+      // mark can't linger and blow out the price scale (e.g. ETH's ~2500 line left
+      // on a VARA chart whose candles sit near 0.0004).
+      oracleRef.current.setData([]);
     }
 
     chartRef.current.timeScale().fitContent();
@@ -450,10 +455,10 @@ export function TradeChart({ oraclePrice, priceHistory, bids, asks, asset }: Tra
                   displayData[displayData.length - 1].close >= displayData[displayData.length - 1].open
                     ? styles.priceUp : styles.priceDown
                 }>
-                  ${displayData[displayData.length - 1].close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${displayData[displayData.length - 1].close.toLocaleString(undefined, { minimumFractionDigits: pricePrecision, maximumFractionDigits: pricePrecision })}
                 </span>
               )}
-              {oraclePrice > 0 && <span className={styles.oracleTag}>Oracle ${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+              {oraclePrice > 0 && <span className={styles.oracleTag}>Oracle ${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: pricePrecision, maximumFractionDigits: pricePrecision })}</span>}
             </div>
             <div className={styles.timeframeTabs}>
               {TIMEFRAMES.map(t => (

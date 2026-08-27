@@ -6,6 +6,8 @@ import { useSpotPairs, useWalletBalances, useAllowances, useTokenSymbols } from 
 import { useSpotActions } from '../hooks/useSpotActions';
 import { useSails } from '../hooks/useSails';
 import { useAccount } from '@gear-js/react-hooks';
+import { useMarketData } from '../providers/MarketDataProvider';
+import { TradeChart } from '../components/chart/TradeChart';
 import { parseUnits, formatUnits, notional } from '../lib/units';
 import styles from './SpotTradeView.module.css';
 
@@ -75,6 +77,34 @@ export function SpotTradeView() {
     refreshAllowances();
   }, [refreshBalances, refreshAllowances]);
 
+  // Live order book for this pair, shared by the chart (depth view) and the side panel.
+  const [book, setBook] = useState<{ bids: Level[]; asks: Level[] }>({ bids: [], asks: [] });
+  const refreshBook = useCallback(async () => {
+    if (!program || !pair) return;
+    try {
+      const [bids, asks] = await program.spot.getOrderbook(BigInt(pair.id as any)).call();
+      const toLevels = (rows: any[]): Level[] => rows.map((l) => [BigInt(l[0]), BigInt(l[1])]);
+      setBook({ bids: toLevels(bids), asks: toLevels(asks) });
+    } catch {
+      /* transient read error; keep last */
+    }
+  }, [program, pair]);
+  useEffect(() => {
+    refreshBook();
+    const iv = setInterval(() => { if (!document.hidden) refreshBook(); }, 5000);
+    return () => clearInterval(iv);
+  }, [refreshBook]);
+
+  // Real market price + history for the base asset (WETH -> ETH, WVARA -> VARA). The
+  // chart draws the underlying coin's real candles from Binance/CoinGecko, independent
+  // of our on-chain liquidity; oraclePrice overlays the live spot price.
+  const { prices, priceHistory } = useMarketData();
+  const chartAsset = useMemo(() => baseSym.replace(/^[wW]/, '').toUpperCase(), [baseSym]);
+  const oraclePrice = useMemo(() => {
+    const feed = prices[chartAsset as keyof typeof prices];
+    return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
+  }, [prices, chartAsset]);
+
   const submit = async () => {
     if (!pair) return;
     setErr(null);
@@ -117,6 +147,17 @@ export function SpotTradeView() {
         </div>
       ) : (
         <>
+          <div className={styles.mainCol}>
+          <div className={`${styles.panel} ${styles.chartPanel}`}>
+            <TradeChart
+              asset={chartAsset}
+              oraclePrice={oraclePrice}
+              priceHistory={priceHistory}
+              bids={book.bids}
+              asks={book.asks}
+              trades={[]}
+            />
+          </div>
           <div className={styles.panel}>
             <div className={styles.sideRow}>
               <button
@@ -226,8 +267,10 @@ export function SpotTradeView() {
             )}
             {err && <p className={styles.err}>{err}</p>}
           </div>
+          </div>
 
           <SidePanel
+            book={book}
             pairId={String(pair.id)}
             baseDec={baseDec}
             quoteDec={quoteDec}
@@ -244,6 +287,7 @@ export function SpotTradeView() {
 
 // The order book for the pair + the caller's open orders (with cancel).
 function SidePanel({
+  book,
   pairId,
   baseDec,
   quoteDec,
@@ -252,6 +296,7 @@ function SidePanel({
   account,
   onCancelled,
 }: {
+  book: { bids: Level[]; asks: Level[] };
   pairId: string;
   baseDec: number;
   quoteDec: number;
@@ -261,19 +306,13 @@ function SidePanel({
   onCancelled: () => void;
 }) {
   const actions = useSpotActions();
-  const [book, setBook] = useState<{ bids: Level[]; asks: Level[] }>({ bids: [], asks: [] });
   const [orders, setOrders] = useState<SpotOrder[]>([]);
 
   const refresh = useCallback(async () => {
-    if (!program) return;
+    if (!program || !account) return;
     try {
-      const [bids, asks] = await program.spot.getOrderbook(BigInt(pairId)).call();
-      const toLevels = (rows: any[]): Level[] => rows.map((l) => [BigInt(l[0]), BigInt(l[1])]);
-      setBook({ bids: toLevels(bids), asks: toLevels(asks) });
-      if (account) {
-        const mine = await program.spot.getMyOrders().withAddress(account.decodedAddress).call();
-        setOrders((Array.isArray(mine) ? mine : []).filter((o: SpotOrder) => String(o.pair_id) === pairId));
-      }
+      const mine = await program.spot.getMyOrders().withAddress(account.decodedAddress).call();
+      setOrders((Array.isArray(mine) ? mine : []).filter((o: SpotOrder) => String(o.pair_id) === pairId));
     } catch {
       /* transient read error; keep last */
     }
