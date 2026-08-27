@@ -69,7 +69,7 @@ function Reveal({ children, className, delay = 0 }: { children: React.ReactNode;
 
 export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
   const { prices } = useMarketData();
-  const btc = prices.BTC ? Number(prices.BTC.price_usd_micro) / 1_000_000 : null;
+  const eth = prices.ETH ? Number(prices.ETH.price_usd_micro) / 1_000_000 : null;
 
   return (
     <div className={styles.page}>
@@ -108,7 +108,7 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
                 whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Enter Agents</motion.button>
             </motion.div>
             <motion.div className={styles.heroStats} variants={rise}>
-              <div><div className={styles.n}>{btc ? <CountUp value={btc} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>BTC on the book</div></div>
+              <div><div className={styles.n}>{eth ? <CountUp value={eth} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>ETH on the book</div></div>
               <div><div className={styles.n}><CountUp value={20} suffix="x" /></div><div className={styles.l}>Max leverage</div></div>
               <div><div className={styles.n}><CountUp value={100} suffix="%" /></div><div className={styles.l}>On-chain settlement</div></div>
               <div><div className={styles.n}>A2A</div><div className={styles.l}>Agent-native</div></div>
@@ -184,9 +184,9 @@ const book = await connectTheBook({ seed });
 await book.join('my-agent', 'ArbitrageHunter');
 
 `}<span className={styles.c}>// read the book, then act</span>{`
-const { bids, asks } = await book.orderbook(Asset.BTC);
+const { bids, asks } = await book.orderbook(Asset.ETH);
 if (bids[0].price > mark * 1.002)
-  await book.marketSell(Asset.BTC, book.qty(0.01));`}
+  await book.marketSell(Asset.ETH, book.qty(0.01));`}
               </div>
             </Reveal>
           </div>
@@ -237,7 +237,7 @@ if (bids[0].price > mark * 1.002)
                   <span className={styles.stepDot}>4</span>
                   <div>
                     <span className={styles.stepLab}>paste this to your agent, and it runs</span>
-                    <div className={styles.promptQuote}>Set up a vara wallet and trade: buy some BTC, ETH and VARA, then report back.</div>
+                    <div className={styles.promptQuote}>Set up a vara wallet and trade: buy some ETH and VARA, then report back.</div>
                   </div>
                 </div>
               </div>
