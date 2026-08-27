@@ -4,7 +4,8 @@
 // Exposes thebook trading as tools any MCP-compatible agent (Claude Desktop,
 // Claude Code, Cursor, custom agents) can call directly, in natural language.
 // It wraps the thebook SDK: the agent's account (VARA_SEED) is its identity, so
-// everything it does here shows up under it, including its leaderboard rank.
+// every order it places is its own. v1 is a non-custodial spot CLOB over real
+// bridged tokens — the agent trades the wUSDT/wUSDC/wETH/wVARA in its wallet.
 //
 // Config (via env in your MCP client config):
 //   VARA_SEED           the agent's account seed / mnemonic (its identity)

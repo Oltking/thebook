@@ -1,46 +1,54 @@
-// Runnable example: sign up and trade on thebook from a plain script.
+// Runnable example: trade the non-custodial spot CLOB on thebookdex from a plain
+// script. This is the real mainnet flow — approve, place, read, withdraw.
 //
 //   cd sdk && npm install
-//   VARA_SEED="//Alice" THEBOOK_PROGRAM_ID=0x… node example.mjs
+//   VARA_SEED="your twelve word mnemonic" \
+//   THEBOOK_PROGRAM_ID=0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484 \
+//   node example.mjs
 //
-// Use any funded testnet account seed. `//Alice` works on a local node; on
-// testnet use your own mnemonic (get test VARA from the Vara faucet first).
+// The seed is a funded Vara MAINNET account holding the bridged tokens you want to
+// trade (wUSDT/wUSDC to buy, wETH/wVARA to sell). Node defaults to Vara mainnet.
 
-import { connectTheBook, Asset, Side, Strategy } from './thebook.mjs';
+import { connectTheBook, Side } from './thebook.mjs';
 
 const book = await connectTheBook({
   seed: process.env.VARA_SEED,
   programId: process.env.THEBOOK_PROGRAM_ID,
-  node: process.env.NODE_ADDRESS,          // defaults to Vara testnet
+  node: process.env.NODE_ADDRESS,          // defaults to Vara mainnet (wss://rpc.vara.network)
 });
 
 console.log('agent account:', book.address);
 
-// 1) Sign up. This also funds the agent with starting balances (virtual model).
-//    Idempotent, safe to call on every start.
-await book.join('ExampleBot', Strategy.Momentum);
-console.log('identity:', await book.identity());
-console.log('funded:', await book.portfolio());
+// 1) Discover the curated markets (read live from Spot/GetPairs).
+const pairs = await book.spot.pairs();
+console.log('markets:', pairs.map((p) => `#${p.id} base=${p.base} quote=${p.quote}`));
 
-// 2) Look at the market.
-const { bids, asks } = await book.orderbook(Asset.BTC);
+// Trade the first active market. Each pair carries its base/quote token ids and
+// their decimals (wETH 18, wVARA 12, wUSDT/wUSDC 6).
+const pair = pairs.find((p) => p.active);
+if (!pair) { console.log('no active markets'); await book.disconnect(); process.exit(0); }
+const baseDec = Number(pair.base_dec);
+const quoteDec = Number(pair.quote_dec);
+
+// 2) Look at the book.
+const { bids, asks } = await book.spot.orderbook(pair.id);
 console.log('best bid / ask:', bids[0], asks[0]);
 
-// 3) Trade. Quantities are in whole assets via book.qty().
-//    (You already have a balance from join, so this just works.)
-if (asks[0]) {
-  await book.marketBuy(Asset.BTC, book.qty(0.001));
-  console.log('bought 0.001 BTC');
-}
-
-// A resting limit order: post a bid one tick under the best bid.
-if (bids[0]) {
-  const oid = await book.placeLimit(Side.Buy, Asset.BTC, bids[0].price - 1, book.qty(0.001));
-  console.log('resting order id:', oid);
-}
+// 3) Place a resting bid: buy 0.01 base @ $2500 (quote units per whole base).
+//    A BUY escrows QUOTE, so approve the quote token first (once; large allowance
+//    avoids re-approving every trade).
+const price = book.units(2500, quoteDec);   // 2500 quote-units per whole base
+const qty   = book.units(0.01, baseDec);    // 0.01 base
+await book.spot.approve(pair.quote, book.units(1_000_000, quoteDec));
+const oid = await book.spot.placeLimit(pair.id, Side.Buy, price, qty);
+console.log('resting order id:', oid);
 
 // 4) Read your standing.
-console.log('portfolio:', await book.portfolio());
-console.log('my rank:', await book.myRank());
+console.log('my orders:', await book.spot.myOrders());
+console.log('claimable base:', await book.spot.claim(pair.base));
+
+// 5) Withdraw any filled proceeds / cancelled escrow back to your wallet.
+await book.spot.withdraw(pair.base);
+await book.spot.withdraw(pair.quote);
 
 await book.disconnect();

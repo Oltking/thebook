@@ -1,44 +1,56 @@
-// Place a perpetual position on thebook from a plain script.
+// Open a cash-settled perpetual position on thebookdex from a plain script.
 //
 //   cd sdk && npm install
-//   VARA_SEED="<your mnemonic>" THEBOOK_PROGRAM_ID=0x… node perp-example.mjs
+//   VARA_SEED="<your mnemonic>" \
+//   THEBOOK_PROGRAM_ID=0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484 \
+//   node perp-example.mjs
 //
-// Testnet only. The seed controls the (virtual) test funds and signs the tx.
+// NOTE: perps are built and deployed but NOT yet enabled on mainnet (no live mark
+// keeper), so this example bails early until a market has a fresh mark. The flow is
+// the real PerpsV1 one: collateral is wUSDT (6 decimals), margin is escrowed via a
+// prior spot.approve on the collateral token, and payouts settle to spot claims.
 
-import { connectTheBook, Asset, Strategy } from './thebook.mjs';
+import { connectTheBook } from './thebook.mjs';
+
+// wUSDT collateral on Vara mainnet (6 decimals).
+const COLLATERAL = '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e';
+const COLLATERAL_DEC = 6;
 
 const book = await connectTheBook({
   seed: process.env.VARA_SEED,
   programId: process.env.THEBOOK_PROGRAM_ID,
-  node: process.env.NODE_ADDRESS,   // defaults to Vara testnet
+  node: process.env.NODE_ADDRESS,   // defaults to Vara mainnet
 });
 
 console.log('agent:', book.address);
 
-// 1) Sign up + get funded (idempotent, safe every start).
-await book.join('PerpBot', Strategy.Momentum);
-
-// 2) A perp needs a live mark price from the keeper. Bail early with a clear
-//    message if the market has no mark yet (openPosition would revert otherwise).
-const marks = await book.marks();
-console.log('marks (USD):', marks);
-if (!marks.btc) {
-  console.error('No BTC mark price published yet — is the keeper running?');
+// 1) Find an enabled, named market with a live mark. openPosition reverts if the
+//    market has no fresh mark (keeper not running), so bail with a clear message.
+const markets = await book.perps.markets();
+const live = markets.find((m) => m.active && m.symbol && BigInt(m.mark) > 0n);
+if (!live) {
+  console.error('No perp market has a live mark yet — perps are not enabled on mainnet.');
   await book.disconnect();
   process.exit(1);
 }
+console.log('market:', live.symbol, 'mark:', String(live.mark));
 
-// 3) Open a small isolated-margin long: $50 margin, 5x leverage.
-console.log('opening long BTC  $50 margin  5x …');
-await book.openPosition(Asset.BTC, /* isLong */ true, book.micros(50), 5);
+// 2) Margin escrow needs an allowance on the collateral token (once, large amount).
+await book.spot.approve(COLLATERAL, book.units(1_000_000, COLLATERAL_DEC));
 
-console.log('portfolio after open:', await book.portfolio());
+// 3) Open a small isolated-margin long: 50 wUSDT margin, 5x leverage.
+console.log(`opening long ${live.symbol}  50 wUSDT margin  5x …`);
+await book.perps.open(live.id, /* isLong */ true, book.units(50, COLLATERAL_DEC), 5);
 
-// 4) Close it back to flat at the current mark.
-console.log('closing BTC position …');
-await book.closePosition(Asset.BTC);
+const positions = await book.perps.positions();
+console.log('open positions:', positions);
 
-console.log('portfolio after close:', await book.portfolio());
-console.log('rank:', await book.myRank());
+// 4) Close it back to flat (pass the position id). Proceeds settle to a spot claim;
+//    pull them out with book.spot.withdraw(COLLATERAL).
+if (positions[0]) {
+  console.log('closing position', String(positions[0].id), '…');
+  await book.perps.close(positions[0].id);
+  await book.spot.withdraw(COLLATERAL);
+}
 
 await book.disconnect();

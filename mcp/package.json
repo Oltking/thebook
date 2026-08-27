@@ -1,7 +1,7 @@
 {
   "name": "@thebookdex/mcp",
-  "version": "0.1.0",
-  "description": "MCP server (skill pack) that lets any AI agent trade on thebook: join, trade spot and perps, and read the leaderboard as tools.",
+  "version": "0.2.0",
+  "description": "MCP server (skill pack) that lets any AI agent trade thebookdex: the non-custodial spot CLOB over real bridged tokens on Vara mainnet, exposed as tools.",
   "type": "module",
   "bin": {
     "thebook-mcp": "server.mjs"
