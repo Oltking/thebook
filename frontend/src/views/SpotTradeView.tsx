@@ -7,6 +7,7 @@ import { useSpotActions } from '../hooks/useSpotActions';
 import { useSails } from '../hooks/useSails';
 import { useAccount } from '@gear-js/react-hooks';
 import { useMarketData } from '../providers/MarketDataProvider';
+import { useViewport } from '../hooks/useViewport';
 import { TradeChart } from '../components/chart/TradeChart';
 import { parseUnits, formatUnits, notional } from '../lib/units';
 import styles from './SpotTradeView.module.css';
@@ -105,6 +106,12 @@ export function SpotTradeView() {
     return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
   }, [prices, chartAsset]);
 
+  // On phones the chart is collapsed behind a toggle so the order form leads; on
+  // larger screens it always shows.
+  const { isMobile } = useViewport();
+  const [chartOpen, setChartOpen] = useState(false);
+  const showChart = !isMobile || chartOpen;
+
   const submit = async () => {
     if (!pair) return;
     setErr(null);
@@ -148,16 +155,27 @@ export function SpotTradeView() {
       ) : (
         <>
           <div className={styles.mainCol}>
-          <div className={`${styles.panel} ${styles.chartPanel}`}>
-            <TradeChart
-              asset={chartAsset}
-              oraclePrice={oraclePrice}
-              priceHistory={priceHistory}
-              bids={book.bids}
-              asks={book.asks}
-              trades={[]}
-            />
-          </div>
+          {isMobile && (
+            <button
+              className={styles.chartToggle}
+              onClick={() => setChartOpen((v) => !v)}
+              aria-expanded={chartOpen}
+            >
+              {chartOpen ? 'Hide chart ▴' : `Show ${chartAsset}/USD chart ▾`}
+            </button>
+          )}
+          {showChart && (
+            <div className={`${styles.panel} ${styles.chartPanel}`}>
+              <TradeChart
+                asset={chartAsset}
+                oraclePrice={oraclePrice}
+                priceHistory={priceHistory}
+                bids={book.bids}
+                asks={book.asks}
+                trades={[]}
+              />
+            </div>
+          )}
           <div className={styles.panel}>
             <div className={styles.sideRow}>
               <button

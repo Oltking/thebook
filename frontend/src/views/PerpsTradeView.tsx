@@ -22,8 +22,15 @@ export function PerpsTradeView() {
   const { balances, refresh: refreshBal } = useWalletBalances(collateralList);
   const { allowances, refresh: refreshAllow } = useAllowances(collateralList);
 
+  // Only markets that are actually enabled and named; the contract can hold empty
+  // reserved slots (blank symbol / inactive) that must not render as "-PERP".
+  const liveMarkets = useMemo(
+    () => markets.filter((m) => m.active && typeof m.symbol === 'string' && m.symbol.trim() !== ''),
+    [markets],
+  );
+
   const [marketId, setMarketId] = useState('0');
-  const market = markets.find((m) => String(m.id) === marketId) ?? markets[0];
+  const market = markets.find((m) => String(m.id) === marketId) ?? liveMarkets[0];
   const [isLong, setIsLong] = useState(true);
   const [leverage, setLeverage] = useState(2);
   const [marginStr, setMarginStr] = useState('');
@@ -61,7 +68,7 @@ export function PerpsTradeView() {
     <div className={styles.wrap}>
       <div className={styles.head}>
         <div className={styles.mkt}>
-          {markets.map((m) => (
+          {liveMarkets.map((m) => (
             <button
               key={String(m.id)}
               className={`${styles.mktBtn} ${String(m.id) === String(market?.id) ? styles.active : ''}`}
@@ -78,7 +85,7 @@ export function PerpsTradeView() {
         )}
       </div>
 
-      {markets.length === 0 ? (
+      {liveMarkets.length === 0 ? (
         <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
           <EmptyState title="Perps not live yet" description="No perpetual markets are enabled on this exchange yet." />
         </div>

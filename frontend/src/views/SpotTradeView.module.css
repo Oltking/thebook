@@ -37,6 +37,25 @@
 }
 .chartPanel > * { height: 100%; }
 
+/* Mobile-only toggle that collapses the chart so the order form leads. */
+.chartToggle {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.09));
+  border-radius: 12px;
+  background: var(--card-bg, #0a0e0a);
+  color: var(--text-secondary, #8b948b);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.chartToggle:hover { color: var(--text-main, #ebf2ec); border-color: var(--border-strong, rgba(255, 255, 255, 0.16)); }
+
+/* On phones the chart, when shown, is shorter so the order form stays reachable. */
+@media (max-width: 767px) {
+  .chartPanel { height: 300px; }
+}
+
 .panel {
   background: var(--card-bg, #0a0e0a);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.09));
