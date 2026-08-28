@@ -5,9 +5,6 @@ pub struct ThebookClientProgram;
 impl sails_rs::client::Program for ThebookClientProgram {}
 pub trait ThebookClient {
     type Env: sails_rs::client::GearEnv;
-    fn orderbook(&self) -> sails_rs::client::Service<orderbook::OrderbookImpl, Self::Env>;
-    fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env>;
-    fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env>;
     fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env>;
     fn perps_v_1(&self) -> sails_rs::client::Service<perps_v_1::PerpsV1Impl, Self::Env>;
 }
@@ -15,15 +12,6 @@ impl<E: sails_rs::client::GearEnv> ThebookClient
     for sails_rs::client::Actor<ThebookClientProgram, E>
 {
     type Env = E;
-    fn orderbook(&self) -> sails_rs::client::Service<orderbook::OrderbookImpl, Self::Env> {
-        self.service(stringify!(Orderbook))
-    }
-    fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env> {
-        self.service(stringify!(Amm))
-    }
-    fn perps(&self) -> sails_rs::client::Service<perps::PerpsImpl, Self::Env> {
-        self.service(stringify!(Perps))
-    }
     fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env> {
         self.service(stringify!(Spot))
     }
@@ -51,584 +39,29 @@ pub mod io {
     sails_rs::io_struct_impl!(New () -> ());
 }
 
-pub mod orderbook {
-    use super::*;
-    pub trait Orderbook {
-        type Env: sails_rs::client::GearEnv;
-        fn call_agent_service(
-            &mut self,
-            target: ActorId,
-            payload: Vec<u8>,
-            gas_limit: u64,
-        ) -> sails_rs::client::PendingCall<io::CallAgentService, Self::Env>;
-        fn cancel_order(
-            &mut self,
-            oid: u64,
-        ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env>;
-        /// Move real VFT tokens from the caller into the DEX vault, crediting their
-        /// internal balance. The caller must have `approve`d the DEX on the token
-        /// program for at least `amount` first. Credits only after the on-chain
-        /// transfer succeeds, so the internal balance stays fully token-backed.
-        fn deposit(
-            &mut self,
-            kind: TokenKind,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env>;
-        /// Register the caller's agent identity (name + strategy) and grant the
-        /// starting balances. This is the virtual-balance model: an agent is funded
-        /// the instant it joins, so it can trade immediately with no token custody,
-        /// approve, or deposit step. Idempotent: re-joining returns the existing
-        /// balances and keeps the original identity (no double funding).
-        fn join(
-            &mut self,
-            name: String,
-            strategy: AgentStrategy,
-        ) -> sails_rs::client::PendingCall<io::Join, Self::Env>;
-        fn market_buy(
-            &mut self,
-            asset: Asset,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env>;
-        fn market_sell(
-            &mut self,
-            asset: Asset,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env>;
-        fn place_limit(
-            &mut self,
-            side: Side,
-            asset: Asset,
-            price: u64,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env>;
-        /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
-        /// so the market maker can quote both sides and USDT-only agents always have a
-        /// counterparty. Idempotent — after the first call it just returns the balances.
-        fn seed_house(&mut self) -> sails_rs::client::PendingCall<io::SeedHouse, Self::Env>;
-        /// Admin-only: register the VFT program ID that backs a custodied balance.
-        /// Must be set before deposit/withdraw can move real tokens for that kind.
-        fn set_token(
-            &mut self,
-            kind: TokenKind,
-            address: ActorId,
-        ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env>;
-        fn start_autopilot(
-            &mut self,
-        ) -> sails_rs::client::PendingCall<io::StartAutopilot, Self::Env>;
-        fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env>;
-        /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
-        /// internal balance first, then transfers on-chain; if the transfer fails the
-        /// debit is reverted so funds are never silently lost.
-        fn withdraw(
-            &mut self,
-            kind: TokenKind,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env>;
-        /// Caller's agent identity, or None if they haven't joined. Used by the UI to
-        /// decide whether to show the "Create your Agent" onboarding.
-        fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env>;
-        fn get_leaderboard(
-            &self,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::GetLeaderboard, Self::Env>;
-        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env>;
-        fn get_orderbook(
-            &self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env>;
-        fn get_portfolio(&self) -> sails_rs::client::PendingCall<io::GetPortfolio, Self::Env>;
-        fn get_status(&self) -> sails_rs::client::PendingCall<io::GetStatus, Self::Env>;
-        fn get_token(
-            &self,
-            kind: TokenKind,
-        ) -> sails_rs::client::PendingCall<io::GetToken, Self::Env>;
-        /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
-        fn get_tokens(&self) -> sails_rs::client::PendingCall<io::GetTokens, Self::Env>;
-        fn get_trades(
-            &self,
-            asset: Asset,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::GetTrades, Self::Env>;
-    }
-    pub struct OrderbookImpl;
-    impl<E: sails_rs::client::GearEnv> Orderbook for sails_rs::client::Service<OrderbookImpl, E> {
-        type Env = E;
-        fn call_agent_service(
-            &mut self,
-            target: ActorId,
-            payload: Vec<u8>,
-            gas_limit: u64,
-        ) -> sails_rs::client::PendingCall<io::CallAgentService, Self::Env> {
-            self.pending_call((target, payload, gas_limit))
-        }
-        fn cancel_order(
-            &mut self,
-            oid: u64,
-        ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env> {
-            self.pending_call((oid,))
-        }
-        fn deposit(
-            &mut self,
-            kind: TokenKind,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Deposit, Self::Env> {
-            self.pending_call((kind, amount))
-        }
-        fn join(
-            &mut self,
-            name: String,
-            strategy: AgentStrategy,
-        ) -> sails_rs::client::PendingCall<io::Join, Self::Env> {
-            self.pending_call((name, strategy))
-        }
-        fn market_buy(
-            &mut self,
-            asset: Asset,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env> {
-            self.pending_call((asset, qty))
-        }
-        fn market_sell(
-            &mut self,
-            asset: Asset,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env> {
-            self.pending_call((asset, qty))
-        }
-        fn place_limit(
-            &mut self,
-            side: Side,
-            asset: Asset,
-            price: u64,
-            qty: u64,
-        ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env> {
-            self.pending_call((side, asset, price, qty))
-        }
-        fn seed_house(&mut self) -> sails_rs::client::PendingCall<io::SeedHouse, Self::Env> {
-            self.pending_call(())
-        }
-        fn set_token(
-            &mut self,
-            kind: TokenKind,
-            address: ActorId,
-        ) -> sails_rs::client::PendingCall<io::SetToken, Self::Env> {
-            self.pending_call((kind, address))
-        }
-        fn start_autopilot(
-            &mut self,
-        ) -> sails_rs::client::PendingCall<io::StartAutopilot, Self::Env> {
-            self.pending_call(())
-        }
-        fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env> {
-            self.pending_call(())
-        }
-        fn withdraw(
-            &mut self,
-            kind: TokenKind,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env> {
-            self.pending_call((kind, amount))
-        }
-        fn get_identity(&self) -> sails_rs::client::PendingCall<io::GetIdentity, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_leaderboard(
-            &self,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::GetLeaderboard, Self::Env> {
-            self.pending_call((limit,))
-        }
-        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_orderbook(
-            &self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env> {
-            self.pending_call((asset,))
-        }
-        fn get_portfolio(&self) -> sails_rs::client::PendingCall<io::GetPortfolio, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_status(&self) -> sails_rs::client::PendingCall<io::GetStatus, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_token(
-            &self,
-            kind: TokenKind,
-        ) -> sails_rs::client::PendingCall<io::GetToken, Self::Env> {
-            self.pending_call((kind,))
-        }
-        fn get_tokens(&self) -> sails_rs::client::PendingCall<io::GetTokens, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_trades(
-            &self,
-            asset: Asset,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::GetTrades, Self::Env> {
-            self.pending_call((asset, limit))
-        }
-    }
-
-    pub mod io {
-        use super::*;
-        sails_rs::io_struct_impl!(CallAgentService (target: ActorId, payload: Vec<u8>, gas_limit: u64) -> Result<Vec<u8>, super::ContractError>);
-        sails_rs::io_struct_impl!(CancelOrder (oid: u64) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(Deposit (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(Join (name: String, strategy: super::AgentStrategy) -> (u64,u64,u64,u64,));
-        sails_rs::io_struct_impl!(MarketBuy (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
-        sails_rs::io_struct_impl!(MarketSell (asset: super::Asset, qty: u64) -> Result<String, super::ContractError>);
-        sails_rs::io_struct_impl!(PlaceLimit (side: super::Side, asset: super::Asset, price: u64, qty: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(SeedHouse () -> Result<(u64,u64,u64,u64,), super::ContractError>);
-        sails_rs::io_struct_impl!(SetToken (kind: super::TokenKind, address: ActorId) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(StartAutopilot () -> ());
-        sails_rs::io_struct_impl!(Tick () -> Result<String, super::ContractError>);
-        sails_rs::io_struct_impl!(Withdraw (kind: super::TokenKind, amount: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(GetIdentity () -> Option<(String,super::AgentStrategy,)>);
-        sails_rs::io_struct_impl!(GetLeaderboard (limit: u32) -> Vec<super::LeaderEntry>);
-        sails_rs::io_struct_impl!(GetMyOrders () -> Vec<(u64,super::Side,super::Asset,u64,u64,u64,super::OrderStatus,)>);
-        sails_rs::io_struct_impl!(GetOrderbook (asset: super::Asset) -> (Vec<(u64,u64,)>,Vec<(u64,u64,)>,));
-        sails_rs::io_struct_impl!(GetPortfolio () -> (u64,u64,u64,u64,));
-        sails_rs::io_struct_impl!(GetStatus () -> (u32,u64,u32,bool,u32,));
-        sails_rs::io_struct_impl!(GetToken (kind: super::TokenKind) -> ActorId);
-        sails_rs::io_struct_impl!(GetTokens () -> (ActorId,ActorId,ActorId,ActorId,));
-        sails_rs::io_struct_impl!(GetTrades (asset: super::Asset, limit: u32) -> Vec<(u64,u64,u64,ActorId,ActorId,)>);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub mod events {
-        use super::*;
-        #[derive(PartialEq, Debug, Encode, Decode)]
-        #[codec(crate = sails_rs::scale_codec)]
-        pub enum OrderbookEvents {
-            OrderPlaced(OrderPlacedEvent),
-            OrderCancelled(OrderCancelledEvent),
-            Trade(TradeEvent),
-        }
-        impl sails_rs::client::Event for OrderbookEvents {
-            const EVENT_NAMES: &'static [Route] = &["OrderPlaced", "OrderCancelled", "Trade"];
-        }
-        impl sails_rs::client::ServiceWithEvents for OrderbookImpl {
-            type Event = OrderbookEvents;
-        }
-    }
-}
-
-pub mod amm {
-    use super::*;
-    pub trait Amm {
-        type Env: sails_rs::client::GearEnv;
-        fn add_liquidity(
-            &mut self,
-            pool_id: u64,
-            amount_a: u64,
-            amount_b: u64,
-        ) -> sails_rs::client::PendingCall<io::AddLiquidity, Self::Env>;
-        fn create_pool(
-            &mut self,
-            asset_a: Asset,
-            asset_b: Asset,
-        ) -> sails_rs::client::PendingCall<io::CreatePool, Self::Env>;
-        fn remove_liquidity(
-            &mut self,
-            pool_id: u64,
-            lp_amount: u64,
-        ) -> sails_rs::client::PendingCall<io::RemoveLiquidity, Self::Env>;
-        fn swap(
-            &mut self,
-            pool_id: u64,
-            asset_in: Asset,
-            amount_in: u64,
-            min_amount_out: u64,
-        ) -> sails_rs::client::PendingCall<io::Swap, Self::Env>;
-        fn get_lp_position(
-            &self,
-            pool_id: u64,
-            provider: ActorId,
-        ) -> sails_rs::client::PendingCall<io::GetLpPosition, Self::Env>;
-        fn get_pool(&self, pool_id: u64) -> sails_rs::client::PendingCall<io::GetPool, Self::Env>;
-        fn list_pools(&self) -> sails_rs::client::PendingCall<io::ListPools, Self::Env>;
-    }
-    pub struct AmmImpl;
-    impl<E: sails_rs::client::GearEnv> Amm for sails_rs::client::Service<AmmImpl, E> {
-        type Env = E;
-        fn add_liquidity(
-            &mut self,
-            pool_id: u64,
-            amount_a: u64,
-            amount_b: u64,
-        ) -> sails_rs::client::PendingCall<io::AddLiquidity, Self::Env> {
-            self.pending_call((pool_id, amount_a, amount_b))
-        }
-        fn create_pool(
-            &mut self,
-            asset_a: Asset,
-            asset_b: Asset,
-        ) -> sails_rs::client::PendingCall<io::CreatePool, Self::Env> {
-            self.pending_call((asset_a, asset_b))
-        }
-        fn remove_liquidity(
-            &mut self,
-            pool_id: u64,
-            lp_amount: u64,
-        ) -> sails_rs::client::PendingCall<io::RemoveLiquidity, Self::Env> {
-            self.pending_call((pool_id, lp_amount))
-        }
-        fn swap(
-            &mut self,
-            pool_id: u64,
-            asset_in: Asset,
-            amount_in: u64,
-            min_amount_out: u64,
-        ) -> sails_rs::client::PendingCall<io::Swap, Self::Env> {
-            self.pending_call((pool_id, asset_in, amount_in, min_amount_out))
-        }
-        fn get_lp_position(
-            &self,
-            pool_id: u64,
-            provider: ActorId,
-        ) -> sails_rs::client::PendingCall<io::GetLpPosition, Self::Env> {
-            self.pending_call((pool_id, provider))
-        }
-        fn get_pool(&self, pool_id: u64) -> sails_rs::client::PendingCall<io::GetPool, Self::Env> {
-            self.pending_call((pool_id,))
-        }
-        fn list_pools(&self) -> sails_rs::client::PendingCall<io::ListPools, Self::Env> {
-            self.pending_call(())
-        }
-    }
-
-    pub mod io {
-        use super::*;
-        sails_rs::io_struct_impl!(AddLiquidity (pool_id: u64, amount_a: u64, amount_b: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(CreatePool (asset_a: super::Asset, asset_b: super::Asset) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(RemoveLiquidity (pool_id: u64, lp_amount: u64) -> Result<(u64,u64,), super::ContractError>);
-        sails_rs::io_struct_impl!(Swap (pool_id: u64, asset_in: super::Asset, amount_in: u64, min_amount_out: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(GetLpPosition (pool_id: u64, provider: ActorId) -> Option<super::LpPosition>);
-        sails_rs::io_struct_impl!(GetPool (pool_id: u64) -> Option<super::Pool>);
-        sails_rs::io_struct_impl!(ListPools () -> Vec<super::Pool>);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub mod events {
-        use super::*;
-        #[derive(PartialEq, Debug, Encode, Decode)]
-        #[codec(crate = sails_rs::scale_codec)]
-        pub enum AmmEvents {
-            PoolCreated(PoolCreatedEvent),
-            LiquidityAdded(LiquidityAddedEvent),
-            LiquidityRemoved(LiquidityRemovedEvent),
-            SwapExecuted(SwapExecutedEvent),
-        }
-        impl sails_rs::client::Event for AmmEvents {
-            const EVENT_NAMES: &'static [Route] = &[
-                "PoolCreated",
-                "LiquidityAdded",
-                "LiquidityRemoved",
-                "SwapExecuted",
-            ];
-        }
-        impl sails_rs::client::ServiceWithEvents for AmmImpl {
-            type Event = AmmEvents;
-        }
-    }
-}
-
-pub mod perps {
-    use super::*;
-    pub trait Perps {
-        type Env: sails_rs::client::GearEnv;
-        /// Close your whole position at the current mark price, settling PnL against the
-        /// house reserve. Returns `(payout_cents, pnl_cents_signed)`.
-        fn close_position(
-            &mut self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::ClosePosition, Self::Env>;
-        /// Admin: move USD (cents) from your own balance into the house reserve that
-        /// pays trader profits. Never mints — total custodied USD is unchanged.
-        fn fund_reserve(
-            &mut self,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::FundReserve, Self::Env>;
-        /// Permissionless liquidation: if a position's equity has fallen to the
-        /// maintenance margin, anyone may close it at the mark. The liquidator earns a
-        /// small fee from the residual equity; the rest flows to the reserve.
-        fn liquidate(
-            &mut self,
-            owner: ActorId,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env>;
-        /// Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
-        /// cents from your balance; position size = margin * leverage at the mark price.
-        fn open_position(
-            &mut self,
-            asset: Asset,
-            is_long: bool,
-            margin: u64,
-            leverage: u32,
-        ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env>;
-        /// Keeper-only: publish the mark price (USD cents) for an asset. This is the
-        /// price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
-        fn set_mark_price(
-            &mut self,
-            asset: Asset,
-            price: u64,
-        ) -> sails_rs::client::PendingCall<io::SetMarkPrice, Self::Env>;
-        /// Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
-        /// USD cents. A zero leaves that asset's mark unchanged.
-        fn set_mark_prices(
-            &mut self,
-            btc: u64,
-            eth: u64,
-            vara: u64,
-        ) -> sails_rs::client::PendingCall<io::SetMarkPrices, Self::Env>;
-        /// Liquidation price (USD cents) for a position, i.e. the mark at which equity
-        /// hits maintenance margin. 0 if there is no such position.
-        fn get_liq_price(
-            &self,
-            owner: ActorId,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env>;
-        fn get_mark_price(
-            &self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetMarkPrice, Self::Env>;
-        fn get_mark_prices(&self) -> sails_rs::client::PendingCall<io::GetMarkPrices, Self::Env>;
-        /// A trader's open positions as
-        /// `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
-        fn get_positions(
-            &self,
-            owner: ActorId,
-        ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env>;
-        fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env>;
-    }
-    pub struct PerpsImpl;
-    impl<E: sails_rs::client::GearEnv> Perps for sails_rs::client::Service<PerpsImpl, E> {
-        type Env = E;
-        fn close_position(
-            &mut self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::ClosePosition, Self::Env> {
-            self.pending_call((asset,))
-        }
-        fn fund_reserve(
-            &mut self,
-            amount: u64,
-        ) -> sails_rs::client::PendingCall<io::FundReserve, Self::Env> {
-            self.pending_call((amount,))
-        }
-        fn liquidate(
-            &mut self,
-            owner: ActorId,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env> {
-            self.pending_call((owner, asset))
-        }
-        fn open_position(
-            &mut self,
-            asset: Asset,
-            is_long: bool,
-            margin: u64,
-            leverage: u32,
-        ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env> {
-            self.pending_call((asset, is_long, margin, leverage))
-        }
-        fn set_mark_price(
-            &mut self,
-            asset: Asset,
-            price: u64,
-        ) -> sails_rs::client::PendingCall<io::SetMarkPrice, Self::Env> {
-            self.pending_call((asset, price))
-        }
-        fn set_mark_prices(
-            &mut self,
-            btc: u64,
-            eth: u64,
-            vara: u64,
-        ) -> sails_rs::client::PendingCall<io::SetMarkPrices, Self::Env> {
-            self.pending_call((btc, eth, vara))
-        }
-        fn get_liq_price(
-            &self,
-            owner: ActorId,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env> {
-            self.pending_call((owner, asset))
-        }
-        fn get_mark_price(
-            &self,
-            asset: Asset,
-        ) -> sails_rs::client::PendingCall<io::GetMarkPrice, Self::Env> {
-            self.pending_call((asset,))
-        }
-        fn get_mark_prices(&self) -> sails_rs::client::PendingCall<io::GetMarkPrices, Self::Env> {
-            self.pending_call(())
-        }
-        fn get_positions(
-            &self,
-            owner: ActorId,
-        ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env> {
-            self.pending_call((owner,))
-        }
-        fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env> {
-            self.pending_call(())
-        }
-    }
-
-    pub mod io {
-        use super::*;
-        sails_rs::io_struct_impl!(ClosePosition (asset: super::Asset) -> Result<(u64,i64,), super::ContractError>);
-        sails_rs::io_struct_impl!(FundReserve (amount: u64) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(Liquidate (owner: ActorId, asset: super::Asset) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(OpenPosition (asset: super::Asset, is_long: bool, margin: u64, leverage: u32) -> Result<u64, super::ContractError>);
-        sails_rs::io_struct_impl!(SetMarkPrice (asset: super::Asset, price: u64) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(SetMarkPrices (btc: u64, eth: u64, vara: u64) -> Result<(), super::ContractError>);
-        sails_rs::io_struct_impl!(GetLiqPrice (owner: ActorId, asset: super::Asset) -> u64);
-        sails_rs::io_struct_impl!(GetMarkPrice (asset: super::Asset) -> u64);
-        sails_rs::io_struct_impl!(GetMarkPrices () -> (u64,u64,u64,));
-        sails_rs::io_struct_impl!(GetPositions (owner: ActorId) -> Vec<(super::Asset,bool,u64,u64,u64,u32,i64,)>);
-        sails_rs::io_struct_impl!(GetReserve () -> u64);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub mod events {
-        use super::*;
-        #[derive(PartialEq, Debug, Encode, Decode)]
-        #[codec(crate = sails_rs::scale_codec)]
-        pub enum PerpsEvents {
-            MarkPrice(MarkPriceEvent),
-            Opened(PerpOpenedEvent),
-            Closed(PerpClosedEvent),
-        }
-        impl sails_rs::client::Event for PerpsEvents {
-            const EVENT_NAMES: &'static [Route] = &["MarkPrice", "Opened", "Closed"];
-        }
-        impl sails_rs::client::ServiceWithEvents for PerpsImpl {
-            type Event = PerpsEvents;
-        }
-    }
-}
-
 pub mod spot {
     use super::*;
     pub trait Spot {
         type Env: sails_rs::client::GearEnv;
-        /// Cancel an open order and refund its unfilled escrow to the caller's claimable
-        /// balance (quote for a buy, base for a sell).
+        /// Accept a pending admin handover. Callable only by the proposed account.
+        fn accept_admin(&mut self) -> sails_rs::client::PendingCall<io::AcceptAdmin, Self::Env>;
+        /// Cancel a resting order and refund its unfilled escrow to the caller's
+        /// claimable balance. Never gated on the pause switch.
         fn cancel_order(
             &mut self,
             order_id: u64,
         ) -> sails_rs::client::PendingCall<io::CancelOrder, Self::Env>;
         /// Stop accepting new orders on a pair. Existing orders can still be cancelled and
-        /// proceeds withdrawn. Admin-only.
+        /// proceeds withdrawn. Reversible with `relist_pair` (audit M-14).
         fn delist_pair(
             &mut self,
             pair_id: u64,
         ) -> sails_rs::client::PendingCall<io::DelistPair, Self::Env>;
-        /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet). `base_dec`
-        /// and `quote_dec` are the tokens' declared decimals; the caller supplies them so
-        /// listing stays synchronous (they are verifiable against each VFT's metadata).
+        /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet).
+        ///
+        /// `base_dec`/`quote_dec` are read back from each token's own `VftMetadata`
+        /// service and rejected on mismatch — a wrong value would misprice the entire
+        /// market by a power of ten, and self-attestation is not a control (audit M-14).
         fn list_pair(
             &mut self,
             base: ActorId,
@@ -636,29 +69,37 @@ pub mod spot {
             base_dec: u8,
             quote_dec: u8,
         ) -> sails_rs::client::PendingCall<io::ListPair, Self::Env>;
-        /// Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
-        /// the full budget up front, sweeps the asks cheapest-first, and refunds anything
-        /// unspent (including the whole budget if the book is empty) to the caller's claim.
-        /// Never rests. Requires a prior `approve` of `max_quote` on the quote token.
+        /// Market buy up to `qty` base, spending at most `max_quote` quote tokens and
+        /// requiring at least `min_base_out` base in return.
+        ///
+        /// `min_base_out` is the slippage bound (audit H-03): without it a taker sweeps
+        /// whatever asks happen to exist, which on a thin book is an invitation to pull
+        /// quotes and leave a lowball. When the bound is not met the whole budget is
+        /// credited back and nothing is filled.
         fn market_buy(
             &mut self,
             pair_id: u64,
             qty: u128,
             max_quote: u128,
+            min_base_out: u128,
         ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env>;
-        /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
-        /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
-        /// Never rests. Requires a prior `approve` of `qty` on the base token.
+        /// Market sell `qty` base into the bids, highest-first, requiring at least
+        /// `min_quote_out` quote in return (audit H-03). Escrows the base up front and
+        /// refunds everything if the bound is not met.
         fn market_sell(
             &mut self,
             pair_id: u64,
             qty: u128,
+            min_quote_out: u128,
         ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env>;
         /// Place a limit order. Escrows the caller's real tokens (a quote-token
         /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
         /// then crosses the book by price-time priority, crediting fills to claimable
-        /// balances. Any unfilled remainder rests. Reverts with no state change if the
-        /// escrow transfer fails.
+        /// balances. Any unfilled remainder rests.
+        ///
+        /// Every check that can precede the escrow does; the only post-await failure is
+        /// the capacity re-check, which credits the escrow back before returning
+        /// (audit C-03, M-08).
         fn place_limit(
             &mut self,
             pair_id: u64,
@@ -666,37 +107,83 @@ pub mod spot {
             price: u128,
             qty: u128,
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env>;
-        /// Hand listing/admin authority to a new account (the multisig on mainnet).
-        /// Admin-only; irreversible except by the new admin.
-        fn transfer_admin(
+        /// Propose a new admin. Takes effect only when that account calls `accept_admin`,
+        /// so a typo is recoverable rather than terminal (audit H-05).
+        fn propose_admin(
             &mut self,
             new_admin: ActorId,
-        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env>;
-        /// Withdraw the caller's full claimable balance of `token` to their wallet. Debits
-        /// optimistically and restores the claim if the on-chain transfer fails.
+        ) -> sails_rs::client::PendingCall<io::ProposeAdmin, Self::Env>;
+        /// Re-open a delisted pair. Admin-only.
+        fn relist_pair(
+            &mut self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::RelistPair, Self::Env>;
+        /// Halt or resume trading. Cancel and withdraw are deliberately never gated on
+        /// this, so pausing during an incident cannot trap user funds (audit H-08).
+        fn set_paused(
+            &mut self,
+            paused: bool,
+        ) -> sails_rs::client::PendingCall<io::SetPaused, Self::Env>;
+        /// Sweep accumulated rounding dust for a token to the admin's claimable balance.
+        /// Dust is real, already-held tokens that no claim references (audit M-06).
+        fn sweep_dust(
+            &mut self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SweepDust, Self::Env>;
+        /// Withdraw `amount` of the caller's claimable `token` to their wallet, or the
+        /// full balance when `amount` is `None` (audit L-01). Debits optimistically and
+        /// restores the claim if the on-chain transfer fails. Never gated on the pause.
         fn withdraw(
             &mut self,
             token: ActorId,
+            amount: Option<u128>,
         ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env>;
+        fn get_admin(&self) -> sails_rs::client::PendingCall<io::GetAdmin, Self::Env>;
         /// The caller's withdrawable balance for a given token program.
         fn get_claim(
             &self,
             token: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetClaim, Self::Env>;
-        /// The caller's open/closed orders.
-        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env>;
+        /// The caller's resting orders, paginated. Filled and cancelled orders are not
+        /// retained in state — their history is in the event log (audit H-02, M-02).
+        fn get_my_orders(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env>;
         /// Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
-        /// each level `(price, remaining_qty)`.
+        /// each level `(price, remaining_qty)`, capped at `depth` levels per side.
         fn get_orderbook(
             &self,
             pair_id: u64,
+            depth: u32,
         ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env>;
         fn get_pair(&self, pair_id: u64) -> sails_rs::client::PendingCall<io::GetPair, Self::Env>;
-        fn get_pairs(&self) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env>;
+        /// Curated markets, paginated (audit L-05).
+        fn get_pairs(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env>;
+        /// Escrow, dust, and reserve held for a token. With the token's own
+        /// `balanceOf(program)` this lets a monitor assert the solvency invariant
+        /// without replaying the book (audit M-17).
+        fn get_solvency(
+            &self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetSolvency, Self::Env>;
+        fn is_paused(&self) -> sails_rs::client::PendingCall<io::IsPaused, Self::Env>;
+        fn pair_count(&self) -> sails_rs::client::PendingCall<io::PairCount, Self::Env>;
+        fn resting_order_count(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::RestingOrderCount, Self::Env>;
     }
     pub struct SpotImpl;
     impl<E: sails_rs::client::GearEnv> Spot for sails_rs::client::Service<SpotImpl, E> {
         type Env = E;
+        fn accept_admin(&mut self) -> sails_rs::client::PendingCall<io::AcceptAdmin, Self::Env> {
+            self.pending_call(())
+        }
         fn cancel_order(
             &mut self,
             order_id: u64,
@@ -723,15 +210,17 @@ pub mod spot {
             pair_id: u64,
             qty: u128,
             max_quote: u128,
+            min_base_out: u128,
         ) -> sails_rs::client::PendingCall<io::MarketBuy, Self::Env> {
-            self.pending_call((pair_id, qty, max_quote))
+            self.pending_call((pair_id, qty, max_quote, min_base_out))
         }
         fn market_sell(
             &mut self,
             pair_id: u64,
             qty: u128,
+            min_quote_out: u128,
         ) -> sails_rs::client::PendingCall<io::MarketSell, Self::Env> {
-            self.pending_call((pair_id, qty))
+            self.pending_call((pair_id, qty, min_quote_out))
         }
         fn place_limit(
             &mut self,
@@ -742,17 +231,39 @@ pub mod spot {
         ) -> sails_rs::client::PendingCall<io::PlaceLimit, Self::Env> {
             self.pending_call((pair_id, side, price, qty))
         }
-        fn transfer_admin(
+        fn propose_admin(
             &mut self,
             new_admin: ActorId,
-        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env> {
+        ) -> sails_rs::client::PendingCall<io::ProposeAdmin, Self::Env> {
             self.pending_call((new_admin,))
+        }
+        fn relist_pair(
+            &mut self,
+            pair_id: u64,
+        ) -> sails_rs::client::PendingCall<io::RelistPair, Self::Env> {
+            self.pending_call((pair_id,))
+        }
+        fn set_paused(
+            &mut self,
+            paused: bool,
+        ) -> sails_rs::client::PendingCall<io::SetPaused, Self::Env> {
+            self.pending_call((paused,))
+        }
+        fn sweep_dust(
+            &mut self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SweepDust, Self::Env> {
+            self.pending_call((token,))
         }
         fn withdraw(
             &mut self,
             token: ActorId,
+            amount: Option<u128>,
         ) -> sails_rs::client::PendingCall<io::Withdraw, Self::Env> {
-            self.pending_call((token,))
+            self.pending_call((token, amount))
+        }
+        fn get_admin(&self) -> sails_rs::client::PendingCall<io::GetAdmin, Self::Env> {
+            self.pending_call(())
         }
         fn get_claim(
             &self,
@@ -760,38 +271,161 @@ pub mod spot {
         ) -> sails_rs::client::PendingCall<io::GetClaim, Self::Env> {
             self.pending_call((token,))
         }
-        fn get_my_orders(&self) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env> {
-            self.pending_call(())
+        fn get_my_orders(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetMyOrders, Self::Env> {
+            self.pending_call((offset, limit))
         }
         fn get_orderbook(
             &self,
             pair_id: u64,
+            depth: u32,
         ) -> sails_rs::client::PendingCall<io::GetOrderbook, Self::Env> {
-            self.pending_call((pair_id,))
+            self.pending_call((pair_id, depth))
         }
         fn get_pair(&self, pair_id: u64) -> sails_rs::client::PendingCall<io::GetPair, Self::Env> {
             self.pending_call((pair_id,))
         }
-        fn get_pairs(&self) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env> {
+        fn get_pairs(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetPairs, Self::Env> {
+            self.pending_call((offset, limit))
+        }
+        fn get_solvency(
+            &self,
+            token: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetSolvency, Self::Env> {
+            self.pending_call((token,))
+        }
+        fn is_paused(&self) -> sails_rs::client::PendingCall<io::IsPaused, Self::Env> {
+            self.pending_call(())
+        }
+        fn pair_count(&self) -> sails_rs::client::PendingCall<io::PairCount, Self::Env> {
+            self.pending_call(())
+        }
+        fn resting_order_count(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::RestingOrderCount, Self::Env> {
             self.pending_call(())
         }
     }
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(AcceptAdmin () -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(CancelOrder (order_id: u64) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(DelistPair (pair_id: u64) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(ListPair (base: ActorId, quote: ActorId, base_dec: u8, quote_dec: u8) -> Result<u64, super::SpotError>);
-        sails_rs::io_struct_impl!(MarketBuy (pair_id: u64, qty: u128, max_quote: u128) -> Result<u64, super::SpotError>);
-        sails_rs::io_struct_impl!(MarketSell (pair_id: u64, qty: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(MarketBuy (pair_id: u64, qty: u128, max_quote: u128, min_base_out: u128) -> Result<u64, super::SpotError>);
+        sails_rs::io_struct_impl!(MarketSell (pair_id: u64, qty: u128, min_quote_out: u128) -> Result<u64, super::SpotError>);
         sails_rs::io_struct_impl!(PlaceLimit (pair_id: u64, side: super::Side, price: u128, qty: u128) -> Result<u64, super::SpotError>);
-        sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> Result<(), super::SpotError>);
-        sails_rs::io_struct_impl!(Withdraw (token: ActorId) -> Result<u128, super::SpotError>);
+        sails_rs::io_struct_impl!(ProposeAdmin (new_admin: ActorId) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(RelistPair (pair_id: u64) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetPaused (paused: bool) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SweepDust (token: ActorId) -> Result<u128, super::SpotError>);
+        sails_rs::io_struct_impl!(Withdraw (token: ActorId, amount: Option<u128>) -> Result<u128, super::SpotError>);
+        sails_rs::io_struct_impl!(GetAdmin () -> (ActorId,ActorId,));
         sails_rs::io_struct_impl!(GetClaim (token: ActorId) -> u128);
-        sails_rs::io_struct_impl!(GetMyOrders () -> Vec<super::SpotOrder>);
-        sails_rs::io_struct_impl!(GetOrderbook (pair_id: u64) -> (Vec<(u128,u128,)>,Vec<(u128,u128,)>,));
+        sails_rs::io_struct_impl!(GetMyOrders (offset: u32, limit: u32) -> Vec<super::SpotOrder>);
+        sails_rs::io_struct_impl!(GetOrderbook (pair_id: u64, depth: u32) -> (Vec<(u128,u128,)>,Vec<(u128,u128,)>,));
         sails_rs::io_struct_impl!(GetPair (pair_id: u64) -> Option<super::SpotPair>);
-        sails_rs::io_struct_impl!(GetPairs () -> Vec<super::SpotPair>);
+        sails_rs::io_struct_impl!(GetPairs (offset: u32, limit: u32) -> Vec<super::SpotPair>);
+        sails_rs::io_struct_impl!(GetSolvency (token: ActorId) -> (u128,u128,u128,));
+        sails_rs::io_struct_impl!(IsPaused () -> bool);
+        sails_rs::io_struct_impl!(PairCount () -> u64);
+        sails_rs::io_struct_impl!(RestingOrderCount () -> u64);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum SpotEvents {
+            PairListed {
+                pair_id: u64,
+                base: ActorId,
+                quote: ActorId,
+                base_dec: u8,
+                quote_dec: u8,
+            },
+            PairDelisted {
+                pair_id: u64,
+            },
+            PairRelisted {
+                pair_id: u64,
+            },
+            OrderPlaced {
+                order_id: u64,
+                pair_id: u64,
+                trader: ActorId,
+                side: Side,
+                price: u128,
+                qty: u128,
+            },
+            Trade {
+                pair_id: u64,
+                taker_order: u64,
+                maker_order: u64,
+                buyer: ActorId,
+                seller: ActorId,
+                price: u128,
+                qty: u128,
+            },
+            OrderCancelled {
+                order_id: u64,
+                pair_id: u64,
+                trader: ActorId,
+                refunded: u128,
+            },
+            OrderClosed {
+                order_id: u64,
+                pair_id: u64,
+                trader: ActorId,
+                filled: u128,
+            },
+            Withdrawn {
+                who: ActorId,
+                token: ActorId,
+                amount: u128,
+            },
+            DustSwept {
+                token: ActorId,
+                amount: u128,
+            },
+            PausedSet {
+                paused: bool,
+            },
+            AdminProposed {
+                pending: ActorId,
+            },
+            AdminChanged {
+                admin: ActorId,
+            },
+        }
+        impl sails_rs::client::Event for SpotEvents {
+            const EVENT_NAMES: &'static [Route] = &[
+                "PairListed",
+                "PairDelisted",
+                "PairRelisted",
+                "OrderPlaced",
+                "Trade",
+                "OrderCancelled",
+                "OrderClosed",
+                "Withdrawn",
+                "DustSwept",
+                "PausedSet",
+                "AdminProposed",
+                "AdminChanged",
+            ];
+        }
+        impl sails_rs::client::ServiceWithEvents for SpotImpl {
+            type Event = SpotEvents;
+        }
     }
 }
 
@@ -799,13 +433,18 @@ pub mod perps_v_1 {
     use super::*;
     pub trait PerpsV1 {
         type Env: sails_rs::client::GearEnv;
-        /// Admin: list a perp market by symbol. Returns its id.
+        /// Admin: list a perp market. `max_oi` is required and must be non-zero — the
+        /// reserve's exposure is bounded at creation, not by a remembered follow-up
+        /// (audit M-03).
         fn add_market(
             &mut self,
             symbol: String,
+            max_oi: u128,
         ) -> sails_rs::client::PendingCall<io::AddMarket, Self::Env>;
-        /// Close your position at the current mark, settling PnL against the reserve and
-        /// crediting the payout to your claimable collateral (withdraw via `Spot/Withdraw`).
+        /// Close your position, settling PnL and funding against the reserve and
+        /// crediting the payout to your claimable collateral (withdraw via
+        /// `Spot/Withdraw`). Never gated on the pause switch, and never gated on a live
+        /// keeper once the feed has been dead past `MARK_EXIT_AGE`.
         fn close_position(
             &mut self,
             position_id: u64,
@@ -815,14 +454,22 @@ pub mod perps_v_1 {
             &mut self,
             amount: u128,
         ) -> sails_rs::client::PendingCall<io::FundReserve, Self::Env>;
-        /// Permissionless liquidation once equity falls to maintenance margin. The
-        /// liquidator earns a fee from residual equity; the rest is settled to the owner.
+        /// Permissionless liquidation once equity falls to maintenance margin.
+        ///
+        /// The liquidator's fee is paid from residual equity and topped up from the
+        /// reserve when equity has gapped away. Capping the fee at residual equity meant
+        /// it vanished exactly when liquidation mattered most, so nobody would run a bot
+        /// for it (audit L-07).
         fn liquidate(
             &mut self,
             position_id: u64,
         ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env>;
         /// Open an isolated-margin position. Escrows `margin` of the collateral token
         /// (requires a prior `approve`); notional = margin * leverage at the mark.
+        ///
+        /// Everything that can be checked before the escrow is checked before it. The two
+        /// post-await re-checks exist because the await yields to other messages, and
+        /// both credit the margin back before returning (audit C-03, M-08).
         fn open_position(
             &mut self,
             market_id: u64,
@@ -835,26 +482,37 @@ pub mod perps_v_1 {
             &mut self,
             token: ActorId,
         ) -> sails_rs::client::PendingCall<io::SetCollateral, Self::Env>;
-        /// Admin: set the keeper account allowed to push mark prices.
+        /// Admin: set the keeper account allowed to push mark prices. The zero address is
+        /// rejected — accepting it silently left admin as the sole mark authority
+        /// (audit L-04).
         fn set_keeper(
             &mut self,
             keeper: ActorId,
         ) -> sails_rs::client::PendingCall<io::SetKeeper, Self::Env>;
         /// Keeper: publish the mark price for a market.
+        ///
+        /// Bounded to `MAX_MARK_DEVIATION_BPS` from the previous mark, so a compromised
+        /// keeper cannot reprice the book in a single transaction and liquidate it
+        /// (audit H-04). The bound is skipped only for the first mark, and once the feed
+        /// is stale past `MARK_EXIT_AGE` — by then positions can already exit at entry,
+        /// so a fresh start is not a lever over anyone.
         fn set_mark(
             &mut self,
             market_id: u64,
             price: u128,
         ) -> sails_rs::client::PendingCall<io::SetMark, Self::Env>;
-        /// Admin: cap open interest per side on a market, bounding the reserve's max loss.
+        /// Admin: cap open interest per side on a market.
         fn set_market_cap(
             &mut self,
             market_id: u64,
             max_oi: u128,
         ) -> sails_rs::client::PendingCall<io::SetMarketCap, Self::Env>;
-        /// Admin: withdraw reserve profit (fees + net trader losses) to the admin's
-        /// claimable collateral. The operator is responsible for leaving enough to cover
-        /// open positions — withdraw profit, not the whole book.
+        /// Admin: withdraw reserve profit to the admin's claimable collateral.
+        ///
+        /// Capped at the amount above current liability, so solvency is a contract
+        /// invariant instead of operator discipline — draining the reserve used to
+        /// silently truncate what winning traders received rather than failing loudly
+        /// (audit H-05).
         fn withdraw_reserve(
             &mut self,
             amount: u128,
@@ -865,13 +523,21 @@ pub mod perps_v_1 {
             position_id: u64,
         ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env>;
         fn get_markets(&self) -> sails_rs::client::PendingCall<io::GetMarkets, Self::Env>;
-        /// A trader's open positions with PnL at the current mark:
+        /// A trader's open positions with PnL at the current mark, paginated (audit L-05):
         /// `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
         fn get_positions(
             &self,
             owner: ActorId,
+            offset: u32,
+            limit: u32,
         ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env>;
         fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env>;
+        /// Reserve health: `(reserve, liability, coverage_bps)`. Surfaced so a trader can
+        /// see the reserve is thin *before* entering, rather than discovering it as a
+        /// truncated payout on the way out (audit M-04).
+        fn get_reserve_health(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetReserveHealth, Self::Env>;
     }
     pub struct PerpsV1Impl;
     impl<E: sails_rs::client::GearEnv> PerpsV1 for sails_rs::client::Service<PerpsV1Impl, E> {
@@ -879,8 +545,9 @@ pub mod perps_v_1 {
         fn add_market(
             &mut self,
             symbol: String,
+            max_oi: u128,
         ) -> sails_rs::client::PendingCall<io::AddMarket, Self::Env> {
-            self.pending_call((symbol,))
+            self.pending_call((symbol, max_oi))
         }
         fn close_position(
             &mut self,
@@ -953,17 +620,24 @@ pub mod perps_v_1 {
         fn get_positions(
             &self,
             owner: ActorId,
+            offset: u32,
+            limit: u32,
         ) -> sails_rs::client::PendingCall<io::GetPositions, Self::Env> {
-            self.pending_call((owner,))
+            self.pending_call((owner, offset, limit))
         }
         fn get_reserve(&self) -> sails_rs::client::PendingCall<io::GetReserve, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_reserve_health(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetReserveHealth, Self::Env> {
             self.pending_call(())
         }
     }
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(AddMarket (symbol: String) -> Result<u64, super::PerpsError>);
+        sails_rs::io_struct_impl!(AddMarket (symbol: String, max_oi: u128) -> Result<u64, super::PerpsError>);
         sails_rs::io_struct_impl!(ClosePosition (position_id: u64) -> Result<(u128,i128,), super::PerpsError>);
         sails_rs::io_struct_impl!(FundReserve (amount: u128) -> Result<u128, super::PerpsError>);
         sails_rs::io_struct_impl!(Liquidate (position_id: u64) -> Result<(), super::PerpsError>);
@@ -975,216 +649,89 @@ pub mod perps_v_1 {
         sails_rs::io_struct_impl!(WithdrawReserve (amount: u128) -> Result<u128, super::PerpsError>);
         sails_rs::io_struct_impl!(GetLiqPrice (position_id: u64) -> u128);
         sails_rs::io_struct_impl!(GetMarkets () -> Vec<super::PerpMarket>);
-        sails_rs::io_struct_impl!(GetPositions (owner: ActorId) -> Vec<(u64,u64,bool,u128,u128,u128,u32,i128,)>);
+        sails_rs::io_struct_impl!(GetPositions (owner: ActorId, offset: u32, limit: u32) -> Vec<(u64,u64,bool,u128,u128,u128,u32,i128,)>);
         sails_rs::io_struct_impl!(GetReserve () -> u128);
+        sails_rs::io_struct_impl!(GetReserveHealth () -> (u128,u128,u128,));
     }
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum ContractError {
-    NotAuthorized,
-    NotAdmin,
-    BadParams,
-    JoinFirst,
-    InsufficientUsd,
-    InsufficientAsset,
-    OrderNotFound,
-    OrderAlreadyDone,
-    NoLiquidity,
-    NoBuyers,
-    PoolExists,
-    PoolNotFound,
-    SameAssetPool,
-    InsufficientLiquidity,
-    SlippageExceeded,
-    ZeroAmount,
-    AgentCallFailed,
-    BookFull,
-    NoMarkPrice,
-    LeverageTooHigh,
-    PositionNotFound,
-    WrongDirection,
-    NotLiquidatable,
-    StaleMark,
-}
-/// The four balances the DEX custodies, each backed by a real VFT on-chain.
-/// `Usd` is a separate kind because the orderbook denominates in USD but the
-/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum TokenKind {
-    Usd,
-    Btc,
-    Eth,
-    Vara,
-}
-/// The trading persona a user picks when creating their agent. Display/behaviour
-/// hint today; drives autopilot strategy selection in a later phase.
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum AgentStrategy {
-    ArbitrageHunter,
-    MarketMaker,
-    Momentum,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum Asset {
-    BTC,
-    ETH,
-    VARA,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum Side {
-    Buy,
-    Sell,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct LeaderEntry {
-    pub id: ActorId,
-    pub name: String,
-    pub strategy: AgentStrategy,
-    pub usd: u64,
-    pub net_worth: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum OrderStatus {
-    Open,
-    Partial,
-    Filled,
-    Cancelled,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct OrderPlacedEvent {
-    pub trader: ActorId,
-    pub side: Side,
-    pub asset: Asset,
-    pub price: u64,
-    pub qty: u64,
-    pub order_id: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct OrderCancelledEvent {
-    pub trader: ActorId,
-    pub order_id: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct TradeEvent {
-    pub trade_id: u64,
-    pub asset: Asset,
-    pub price: u64,
-    pub qty: u64,
-    pub buyer: ActorId,
-    pub seller: ActorId,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct LpPosition {
-    pub pool_id: u64,
-    pub provider: ActorId,
-    pub amount: u64,
-    pub share_a: u64,
-    pub share_b: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct Pool {
-    pub id: u64,
-    pub asset_a: Asset,
-    pub asset_b: Asset,
-    pub reserve_a: u64,
-    pub reserve_b: u64,
-    pub total_lp: u64,
-    pub creator: ActorId,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct PoolCreatedEvent {
-    pub pool_id: u64,
-    pub asset_a: Asset,
-    pub asset_b: Asset,
-    pub creator: ActorId,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct LiquidityAddedEvent {
-    pub pool_id: u64,
-    pub provider: ActorId,
-    pub amount_a: u64,
-    pub amount_b: u64,
-    pub lp_minted: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct LiquidityRemovedEvent {
-    pub pool_id: u64,
-    pub provider: ActorId,
-    pub amount_a: u64,
-    pub amount_b: u64,
-    pub lp_burned: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct SwapExecutedEvent {
-    pub pool_id: u64,
-    pub trader: ActorId,
-    pub asset_in: Asset,
-    pub amount_in: u64,
-    pub asset_out: Asset,
-    pub amount_out: u64,
-    pub fee: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct MarkPriceEvent {
-    pub asset: Asset,
-    pub price: u64,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct PerpOpenedEvent {
-    pub owner: ActorId,
-    pub asset: Asset,
-    pub is_long: bool,
-    pub size: u64,
-    pub entry: u64,
-    pub margin: u64,
-    pub leverage: u32,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct PerpClosedEvent {
-    pub owner: ActorId,
-    pub asset: Asset,
-    pub exit: u64,
-    pub payout: u64,
-    pub pnl: i64,
-    pub liquidated: bool,
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum PerpsV1Events {
+            MarketAdded {
+                market_id: u64,
+                symbol: String,
+                max_oi: u128,
+            },
+            MarketCapSet {
+                market_id: u64,
+                max_oi: u128,
+            },
+            MarkSet {
+                market_id: u64,
+                price: u128,
+                block: u32,
+            },
+            PositionOpened {
+                position_id: u64,
+                market_id: u64,
+                owner: ActorId,
+                is_long: bool,
+                notional: u128,
+                entry: u128,
+                margin: u128,
+                leverage: u32,
+            },
+            PositionClosed {
+                position_id: u64,
+                owner: ActorId,
+                payout: u128,
+                pnl: i128,
+                funding: i128,
+                at_entry: bool,
+            },
+            PositionLiquidated {
+                position_id: u64,
+                owner: ActorId,
+                liquidator: ActorId,
+                to_owner: u128,
+                fee: u128,
+            },
+            ReserveFunded {
+                amount: u128,
+                reserve: u128,
+            },
+            ReserveWithdrawn {
+                amount: u128,
+                reserve: u128,
+            },
+            KeeperSet {
+                keeper: ActorId,
+            },
+            CollateralSet {
+                token: ActorId,
+            },
+        }
+        impl sails_rs::client::Event for PerpsV1Events {
+            const EVENT_NAMES: &'static [Route] = &[
+                "MarketAdded",
+                "MarketCapSet",
+                "MarkSet",
+                "PositionOpened",
+                "PositionClosed",
+                "PositionLiquidated",
+                "ReserveFunded",
+                "ReserveWithdrawn",
+                "KeeperSet",
+                "CollateralSet",
+            ];
+        }
+        impl sails_rs::client::ServiceWithEvents for PerpsV1Impl {
+            type Event = PerpsV1Events;
+        }
+    }
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1194,13 +741,13 @@ pub enum SpotError {
     NotAdmin,
     /// Zero price/qty, unknown token, or other malformed input.
     BadParams,
-    /// A pair with the same (base, quote) already exists.
+    /// A pair with the same (base, quote) already exists — in either orientation.
     PairExists,
     /// No pair with that id.
     NoPair,
     /// Pair exists but is delisted; no new orders accepted.
     PairInactive,
-    /// The global order cap is reached.
+    /// The global resting-order cap is reached.
     BookFull,
     /// No order with that id.
     NoOrder,
@@ -1210,6 +757,26 @@ pub enum SpotError {
     NothingToClaim,
     /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
     TransferFailed,
+    /// Trading is paused. Cancel and withdraw remain open.
+    Paused,
+    /// The fill would be worse than the caller's stated slippage bound.
+    SlippageExceeded,
+    /// An amount overflowed u128. Trapping beats a silently wrong number.
+    Overflow,
+    /// The token's on-chain decimals do not match the value supplied at listing.
+    DecimalsMismatch,
+    /// No pending admin, or the caller is not the pending admin.
+    NotPendingAdmin,
+}
+/// `Ord` matters: `Side` is part of the spot price-level index key
+/// `(pair_id, side, price)`, which is what makes matching walk levels instead of
+/// every order ever placed.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum Side {
+    Buy,
+    Sell,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1226,6 +793,11 @@ pub struct SpotOrder {
     /// Filled base amount so far.
     pub filled: u128,
     pub status: SpotStatus,
+    /// Tokens escrowed when the order was placed (quote for a buy, base for a sell).
+    pub escrowed: u128,
+    /// How much of `escrowed` has been paid out or refunded. The remainder at
+    /// removal time is rounding dust (audit M-06).
+    pub released: u128,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1233,8 +805,6 @@ pub struct SpotOrder {
 pub enum SpotStatus {
     Open,
     PartiallyFilled,
-    Filled,
-    Cancelled,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1245,7 +815,7 @@ pub struct SpotPair {
     pub base: ActorId,
     /// Quote token program (USDT or USDC).
     pub quote: ActorId,
-    /// Declared decimals of each token, read from the VFT at listing time.
+    /// Decimals of each token, verified against the VFT's own metadata at listing.
     pub base_dec: u8,
     pub quote_dec: u8,
     /// Delisted pairs reject new orders but still allow cancel/withdraw.
@@ -1270,6 +840,14 @@ pub enum PerpsError {
     NoCollateral,
     /// Opening would push this side's open interest past the market cap.
     OiCapExceeded,
+    /// Trading is paused. Closing and liquidating stay open.
+    Paused,
+    /// The mark update deviates further from the previous mark than the bound allows.
+    MarkDeviationTooLarge,
+    /// The reserve is too thin relative to what it already owes to accept new risk.
+    InsufficientCoverage,
+    /// An amount overflowed. Trapping beats a silently wrong number.
+    Overflow,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1286,6 +864,14 @@ pub struct PerpMarket {
     /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
     pub long_oi: u128,
     pub short_oi: u128,
-    /// Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+    /// Max open interest per side. Required at market creation: there is no
+    /// unlimited default, because the safe value should not depend on an operator
+    /// remembering a second call (audit M-03).
     pub max_oi: u128,
+    /// Cumulative funding index in `FUNDING_SCALE` units. Rises while longs are the
+    /// crowded side, falls while shorts are. Longs pay the increase, shorts receive
+    /// its negation; both settle against the reserve, which is the counterparty.
+    pub cum_funding: i128,
+    /// Block `cum_funding` was last advanced.
+    pub funding_block: u32,
 }

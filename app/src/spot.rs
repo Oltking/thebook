@@ -927,8 +927,10 @@ impl<'a> SpotService<'a> {
                 };
                 st.credit(caller, base, fill);
                 st.credit(o_trader, quote, cost);
+                // The maker here is a resting *sell*: its escrow is base, so `fill`
+                // is what it released — not the quote it received.
                 if let Some(m) = st.orders.get_mut(&mid) {
-                    m.released += cost;
+                    m.released += fill;
                     m.filled += fill;
                     m.status = SpotStatus::PartiallyFilled;
                 }
@@ -1026,8 +1028,10 @@ impl<'a> SpotService<'a> {
                 };
                 st.credit(caller, quote, proceeds);
                 st.credit(o_trader, base, fill);
+                // The maker here is a resting *bid*: its escrow is quote, so
+                // `proceeds` is what it released — not the base it received.
                 if let Some(m) = st.orders.get_mut(&mid) {
-                    m.released += fill;
+                    m.released += proceeds;
                     m.filled += fill;
                     m.status = SpotStatus::PartiallyFilled;
                 }

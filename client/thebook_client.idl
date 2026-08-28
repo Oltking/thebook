@@ -1,184 +1,15 @@
-type ContractError = enum {
-  NotAuthorized,
-  NotAdmin,
-  BadParams,
-  JoinFirst,
-  InsufficientUsd,
-  InsufficientAsset,
-  OrderNotFound,
-  OrderAlreadyDone,
-  NoLiquidity,
-  NoBuyers,
-  PoolExists,
-  PoolNotFound,
-  SameAssetPool,
-  InsufficientLiquidity,
-  SlippageExceeded,
-  ZeroAmount,
-  AgentCallFailed,
-  BookFull,
-  NoMarkPrice,
-  LeverageTooHigh,
-  PositionNotFound,
-  WrongDirection,
-  NotLiquidatable,
-  StaleMark,
-};
-
-/// The four balances the DEX custodies, each backed by a real VFT on-chain.
-/// `Usd` is a separate kind because the orderbook denominates in USD but the
-/// `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
-type TokenKind = enum {
-  Usd,
-  Btc,
-  Eth,
-  Vara,
-};
-
-/// The trading persona a user picks when creating their agent. Display/behaviour
-/// hint today; drives autopilot strategy selection in a later phase.
-type AgentStrategy = enum {
-  ArbitrageHunter,
-  MarketMaker,
-  Momentum,
-};
-
-type Asset = enum {
-  BTC,
-  ETH,
-  VARA,
-};
-
-type Side = enum {
-  Buy,
-  Sell,
-};
-
-type LeaderEntry = struct {
-  id: actor_id,
-  name: str,
-  strategy: AgentStrategy,
-  usd: u64,
-  net_worth: u64,
-};
-
-type OrderStatus = enum {
-  Open,
-  Partial,
-  Filled,
-  Cancelled,
-};
-
-type OrderPlacedEvent = struct {
-  trader: actor_id,
-  side: Side,
-  asset: Asset,
-  price: u64,
-  qty: u64,
-  order_id: u64,
-};
-
-type OrderCancelledEvent = struct {
-  trader: actor_id,
-  order_id: u64,
-};
-
-type TradeEvent = struct {
-  trade_id: u64,
-  asset: Asset,
-  price: u64,
-  qty: u64,
-  buyer: actor_id,
-  seller: actor_id,
-};
-
-type LpPosition = struct {
-  pool_id: u64,
-  provider: actor_id,
-  amount: u64,
-  share_a: u64,
-  share_b: u64,
-};
-
-type Pool = struct {
-  id: u64,
-  asset_a: Asset,
-  asset_b: Asset,
-  reserve_a: u64,
-  reserve_b: u64,
-  total_lp: u64,
-  creator: actor_id,
-};
-
-type PoolCreatedEvent = struct {
-  pool_id: u64,
-  asset_a: Asset,
-  asset_b: Asset,
-  creator: actor_id,
-};
-
-type LiquidityAddedEvent = struct {
-  pool_id: u64,
-  provider: actor_id,
-  amount_a: u64,
-  amount_b: u64,
-  lp_minted: u64,
-};
-
-type LiquidityRemovedEvent = struct {
-  pool_id: u64,
-  provider: actor_id,
-  amount_a: u64,
-  amount_b: u64,
-  lp_burned: u64,
-};
-
-type SwapExecutedEvent = struct {
-  pool_id: u64,
-  trader: actor_id,
-  asset_in: Asset,
-  amount_in: u64,
-  asset_out: Asset,
-  amount_out: u64,
-  fee: u64,
-};
-
-type MarkPriceEvent = struct {
-  asset: Asset,
-  price: u64,
-};
-
-type PerpOpenedEvent = struct {
-  owner: actor_id,
-  asset: Asset,
-  is_long: bool,
-  size: u64,
-  entry: u64,
-  margin: u64,
-  leverage: u32,
-};
-
-type PerpClosedEvent = struct {
-  owner: actor_id,
-  asset: Asset,
-  exit: u64,
-  payout: u64,
-  pnl: i64,
-  liquidated: bool,
-};
-
 type SpotError = enum {
   /// Caller is not the admin/multisig.
   NotAdmin,
   /// Zero price/qty, unknown token, or other malformed input.
   BadParams,
-  /// A pair with the same (base, quote) already exists.
+  /// A pair with the same (base, quote) already exists — in either orientation.
   PairExists,
   /// No pair with that id.
   NoPair,
   /// Pair exists but is delisted; no new orders accepted.
   PairInactive,
-  /// The global order cap is reached.
+  /// The global resting-order cap is reached.
   BookFull,
   /// No order with that id.
   NoOrder,
@@ -188,6 +19,24 @@ type SpotError = enum {
   NothingToClaim,
   /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
   TransferFailed,
+  /// Trading is paused. Cancel and withdraw remain open.
+  Paused,
+  /// The fill would be worse than the caller's stated slippage bound.
+  SlippageExceeded,
+  /// An amount overflowed u128. Trapping beats a silently wrong number.
+  Overflow,
+  /// The token's on-chain decimals do not match the value supplied at listing.
+  DecimalsMismatch,
+  /// No pending admin, or the caller is not the pending admin.
+  NotPendingAdmin,
+};
+
+/// `Ord` matters: `Side` is part of the spot price-level index key
+/// `(pair_id, side, price)`, which is what makes matching walk levels instead of
+/// every order ever placed.
+type Side = enum {
+  Buy,
+  Sell,
 };
 
 type SpotOrder = struct {
@@ -202,13 +51,16 @@ type SpotOrder = struct {
   /// Filled base amount so far.
   filled: u128,
   status: SpotStatus,
+  /// Tokens escrowed when the order was placed (quote for a buy, base for a sell).
+  escrowed: u128,
+  /// How much of `escrowed` has been paid out or refunded. The remainder at
+  /// removal time is rounding dust (audit M-06).
+  released: u128,
 };
 
 type SpotStatus = enum {
   Open,
   PartiallyFilled,
-  Filled,
-  Cancelled,
 };
 
 type SpotPair = struct {
@@ -217,7 +69,7 @@ type SpotPair = struct {
   base: actor_id,
   /// Quote token program (USDT or USDC).
   quote: actor_id,
-  /// Declared decimals of each token, read from the VFT at listing time.
+  /// Decimals of each token, verified against the VFT's own metadata at listing.
   base_dec: u8,
   quote_dec: u8,
   /// Delisted pairs reject new orders but still allow cancel/withdraw.
@@ -240,6 +92,14 @@ type PerpsError = enum {
   NoCollateral,
   /// Opening would push this side's open interest past the market cap.
   OiCapExceeded,
+  /// Trading is paused. Closing and liquidating stay open.
+  Paused,
+  /// The mark update deviates further from the previous mark than the bound allows.
+  MarkDeviationTooLarge,
+  /// The reserve is too thin relative to what it already owes to accept new risk.
+  InsufficientCoverage,
+  /// An amount overflowed. Trapping beats a silently wrong number.
+  Overflow,
 };
 
 type PerpMarket = struct {
@@ -254,193 +114,272 @@ type PerpMarket = struct {
   /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
   long_oi: u128,
   short_oi: u128,
-  /// Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+  /// Max open interest per side. Required at market creation: there is no
+  /// unlimited default, because the safe value should not depend on an operator
+  /// remembering a second call (audit M-03).
   max_oi: u128,
+  /// Cumulative funding index in `FUNDING_SCALE` units. Rises while longs are the
+  /// crowded side, falls while shorts are. Longs pay the increase, shorts receive
+  /// its negation; both settle against the reserve, which is the counterparty.
+  cum_funding: i128,
+  /// Block `cum_funding` was last advanced.
+  funding_block: u32,
 };
 
 constructor {
   New : ();
 };
 
-service Orderbook {
-  CallAgentService : (target: actor_id, payload: vec u8, gas_limit: u64) -> result (vec u8, ContractError);
-  CancelOrder : (oid: u64) -> result (null, ContractError);
-  /// Move real VFT tokens from the caller into the DEX vault, crediting their
-  /// internal balance. The caller must have `approve`d the DEX on the token
-  /// program for at least `amount` first. Credits only after the on-chain
-  /// transfer succeeds, so the internal balance stays fully token-backed.
-  Deposit : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
-  /// Register the caller's agent identity (name + strategy) and grant the
-  /// starting balances. This is the virtual-balance model: an agent is funded
-  /// the instant it joins, so it can trade immediately with no token custody,
-  /// approve, or deposit step. Idempotent: re-joining returns the existing
-  /// balances and keeps the original identity (no double funding).
-  Join : (name: str, strategy: AgentStrategy) -> struct { u64, u64, u64, u64 };
-  MarketBuy : (asset: Asset, qty: u64) -> result (str, ContractError);
-  MarketSell : (asset: Asset, qty: u64) -> result (str, ContractError);
-  PlaceLimit : (side: Side, asset: Asset, price: u64, qty: u64) -> result (u64, ContractError);
-  /// Admin-only, one-time: grant the house (admin) a deep USDT + asset stockpile
-  /// so the market maker can quote both sides and USDT-only agents always have a
-  /// counterparty. Idempotent — after the first call it just returns the balances.
-  SeedHouse : () -> result (struct { u64, u64, u64, u64 }, ContractError);
-  /// Admin-only: register the VFT program ID that backs a custodied balance.
-  /// Must be set before deposit/withdraw can move real tokens for that kind.
-  SetToken : (kind: TokenKind, address: actor_id) -> result (null, ContractError);
-  StartAutopilot : () -> null;
-  Tick : () -> result (str, ContractError);
-  /// Withdraw real VFT tokens from the DEX vault back to the caller. Debits the
-  /// internal balance first, then transfers on-chain; if the transfer fails the
-  /// debit is reverted so funds are never silently lost.
-  Withdraw : (kind: TokenKind, amount: u64) -> result (u64, ContractError);
-  /// Caller's agent identity, or None if they haven't joined. Used by the UI to
-  /// decide whether to show the "Create your Agent" onboarding.
-  query GetIdentity : () -> opt struct { str, AgentStrategy };
-  query GetLeaderboard : (limit: u32) -> vec LeaderEntry;
-  query GetMyOrders : () -> vec struct { u64, Side, Asset, u64, u64, u64, OrderStatus };
-  query GetOrderbook : (asset: Asset) -> struct { vec struct { u64, u64 }, vec struct { u64, u64 } };
-  query GetPortfolio : () -> struct { u64, u64, u64, u64 };
-  query GetStatus : () -> struct { u32, u64, u32, bool, u32 };
-  query GetToken : (kind: TokenKind) -> actor_id;
-  /// All four token registrations as (usd, btc, eth, vara) for the UI/agents.
-  query GetTokens : () -> struct { actor_id, actor_id, actor_id, actor_id };
-  query GetTrades : (asset: Asset, limit: u32) -> vec struct { u64, u64, u64, actor_id, actor_id };
-
-  events {
-    OrderPlaced: OrderPlacedEvent;
-    OrderCancelled: OrderCancelledEvent;
-    Trade: TradeEvent;
-  }
-};
-
-service Amm {
-  AddLiquidity : (pool_id: u64, amount_a: u64, amount_b: u64) -> result (u64, ContractError);
-  CreatePool : (asset_a: Asset, asset_b: Asset) -> result (u64, ContractError);
-  RemoveLiquidity : (pool_id: u64, lp_amount: u64) -> result (struct { u64, u64 }, ContractError);
-  Swap : (pool_id: u64, asset_in: Asset, amount_in: u64, min_amount_out: u64) -> result (u64, ContractError);
-  query GetLpPosition : (pool_id: u64, provider: actor_id) -> opt LpPosition;
-  query GetPool : (pool_id: u64) -> opt Pool;
-  query ListPools : () -> vec Pool;
-
-  events {
-    PoolCreated: PoolCreatedEvent;
-    LiquidityAdded: LiquidityAddedEvent;
-    LiquidityRemoved: LiquidityRemovedEvent;
-    SwapExecuted: SwapExecutedEvent;
-  }
-};
-
-service Perps {
-  /// Close your whole position at the current mark price, settling PnL against the
-  /// house reserve. Returns `(payout_cents, pnl_cents_signed)`.
-  ClosePosition : (asset: Asset) -> result (struct { u64, i64 }, ContractError);
-  /// Admin: move USD (cents) from your own balance into the house reserve that
-  /// pays trader profits. Never mints — total custodied USD is unchanged.
-  FundReserve : (amount: u64) -> result (u64, ContractError);
-  /// Permissionless liquidation: if a position's equity has fallen to the
-  /// maintenance margin, anyone may close it at the mark. The liquidator earns a
-  /// small fee from the residual equity; the rest flows to the reserve.
-  Liquidate : (owner: actor_id, asset: Asset) -> result (null, ContractError);
-  /// Open (or add to) an isolated-margin perpetual position. Locks `margin` USD
-  /// cents from your balance; position size = margin * leverage at the mark price.
-  OpenPosition : (asset: Asset, is_long: bool, margin: u64, leverage: u32) -> result (u64, ContractError);
-  /// Keeper-only: publish the mark price (USD cents) for an asset. This is the
-  /// price PnL and liquidations settle at — like GMX/Pyth keepers pushing a feed.
-  SetMarkPrice : (asset: Asset, price: u64) -> result (null, ContractError);
-  /// Keeper convenience: push all three marks at once (BTC, ETH, VARA), each in
-  /// USD cents. A zero leaves that asset's mark unchanged.
-  SetMarkPrices : (btc: u64, eth: u64, vara: u64) -> result (null, ContractError);
-  /// Liquidation price (USD cents) for a position, i.e. the mark at which equity
-  /// hits maintenance margin. 0 if there is no such position.
-  query GetLiqPrice : (owner: actor_id, asset: Asset) -> u64;
-  query GetMarkPrice : (asset: Asset) -> u64;
-  query GetMarkPrices : () -> struct { u64, u64, u64 };
-  /// A trader's open positions as
-  /// `(asset, is_long, size, entry, margin, leverage, pnl_at_mark)`.
-  query GetPositions : (owner: actor_id) -> vec struct { Asset, bool, u64, u64, u64, u32, i64 };
-  query GetReserve : () -> u64;
-
-  events {
-    MarkPrice: MarkPriceEvent;
-    Opened: PerpOpenedEvent;
-    Closed: PerpClosedEvent;
-  }
-};
-
 service Spot {
-  /// Cancel an open order and refund its unfilled escrow to the caller's claimable
-  /// balance (quote for a buy, base for a sell).
+  /// Accept a pending admin handover. Callable only by the proposed account.
+  AcceptAdmin : () -> result (null, SpotError);
+  /// Cancel a resting order and refund its unfilled escrow to the caller's
+  /// claimable balance. Never gated on the pause switch.
   CancelOrder : (order_id: u64) -> result (null, SpotError);
   /// Stop accepting new orders on a pair. Existing orders can still be cancelled and
-  /// proceeds withdrawn. Admin-only.
+  /// proceeds withdrawn. Reversible with `relist_pair` (audit M-14).
   DelistPair : (pair_id: u64) -> result (null, SpotError);
-  /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet). `base_dec`
-  /// and `quote_dec` are the tokens' declared decimals; the caller supplies them so
-  /// listing stays synchronous (they are verifiable against each VFT's metadata).
+  /// Curate a new TOKEN/quote market. Admin-only (multisig on mainnet).
+  /// 
+  /// `base_dec`/`quote_dec` are read back from each token's own `VftMetadata`
+  /// service and rejected on mismatch — a wrong value would misprice the entire
+  /// market by a power of ten, and self-attestation is not a control (audit M-14).
   ListPair : (base: actor_id, quote: actor_id, base_dec: u8, quote_dec: u8) -> result (u64, SpotError);
-  /// Market buy up to `qty` base, spending at most `max_quote` quote tokens. Escrows
-  /// the full budget up front, sweeps the asks cheapest-first, and refunds anything
-  /// unspent (including the whole budget if the book is empty) to the caller's claim.
-  /// Never rests. Requires a prior `approve` of `max_quote` on the quote token.
-  MarketBuy : (pair_id: u64, qty: u128, max_quote: u128) -> result (u64, SpotError);
-  /// Market sell `qty` base into the bids, highest-first. Escrows the base up front,
-  /// credits quote proceeds, and refunds any unfilled base to the caller's claim.
-  /// Never rests. Requires a prior `approve` of `qty` on the base token.
-  MarketSell : (pair_id: u64, qty: u128) -> result (u64, SpotError);
+  /// Market buy up to `qty` base, spending at most `max_quote` quote tokens and
+  /// requiring at least `min_base_out` base in return.
+  /// 
+  /// `min_base_out` is the slippage bound (audit H-03): without it a taker sweeps
+  /// whatever asks happen to exist, which on a thin book is an invitation to pull
+  /// quotes and leave a lowball. When the bound is not met the whole budget is
+  /// credited back and nothing is filled.
+  MarketBuy : (pair_id: u64, qty: u128, max_quote: u128, min_base_out: u128) -> result (u64, SpotError);
+  /// Market sell `qty` base into the bids, highest-first, requiring at least
+  /// `min_quote_out` quote in return (audit H-03). Escrows the base up front and
+  /// refunds everything if the bound is not met.
+  MarketSell : (pair_id: u64, qty: u128, min_quote_out: u128) -> result (u64, SpotError);
   /// Place a limit order. Escrows the caller's real tokens (a quote-token
   /// `TransferFrom` for a buy, base-token for a sell — requires a prior `approve`),
   /// then crosses the book by price-time priority, crediting fills to claimable
-  /// balances. Any unfilled remainder rests. Reverts with no state change if the
-  /// escrow transfer fails.
+  /// balances. Any unfilled remainder rests.
+  /// 
+  /// Every check that can precede the escrow does; the only post-await failure is
+  /// the capacity re-check, which credits the escrow back before returning
+  /// (audit C-03, M-08).
   PlaceLimit : (pair_id: u64, side: Side, price: u128, qty: u128) -> result (u64, SpotError);
-  /// Hand listing/admin authority to a new account (the multisig on mainnet).
-  /// Admin-only; irreversible except by the new admin.
-  TransferAdmin : (new_admin: actor_id) -> result (null, SpotError);
-  /// Withdraw the caller's full claimable balance of `token` to their wallet. Debits
-  /// optimistically and restores the claim if the on-chain transfer fails.
-  Withdraw : (token: actor_id) -> result (u128, SpotError);
+  /// Propose a new admin. Takes effect only when that account calls `accept_admin`,
+  /// so a typo is recoverable rather than terminal (audit H-05).
+  ProposeAdmin : (new_admin: actor_id) -> result (null, SpotError);
+  /// Re-open a delisted pair. Admin-only.
+  RelistPair : (pair_id: u64) -> result (null, SpotError);
+  /// Halt or resume trading. Cancel and withdraw are deliberately never gated on
+  /// this, so pausing during an incident cannot trap user funds (audit H-08).
+  SetPaused : (paused: bool) -> result (null, SpotError);
+  /// Sweep accumulated rounding dust for a token to the admin's claimable balance.
+  /// Dust is real, already-held tokens that no claim references (audit M-06).
+  SweepDust : (token: actor_id) -> result (u128, SpotError);
+  /// Withdraw `amount` of the caller's claimable `token` to their wallet, or the
+  /// full balance when `amount` is `None` (audit L-01). Debits optimistically and
+  /// restores the claim if the on-chain transfer fails. Never gated on the pause.
+  Withdraw : (token: actor_id, amount: opt u128) -> result (u128, SpotError);
+  query GetAdmin : () -> struct { actor_id, actor_id };
   /// The caller's withdrawable balance for a given token program.
   query GetClaim : (token: actor_id) -> u128;
-  /// The caller's open/closed orders.
-  query GetMyOrders : () -> vec SpotOrder;
+  /// The caller's resting orders, paginated. Filled and cancelled orders are not
+  /// retained in state — their history is in the event log (audit H-02, M-02).
+  query GetMyOrders : (offset: u32, limit: u32) -> vec SpotOrder;
   /// Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
-  /// each level `(price, remaining_qty)`.
-  query GetOrderbook : (pair_id: u64) -> struct { vec struct { u128, u128 }, vec struct { u128, u128 } };
+  /// each level `(price, remaining_qty)`, capped at `depth` levels per side.
+  query GetOrderbook : (pair_id: u64, depth: u32) -> struct { vec struct { u128, u128 }, vec struct { u128, u128 } };
   query GetPair : (pair_id: u64) -> opt SpotPair;
-  query GetPairs : () -> vec SpotPair;
+  /// Curated markets, paginated (audit L-05).
+  query GetPairs : (offset: u32, limit: u32) -> vec SpotPair;
+  /// Escrow, dust, and reserve held for a token. With the token's own
+  /// `balanceOf(program)` this lets a monitor assert the solvency invariant
+  /// without replaying the book (audit M-17).
+  query GetSolvency : (token: actor_id) -> struct { u128, u128, u128 };
+  query IsPaused : () -> bool;
+  query PairCount : () -> u64;
+  query RestingOrderCount : () -> u64;
+
+  events {
+    PairListed: struct {
+      pair_id: u64,
+      base: actor_id,
+      quote: actor_id,
+      base_dec: u8,
+      quote_dec: u8,
+    };
+    PairDelisted: struct {
+      pair_id: u64
+    };
+    PairRelisted: struct {
+      pair_id: u64
+    };
+    OrderPlaced: struct {
+      order_id: u64,
+      pair_id: u64,
+      trader: actor_id,
+      side: Side,
+      price: u128,
+      qty: u128,
+    };
+    Trade: struct {
+      pair_id: u64,
+      taker_order: u64,
+      maker_order: u64,
+      buyer: actor_id,
+      seller: actor_id,
+      price: u128,
+      qty: u128,
+    };
+    OrderCancelled: struct {
+      order_id: u64,
+      pair_id: u64,
+      trader: actor_id,
+      refunded: u128,
+    };
+    OrderClosed: struct {
+      order_id: u64,
+      pair_id: u64,
+      trader: actor_id,
+      filled: u128,
+    };
+    Withdrawn: struct {
+      who: actor_id,
+      token: actor_id,
+      amount: u128,
+    };
+    DustSwept: struct {
+      token: actor_id,
+      amount: u128,
+    };
+    PausedSet: struct {
+      paused: bool
+    };
+    AdminProposed: struct {
+      pending: actor_id
+    };
+    AdminChanged: struct {
+      admin: actor_id
+    };
+  }
 };
 
 service PerpsV1 {
-  /// Admin: list a perp market by symbol. Returns its id.
-  AddMarket : (symbol: str) -> result (u64, PerpsError);
-  /// Close your position at the current mark, settling PnL against the reserve and
-  /// crediting the payout to your claimable collateral (withdraw via `Spot/Withdraw`).
+  /// Admin: list a perp market. `max_oi` is required and must be non-zero — the
+  /// reserve's exposure is bounded at creation, not by a remembered follow-up
+  /// (audit M-03).
+  AddMarket : (symbol: str, max_oi: u128) -> result (u64, PerpsError);
+  /// Close your position, settling PnL and funding against the reserve and
+  /// crediting the payout to your claimable collateral (withdraw via
+  /// `Spot/Withdraw`). Never gated on the pause switch, and never gated on a live
+  /// keeper once the feed has been dead past `MARK_EXIT_AGE`.
   ClosePosition : (position_id: u64) -> result (struct { u128, i128 }, PerpsError);
   /// Admin: fund the house reserve with real collateral (requires a prior `approve`).
   FundReserve : (amount: u128) -> result (u128, PerpsError);
-  /// Permissionless liquidation once equity falls to maintenance margin. The
-  /// liquidator earns a fee from residual equity; the rest is settled to the owner.
+  /// Permissionless liquidation once equity falls to maintenance margin.
+  /// 
+  /// The liquidator's fee is paid from residual equity and topped up from the
+  /// reserve when equity has gapped away. Capping the fee at residual equity meant
+  /// it vanished exactly when liquidation mattered most, so nobody would run a bot
+  /// for it (audit L-07).
   Liquidate : (position_id: u64) -> result (null, PerpsError);
   /// Open an isolated-margin position. Escrows `margin` of the collateral token
   /// (requires a prior `approve`); notional = margin * leverage at the mark.
+  /// 
+  /// Everything that can be checked before the escrow is checked before it. The two
+  /// post-await re-checks exist because the await yields to other messages, and
+  /// both credit the margin back before returning (audit C-03, M-08).
   OpenPosition : (market_id: u64, is_long: bool, margin: u128, leverage: u32) -> result (u64, PerpsError);
   /// Admin: set the collateral (settlement) token — the USDT VFT program.
   SetCollateral : (token: actor_id) -> result (null, PerpsError);
-  /// Admin: set the keeper account allowed to push mark prices.
+  /// Admin: set the keeper account allowed to push mark prices. The zero address is
+  /// rejected — accepting it silently left admin as the sole mark authority
+  /// (audit L-04).
   SetKeeper : (keeper: actor_id) -> result (null, PerpsError);
   /// Keeper: publish the mark price for a market.
+  /// 
+  /// Bounded to `MAX_MARK_DEVIATION_BPS` from the previous mark, so a compromised
+  /// keeper cannot reprice the book in a single transaction and liquidate it
+  /// (audit H-04). The bound is skipped only for the first mark, and once the feed
+  /// is stale past `MARK_EXIT_AGE` — by then positions can already exit at entry,
+  /// so a fresh start is not a lever over anyone.
   SetMark : (market_id: u64, price: u128) -> result (null, PerpsError);
-  /// Admin: cap open interest per side on a market, bounding the reserve's max loss.
+  /// Admin: cap open interest per side on a market.
   SetMarketCap : (market_id: u64, max_oi: u128) -> result (null, PerpsError);
-  /// Admin: withdraw reserve profit (fees + net trader losses) to the admin's
-  /// claimable collateral. The operator is responsible for leaving enough to cover
-  /// open positions — withdraw profit, not the whole book.
+  /// Admin: withdraw reserve profit to the admin's claimable collateral.
+  /// 
+  /// Capped at the amount above current liability, so solvency is a contract
+  /// invariant instead of operator discipline — draining the reserve used to
+  /// silently truncate what winning traders received rather than failing loudly
+  /// (audit H-05).
   WithdrawReserve : (amount: u128) -> result (u128, PerpsError);
   /// Liquidation price for a position (0 if none).
   query GetLiqPrice : (position_id: u64) -> u128;
   query GetMarkets : () -> vec PerpMarket;
-  /// A trader's open positions with PnL at the current mark:
+  /// A trader's open positions with PnL at the current mark, paginated (audit L-05):
   /// `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
-  query GetPositions : (owner: actor_id) -> vec struct { u64, u64, bool, u128, u128, u128, u32, i128 };
+  query GetPositions : (owner: actor_id, offset: u32, limit: u32) -> vec struct { u64, u64, bool, u128, u128, u128, u32, i128 };
   query GetReserve : () -> u128;
+  /// Reserve health: `(reserve, liability, coverage_bps)`. Surfaced so a trader can
+  /// see the reserve is thin *before* entering, rather than discovering it as a
+  /// truncated payout on the way out (audit M-04).
+  query GetReserveHealth : () -> struct { u128, u128, u128 };
+
+  events {
+    MarketAdded: struct {
+      market_id: u64,
+      symbol: str,
+      max_oi: u128,
+    };
+    MarketCapSet: struct {
+      market_id: u64,
+      max_oi: u128,
+    };
+    MarkSet: struct {
+      market_id: u64,
+      price: u128,
+      block: u32,
+    };
+    PositionOpened: struct {
+      position_id: u64,
+      market_id: u64,
+      owner: actor_id,
+      is_long: bool,
+      notional: u128,
+      entry: u128,
+      margin: u128,
+      leverage: u32,
+    };
+    PositionClosed: struct {
+      position_id: u64,
+      owner: actor_id,
+      payout: u128,
+      pnl: i128,
+      funding: i128,
+      at_entry: bool,
+    };
+    PositionLiquidated: struct {
+      position_id: u64,
+      owner: actor_id,
+      liquidator: actor_id,
+      to_owner: u128,
+      fee: u128,
+    };
+    ReserveFunded: struct {
+      amount: u128,
+      reserve: u128,
+    };
+    ReserveWithdrawn: struct {
+      amount: u128,
+      reserve: u128,
+    };
+    KeeperSet: struct {
+      keeper: actor_id
+    };
+    CollateralSet: struct {
+      token: actor_id
+    };
+  }
 };
 
