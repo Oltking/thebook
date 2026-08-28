@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatUnits, isValidDecimal, notional, parseUnits } from './units';
+import { formatPrice, formatUnits, isValidDecimal, notional, parseUnits, priceFractionDigits } from './units';
 
 /**
  * `units.ts` converts every user keystroke into an on-chain amount and had no tests
@@ -99,5 +99,29 @@ describe('notional', () => {
   it('agrees with the contract on a realistic ETH/USDT order', () => {
     // 0.5 wETH (18 dec) at 2500 USDT (6 dec) per whole ETH = 1250 USDT.
     expect(notional(2_500_000_000n, 500_000_000_000_000_000n, 18)).toBe(1_250_000_000n);
+  });
+});
+
+describe('formatPrice', () => {
+  it('shows sub-cent prices instead of collapsing them to zero', () => {
+    // The perps mark for VARA: 421340000 at 12 decimals is $0.00042134. Formatted
+    // with a hardcoded 2 digits this rendered as "0", making a live market look dead.
+    expect(formatPrice(421_340_000n, 12)).toBe('0.00042134');
+  });
+
+  it('keeps ordinary prices short', () => {
+    expect(formatPrice(2_436_500_000_000_000n, 12)).toBe('2436.5');
+    expect(formatPrice(2_500_000_000n, 6)).toBe('2500');
+  });
+
+  it('distinguishes a real zero from a very small number', () => {
+    expect(formatPrice(0n, 12)).toBe('0');
+    expect(formatPrice(1n, 12)).not.toBe('0');
+  });
+
+  it('never asks for more digits than the token has', () => {
+    expect(priceFractionDigits(0.0004, 2)).toBe(2);
+    expect(priceFractionDigits(0.0004, 12)).toBe(8);
+    expect(priceFractionDigits(5000, 12)).toBe(2);
   });
 });

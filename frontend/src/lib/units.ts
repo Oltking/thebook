@@ -60,3 +60,44 @@ export function formatUnits(amount: bigint, decimals: number, maxFrac = 6): stri
 export function notional(price: bigint, qty: bigint, baseDec: number): bigint {
   return (price * qty) / 10n ** BigInt(baseDec);
 }
+
+/**
+ * How many fractional digits a price needs to stay readable.
+ *
+ * A fixed 2 decimals is wrong for sub-cent assets: VARA at $0.00042 renders as
+ * "0.00", and once trailing zeros are stripped, as plain "0". A price of zero and a
+ * price too small to show at the chosen precision look identical to the user, which
+ * on a trading screen is the difference between "this market is broken" and "this
+ * market is cheap".
+ *
+ * Capped by the token's own decimals, since no more can be represented.
+ */
+export function priceFractionDigits(approxValue: number, decimals: number): number {
+  const want =
+    approxValue >= 1 ? 2
+      : approxValue >= 0.01 ? 4
+        : approxValue > 0 ? 8
+          : 2;
+  return Math.min(want, decimals);
+}
+
+/**
+ * Format an on-chain price for display, choosing precision from its magnitude.
+ *
+ * Use this anywhere a price is shown; `formatUnits` with a hardcoded digit count is
+ * what produced "$0" for VARA on both the spot form and the perps mark.
+ */
+export function formatPrice(raw: bigint, decimals: number): string {
+  if (raw <= 0n) return '0';
+  const approx = Number(raw) / 10 ** decimals;
+  const digits = priceFractionDigits(approx, decimals);
+  const out = formatUnits(raw, decimals, digits);
+  // A non-zero price must never render as "0". If it is smaller than the chosen
+  // precision can show, say so explicitly rather than claiming zero: those two mean
+  // very different things to someone deciding whether to trade.
+  if (out === '0' || out === '-0') {
+    const smallest = formatUnits(1n, digits, digits);
+    return `${raw < 0n ? '>-' : '<'}${smallest}`;
+  }
+  return out;
+}

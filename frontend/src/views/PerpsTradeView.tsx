@@ -4,7 +4,7 @@ import { AllowanceGate } from '../components/ui/AllowanceGate';
 import { EmptyState } from '../components/ui/EmptyState';
 import { usePerpMarkets, usePerpPositions, useWalletBalances, useAllowances } from '../hooks/useSpot';
 import { useSpotActions } from '../hooks/useSpotActions';
-import { parseUnits, formatUnits } from '../lib/units';
+import { parseUnits, formatUnits, formatPrice } from '../lib/units';
 import { RiskBanner } from '../components/ui/RiskBanner';
 import styles from './PerpsTradeView.module.css';
 
@@ -86,7 +86,7 @@ export function PerpsTradeView() {
         </div>
         {market && (
           <span className={styles.mark}>
-            mark <b>{mark > 0n ? `$${formatUnits(mark, MARK_DEC, 2)}` : '—'}</b>
+            mark <b>{mark > 0n ? `$${formatPrice(mark, MARK_DEC)}` : '—'}</b>
           </span>
         )}
       </div>

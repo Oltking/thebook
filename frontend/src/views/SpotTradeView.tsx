@@ -10,7 +10,7 @@ import { useAccount } from '@gear-js/react-hooks';
 import { useMarketData } from '../providers/MarketDataProvider';
 import { useViewport } from '../hooks/useViewport';
 import { TradeChart } from '../components/chart/TradeChart';
-import { parseUnits, formatUnits, notional, isValidDecimal } from '../lib/units';
+import { parseUnits, formatUnits, notional, isValidDecimal, priceFractionDigits } from '../lib/units';
 import { knownToken } from '../consts';
 import styles from './SpotTradeView.module.css';
 
@@ -137,8 +137,7 @@ export function SpotTradeView() {
   // they round to 0.00. Capped at the quote token's own decimals.
   const priceFrac = useMemo(() => {
     const ref = oraclePrice > 0 ? oraclePrice : effPrice > 0n ? Number(effPrice) / 10 ** quoteDec : 0;
-    const want = ref >= 1 ? 2 : ref >= 0.01 ? 4 : ref > 0 ? 6 : 2;
-    return Math.min(want, quoteDec);
+    return priceFractionDigits(ref, quoteDec);
   }, [oraclePrice, effPrice, quoteDec]);
 
   const baseUnit = 10n ** BigInt(baseDec);
