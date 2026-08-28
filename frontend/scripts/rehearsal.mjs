@@ -27,7 +27,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GearApi } from '@gear-js/api';
 import { Keyring } from '@polkadot/api';
-import { u8aToHex } from '@polkadot/util';
+import { u8aToHex, u8aConcat, stringToU8a, compactToU8a } from '@polkadot/util';
 import { randomAsU8a } from '@polkadot/util-crypto';
 import { generateCodeHash } from '@gear-js/api';
 import { waitReady } from '@polkadot/wasm-crypto';
@@ -53,9 +53,22 @@ for (const [p, what] of [[DEX_WASM, 'DEX WASM'], [TOKEN_WASM, 'token WASM'], [ID
 }
 
 const VARA = 1_000_000_000_000n;
-const DEC = 6;                       // both rehearsal tokens
-const UNIT = 10n ** BigInt(DEC);
-const FAUCET = 1_000_000n * UNIT;    // per claim
+
+// The BASE side is the REAL bridged wVARA program. That is the point of this
+// harness: the DEX escrows by messaging a token program someone else wrote, and
+// only a real token proves that path works. Native VARA is wrapped into it via
+// `VftNativeExchange/Mint`, so no bridged balance has to be acquired first.
+const WVARA = '0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17';
+const BASE_DEC = 12;
+const BASE_UNIT = 10n ** BigInt(BASE_DEC);
+
+// The QUOTE side is a throwaway test token. Its constructor pre-allocates balance
+// shards at ~49 VARA, so it is cached and reused rather than redeployed. Using
+// different decimals on each side is deliberate: `notional` scales by `base_dec`,
+// and a 12/6 pair exercises that where a 6/6 pair would not.
+const QUOTE_DEC = 6;
+const QUOTE_UNIT = 10n ** BigInt(QUOTE_DEC);
+const FAUCET = 1_000_000n * QUOTE_UNIT;
 
 let failures = 0;
 const pass = (m) => console.log(`    ✓ ${m}`);
@@ -137,9 +150,11 @@ async function instantiate(wasm, initPayload, label) {
 }
 
 /** Sign, send, and reject with a decoded pallet error rather than a module index. */
-function signSend(extrinsic, label) {
+const signSend = (extrinsic, label) => signSendAs(extrinsic, admin, label);
+
+function signSendAs(extrinsic, who, label) {
   return new Promise((res, rej) => {
-    extrinsic.signAndSend(admin, ({ status, events, dispatchError }) => {
+    extrinsic.signAndSend(who, ({ status, events, dispatchError }) => {
       if (dispatchError) {
         let detail = dispatchError.toString();
         if (dispatchError.isModule) {
@@ -166,6 +181,24 @@ async function fundNative(to, amount) {
       if (status.isInBlock || status.isFinalized) res();
     }).catch(rej);
   });
+}
+
+/**
+ * Wrap native VARA into real wVARA.
+ *
+ * The wVARA program exposes `VftNativeExchange/Mint`, which is payable: the native
+ * value attached to the message becomes the minted VFT balance, 1:1. `Burn(amount)`
+ * reverses it. Both were confirmed against the live program.
+ */
+async function wrapVara(who, amount) {
+  const payload = u8aToHex(u8aConcat(
+    compactToU8a('VftNativeExchange'.length), stringToU8a('VftNativeExchange'),
+    compactToU8a('Mint'.length), stringToU8a('Mint'),
+  ));
+  const gas = await api.program.calculateGas.handle(
+    u8aToHex(who.addressRaw), WVARA, payload, amount, true);
+  const limit = (gas.min_limit.toBigInt() * 5n) / 2n;
+  await signSendAs(api.message.send({ destination: WVARA, payload, gasLimit: limit, value: amount }), who, 'wrap VARA');
 }
 
 function sailsFor(idlPath, programId) {
@@ -222,7 +255,7 @@ const CACHE = resolve(__dirname, '.rehearsal-tokens.json');
 const salt = Date.now().toString(16);
 const tokenInit = (name, symbol) =>
   u8aToHex(
-    api.createType('(String, String, String, u8, U256)', ['New', name, symbol, DEC, FAUCET]).toU8a(),
+    api.createType('(String, String, String, u8, U256)', ['New', name, symbol, QUOTE_DEC, FAUCET]).toU8a(),
   );
 
 let cached = {};
@@ -249,7 +282,9 @@ async function tokenFor(key, label) {
   return id;
 }
 
-const BASE = await tokenFor('base', 'BASE');
+// BASE is the real bridged wVARA program, not something we deploy.
+const BASE = WVARA;
+console.log(`    BASE  ${BASE} (real bridged wVARA)`);
 const QUOTE = await tokenFor('quote', 'QUOTE');
 
 const dexInit = u8aToHex(api.createType('String', 'New').toU8a());
@@ -271,29 +306,31 @@ const claimOf = async (token, who) => BigInt((await query(dex, 'Spot', 'GetClaim
 
 // ── 2 · Listing verifies decimals on chain (M-14) ───────────────────────────────
 step('2 · listing');
-const wrongDec = await sendExpectingError(dex, 'Spot', 'ListPair', admin, BASE, QUOTE, 18, DEC);
-check(wrongDec !== null && /DecimalsMismatch/.test(wrongDec), 'wrong decimals rejected on chain');
-const pairId = await send(dex, 'Spot', 'ListPair', admin, BASE, QUOTE, DEC, DEC);
-eq(Number(pairId), 0, 'pair listed');
-const reversed = await sendExpectingError(dex, 'Spot', 'ListPair', admin, QUOTE, BASE, DEC, DEC);
+const wrongDec = await sendExpectingError(dex, 'Spot', 'ListPair', admin, BASE, QUOTE, 18, QUOTE_DEC);
+check(wrongDec !== null && /DecimalsMismatch/.test(wrongDec),
+  'wrong decimals rejected against the real token metadata');
+const pairId = await send(dex, 'Spot', 'ListPair', admin, BASE, QUOTE, BASE_DEC, QUOTE_DEC);
+eq(Number(pairId), 0, 'pair listed (real wVARA base, 12 dec)');
+const reversed = await sendExpectingError(dex, 'Spot', 'ListPair', admin, QUOTE, BASE, QUOTE_DEC, BASE_DEC);
 check(reversed !== null && /PairExists/.test(reversed), 'reverse orientation rejected');
 
 // ── 3 · Faucets ────────────────────────────────────────────────────────────────
-step('3 · claiming faucets');
-await send(base, 'Faucet', 'Claim', trader);
+step('3 · funding: wrap real wVARA, claim the throwaway quote');
+const WRAP = 5n * BASE_UNIT;          // 5 wVARA, recoverable via Burn
+await wrapVara(trader, WRAP);
+eq(await bal(base, traderId), WRAP, 'trader holds REAL wVARA (wrapped from native)');
 await send(quote, 'Faucet', 'Claim', admin);
-eq(await bal(base, traderId), FAUCET, 'trader holds base');
 eq(await bal(quote, adminId), FAUCET, 'admin holds quote');
 
 // ── 4 · The core path: approve, rest a sell, cross it with a buy ────────────────
 step('4 · limit order crossing');
-const PRICE = 100n * UNIT;      // 100 quote per whole base
-const QTY = 10n * UNIT;         // 10 base
-const COST = (PRICE * QTY) / UNIT;
+const PRICE = 2n * QUOTE_UNIT;   // 2 quote per whole base
+const QTY = 1n * BASE_UNIT;      // 1 wVARA
+const COST = (PRICE * QTY) / BASE_UNIT;
 
 await send(base, 'Vft', 'Approve', trader, DEX, QTY);
 const sellId = await send(dex, 'Spot', 'PlaceLimit', trader, pairId, 'Sell', PRICE, QTY);
-eq(await bal(base, traderId), FAUCET - QTY, 'sell escrow left the wallet');
+eq(await bal(base, traderId), WRAP - QTY, 'sell escrow left the wallet (real token TransferFrom)');
 pass(`resting sell id=${sellId}`);
 
 const [, asks] = await query(dex, 'Spot', 'GetOrderbook', adminId, pairId, 20);
@@ -324,7 +361,7 @@ const cancelId = await send(dex, 'Spot', 'PlaceLimit', trader, pairId, 'Sell', P
 await send(dex, 'Spot', 'CancelOrder', trader, cancelId);
 eq(await claimOf(BASE, traderId), QTY, 'cancel refunded the full escrow');
 await send(dex, 'Spot', 'Withdraw', trader, BASE, null);
-eq(await bal(base, traderId), FAUCET - QTY, 'refund reached the wallet');
+eq(await bal(base, traderId), WRAP - QTY, 'refund reached the wallet');
 
 // ── 7 · Market order slippage bound returns the escrow (H-03) ──────────────────
 step('7 · slippage bound');
@@ -368,18 +405,19 @@ const wildMark = await sendExpectingError(dex, 'PerpsV1', 'SetMark', keeper, mar
 check(wildMark !== null && /MarkDeviationTooLarge/.test(wildMark), 'mark deviation bound holds');
 
 // Unbacked open must be refused: the reserve is still empty.
-await send(quote, 'Vft', 'Approve', trader, DEX, 1000n * UNIT);
-await send(quote, 'Faucet', 'Claim', trader).catch(() => {});
-const unbacked = await sendExpectingError(dex, 'PerpsV1', 'OpenPosition', trader, marketId, true, (100n * UNIT).toString(), 2);
+// The trader needs quote to post perp margin; the faucet is one claim per account.
+await send(quote, 'Faucet', 'Claim', trader);
+await send(quote, 'Vft', 'Approve', trader, DEX, 1000n * QUOTE_UNIT);
+const unbacked = await sendExpectingError(dex, 'PerpsV1', 'OpenPosition', trader, marketId, true, (100n * QUOTE_UNIT).toString(), 2);
 check(unbacked !== null && /InsufficientCoverage/.test(unbacked), 'open refused against an empty reserve');
 
 // Fund the reserve, then open for real.
-const RESERVE = 100_000n * UNIT;
+const RESERVE = 100_000n * QUOTE_UNIT;
 await send(quote, 'Vft', 'Approve', admin, DEX, RESERVE);
 await send(dex, 'PerpsV1', 'FundReserve', admin, RESERVE.toString());
 eq(BigInt((await dex.services.PerpsV1.queries.GetReserve().call()).toString()), RESERVE, 'reserve funded');
 
-const MARGIN = 1000n * UNIT;
+const MARGIN = 1000n * QUOTE_UNIT;
 await send(quote, 'Vft', 'Approve', trader, DEX, MARGIN);
 const traderQuoteBefore = await bal(quote, traderId);
 const posId = await send(dex, 'PerpsV1', 'OpenPosition', trader, marketId, true, MARGIN.toString(), 5);
