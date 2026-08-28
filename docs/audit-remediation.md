@@ -5,7 +5,7 @@ Source: `thebook Security Audit.pdf` — 27 August 2026, commit `22970f4`.
 against the compiled WASM.
 
 **Status: every finding is addressed, and the remediated build is deployed at**
-`0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
+`0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774`
 **(28 August 2026). The launch gate is still not satisfied — see Phase 3.**
 
 Legend: `[x]` done · `[U]` needs the operator — a key, a signature, or a dashboard.

@@ -10,7 +10,7 @@ only as intentions.
 
 ## Live program
 
-**Current:** `0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
+**Current:** `0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774`
 (deployed 28 August 2026, the remediated build)
 
 **Retired:** `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`
@@ -38,7 +38,7 @@ Re-check at any time:
 ```sh
 cd frontend
 NODE_ADDRESS=wss://rpc.vara.network \
-PROGRAM_ID=0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4 \
+PROGRAM_ID=0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774 \
 node scripts/audit-probe.mjs
 ```
 
