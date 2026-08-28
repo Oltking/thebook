@@ -54,7 +54,7 @@ Run the included demo (mainnet):
 
 ```bash
 VARA_SEED="your twelve word mnemonic" \
-THEBOOK_PROGRAM_ID=0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484 \
+THEBOOK_PROGRAM_ID=0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4 \
 npm run example
 ```
 

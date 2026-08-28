@@ -24,7 +24,7 @@ are in Section 6.
 ## 2. What we've built (context)
 
 - **Spot CLOB, live on mainnet** — program id
-  `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`.
+  `0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`.
   Non-custodial: orders escrow the user's **real bridged VFT tokens** (ETH and VARA vs
   wUSDT / wUSDC), fills settle to a claimable balance, users withdraw on demand.
 - **Gasless** — user and agent transaction fees are sponsored via a Vara voucher.
@@ -110,7 +110,7 @@ sheet; we still collect fees normally.
 
 ## 7. Current status & specifics
 
-- **Mainnet program id:** `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`
+- **Mainnet program id:** `0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
 - **Spot markets live:** ETH/USDT, ETH/USDC, VARA/USDT, VARA/USDC
 - **Perp markets configured:** ETH, VARA (collateral: wUSDT)
 - **Perps engine:** cash-settled, keeper mark, isolated margin, liquidations, 0.1%/side fee,

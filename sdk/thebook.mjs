@@ -143,7 +143,25 @@ export async function connectTheBook(opts = {}) {
     return voucherId;
   }
 
-  // Send a state-changing call and wait until it's finalized. Surfaces the
+  /**
+   * Give a transaction a gas limit.
+   *
+   * Gear's gas-estimation RPC cannot simulate a program that awaits a cross-program
+   * reply, and aborts with "Unable to call a forbidden function". Every method here
+   * that escrows or moves tokens does exactly that, so estimation is allowed to fail
+   * and we fall back to an explicit limit. Unused gas is refunded, so the fallback
+   * costs only a temporary reservation. A real program error still propagates.
+   */
+  async function prepareGas(tx) {
+    try {
+      await tx.calculateGas(true);
+    } catch (e) {
+      if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;
+      tx.withGas('max');
+    }
+  }
+
+// Send a state-changing call and wait until it's finalized. Surfaces the
   // program's own error (e.g. UnknownPair, InsufficientAllowance) as a thrown Error.
   async function send(service, fn, args) {
     const tx = sails.services[service].functions[fn](...args);
@@ -154,7 +172,7 @@ export async function connectTheBook(opts = {}) {
     tx.withAccount(account, { nonce: -1 });
     const vid = await ensureVoucher();
     if (vid) tx.withVoucher(vid);
-    await tx.calculateGas(true);
+    await prepareGas(tx);
     const { response } = await tx.signAndSend();
     const value = await response();
     if (value && typeof value === 'object' && 'err' in value) {
@@ -191,7 +209,7 @@ export async function connectTheBook(opts = {}) {
     tx.withAccount(account, { nonce: -1 });
     const vid = await ensureVoucher();
     if (vid) tx.withVoucher(vid);
-    await tx.calculateGas(true);
+    await prepareGas(tx);
     const { response } = await tx.signAndSend();
     return await response();
   }

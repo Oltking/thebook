@@ -7,6 +7,7 @@ import { useSails } from './useSails';
 import { useVoucher } from '../providers/VoucherProvider';
 import { VftProgram } from '../lib/vft';
 import { PROGRAM_ID } from '../consts';
+import { prepareGas } from '../lib/gas';
 
 type Side = 'Buy' | 'Sell';
 
@@ -21,7 +22,9 @@ async function run<T>(
 ): Promise<T> {
   const { signer } = await web3FromSource(source);
   const prepared = applyVoucher(tx.withAccount(address, { signer }));
-  await prepared.calculateGas(true, 100);
+  // Estimation cannot simulate the cross-program awaits these methods make; see
+  // lib/gas.ts. Without this every escrowing call fails before it is signed.
+  await prepareGas(prepared);
   const { response } = await tx.signAndSend();
   const value = await response();
   if (value && typeof value === 'object' && 'err' in (value as any)) {

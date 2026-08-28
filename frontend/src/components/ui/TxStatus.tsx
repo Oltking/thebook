@@ -7,6 +7,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useVoucher } from '../../providers/VoucherProvider';
 import styles from './TxStatus.module.css';
 import { asSigner } from '../../lib/signer';
+import { prepareGas } from '../../lib/gas';
 
 type TxStage = 'idle' | 'signing' | 'broadcasting' | 'confirming' | 'confirmed' | 'failed';
 
@@ -80,7 +81,7 @@ export function useTxStatus(): UseTxStatusReturn {
       // cost and causes intermittent "ran out of gas" failures. Add the max buffer.
       // Gasless: apply a sponsor voucher when one is available (else self-paid).
       const prepared = applyVoucher(transaction.withAccount(account.address, { signer: asSigner(signer) }) as any);
-      await prepared.calculateGas(true, 100);
+      await prepareGas(prepared);
 
       updateStage('broadcasting');
       const { response } = await transaction.signAndSend();

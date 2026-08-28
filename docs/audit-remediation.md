@@ -4,27 +4,24 @@ Source: `thebook Security Audit.pdf` — 27 August 2026, commit `22970f4`.
 41 findings: 4 critical, 9 high, 15 medium, 13 low. Three criticals were reproduced
 against the compiled WASM.
 
-**Status: every finding is addressed in this source. The fixed build has not yet
-been redeployed, and the launch gate is not satisfied.**
+**Status: every finding is addressed, and the remediated build is deployed at**
+`0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
+**(28 August 2026). The launch gate is still not satisfied — see Phase 3.**
 
 Legend: `[x]` done · `[U]` needs the operator — a key, a signature, or a dashboard.
 
 ---
 
-## What the live program actually looks like
+## The redeploy
 
-Verified with `frontend/scripts/audit-probe.mjs` (read-only) against
-`0x7c5dbc8a…2484` on Vara mainnet:
+The old program `0x7c5dbc8a…2484` carried a callable C-01 drain path and a latent
+C-02. Probing it showed **zero custodied value in all four tokens for its entire
+life**, so nothing was ever at risk and nothing needed migrating — a rare free
+window, now used.
 
-| | Result |
-|---|---|
-| `Orderbook` service | **Present.** C-01 `CallAgentService` is callable. |
-| `Orderbook/GetTokens` | Four zero addresses — **C-02 is latent**, one `SetToken` from live. |
-| wVARA / wETH / wUSDT / wUSDC held | **0 / 0 / 0 / 0** |
-
-**The deployed program is drainable and holds nothing.** That is the whole reason
-this is recoverable without loss. It stops being true the moment anyone deposits, so
-it must be replaced before it is used — not after.
+The remediated build is live at `0x8ff92cab…fac4` with the four markets listed and
+perps wired to a dedicated keeper key. The probe confirms the legacy services are
+absent. **The old program is retired; nothing should point at it again.**
 
 ---
 
@@ -140,7 +137,7 @@ Disclosure
 
 None of these can be done from the repository. All are required before real funds.
 
-- [ ] **Redeploy the fixed build.** Everything above is source-only until this happens.
+- [x] **Redeploy the fixed build.** Done — `0x8ff92cab…fac4`, 28 August 2026.
 - [ ] **N-of-M multisig as admin**, via `propose_admin` / `accept_admin`. Split the
       keeper key at the same time.
 - [ ] **Independent professional audit** of the reduced program. This remediation is

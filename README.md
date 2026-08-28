@@ -6,16 +6,18 @@ futures over the same collateral.
 [![Build Status](https://github.com/deveier/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/deveier/thebook/actions)
 [![Network](https://img.shields.io/badge/Vara-mainnet-brightgreen)](https://idea.gear-tech.io/programs?node=wss://rpc.vara.network)
 
-> **Status: not open for deposits.** The program is undergoing audit remediation.
-> A [full-stack security assessment](docs/audit-remediation.md) found three
-> exploitable critical defects; all are fixed in this source, and the fixed build
-> has **not yet been redeployed**. The program currently on mainnet still carries
-> them and holds no funds. **Do not deposit into it.**
+> **Live on Vara mainnet:** `0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
 >
-> Before real funds return: an independent professional audit, admin behind a
-> multisig, and the rest of the [launch gate](MAINNET.md). See
-> [docs/audit-remediation.md](docs/audit-remediation.md) for the tracker and
-> [docs/incident-runbook.md](docs/incident-runbook.md) for current live status.
+> This is the remediated build. A [full-stack security assessment](docs/audit-remediation.md)
+> found three exploitable critical defects in the previous program; all are fixed
+> here, and that program is retired — it held zero funds for its entire life, so
+> nothing was ever at risk.
+>
+> **The launch gate is not yet satisfied.** No independent professional audit, admin
+> is still a single key rather than a multisig, and there is no committed market
+> maker. See [docs/audit-remediation.md](docs/audit-remediation.md) for the tracker,
+> [docs/incident-runbook.md](docs/incident-runbook.md) for live status, and
+> [MAINNET.md](MAINNET.md) for the gate. Trade accordingly.
 
 **Real funds, real risk.** Read the [risk disclosure](docs/risk-disclosure.md) and
 [terms](docs/terms.md) before trading. This is not a regulated exchange, and nothing

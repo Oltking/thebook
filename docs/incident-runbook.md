@@ -8,33 +8,36 @@ only as intentions.
 
 ---
 
-## Current status of the audit's criticals
+## Live program
 
-Verified against the live mainnet program
-`0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`
-with `frontend/scripts/audit-probe.mjs` (read-only):
+**Current:** `0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4`
+(deployed 28 August 2026, the remediated build)
 
-| Finding | On the deployed program | On the fixed build |
-|---|---|---|
-| C-01 `CallAgentService` | **Present and callable** | Deleted with the service |
-| C-02 `Join` → `Withdraw` | **Latent** — all four legacy token slots are the zero address | Deleted with the service |
-| Custodied value | **Zero** in all four tokens | — |
+**Retired:** `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`
+— carried C-01 `CallAgentService` (an unauthenticated drain path) and a latent C-02.
+It held zero in all four tokens for its whole life, so nothing was ever at risk and
+nothing needed migrating. **Do not point anything at it again.**
 
-**The deployed program is drainable, but there is currently nothing in it to drain.**
-That is what makes this recoverable without loss: the exposure is real, the balance is
-zero. It stops being true the moment anyone deposits, so the program must be replaced
-before it is used, not after.
+Verified on the current program with `frontend/scripts/audit-probe.mjs` (read-only):
+
+| | Result |
+|---|---|
+| Legacy `Orderbook` / `Amm` / `Perps` services | Absent — C-01 and C-02 unreachable |
+| Markets listed | 4 |
+| Paused | no |
+| Custodied value | 0 in all four tokens |
 
 Re-check at any time:
 
 ```sh
 cd frontend
 NODE_ADDRESS=wss://rpc.vara.network \
-PROGRAM_ID=0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484 \
+PROGRAM_ID=0x8ff92cabb35bdeec210f203f3afcb626e2db106a8362ffff4f5b7b344917fac4 \
 node scripts/audit-probe.mjs
 ```
 
-Exit code 1 means the legacy attack surface is still present.
+Exit code 1 means a legacy attack surface is present — that should never happen on
+this program.
 
 ---
 

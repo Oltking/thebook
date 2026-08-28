@@ -127,10 +127,25 @@ async function upload(code, payload, label) {
   return programId;
 }
 
+/**
+ * Gear's gas-estimation RPC cannot simulate a program that awaits a cross-program
+ * reply — it aborts with "Unable to call a forbidden function". `ListPair` reads each
+ * token's decimals, and every escrowing method awaits a transfer, so estimation is
+ * allowed to fail and we fall back to an explicit limit. Unused gas is refunded.
+ */
+async function prepareGas(tx) {
+  try {
+    await tx.calculateGas(true);
+  } catch (e) {
+    if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;
+    tx.withGas('max');
+  }
+}
+
 async function call(service, fn, ...args) {
   const tx = sails.services[service].functions[fn](...args);
   tx.withAccount(admin);
-  await tx.calculateGas(true);
+  await prepareGas(tx);
   const { response } = await tx.signAndSend();
   const value = await response();
   if (value && typeof value === 'object' && 'err' in value) {
@@ -140,17 +155,36 @@ async function call(service, fn, ...args) {
 }
 
 // 1 · deploy the program
-process.stdout.write('  deploying thebook v1 … ');
-const dexInit = u8aToHex(api.createType('String', 'New').toU8a());
-const PROGRAM_ID = await upload(readFileSync(DEX_WASM), dexInit, 'thebook');
-console.log(PROGRAM_ID);
+// Resumable: if EXISTING_PROGRAM is set, initialise that program instead of
+// uploading a second one. Deploy is the expensive, irreversible step; the wiring
+// after it can fail on a transient RPC error and should be retryable without
+// stranding a half-initialised program on chain.
+let PROGRAM_ID;
+if (process.env.EXISTING_PROGRAM) {
+  PROGRAM_ID = process.env.EXISTING_PROGRAM;
+  console.log(`  using existing program … ${PROGRAM_ID}`);
+} else {
+  process.stdout.write('  deploying thebook v1 … ');
+  const dexInit = u8aToHex(api.createType('String', 'New').toU8a());
+  PROGRAM_ID = await upload(readFileSync(DEX_WASM), dexInit, 'thebook');
+  console.log(PROGRAM_ID);
+}
 sails.setProgramId(PROGRAM_ID);
 
 // 2 · list spot markets
 console.log('\n  listing spot markets:');
 for (const m of MARKETS) {
-  const id = await call('Spot', 'ListPair', m.base.addr, m.quote.addr, m.base.dec, m.quote.dec);
-  console.log(`    ${m.name.padEnd(10)} pair_id=${id}`);
+  try {
+    const id = await call('Spot', 'ListPair', m.base.addr, m.quote.addr, m.base.dec, m.quote.dec);
+    console.log(`    ${m.name.padEnd(10)} pair_id=${id}`);
+  } catch (e) {
+    // Already listed by an earlier run — not an error when resuming.
+    if (/PairExists/.test(String(e?.message ?? e))) {
+      console.log(`    ${m.name.padEnd(10)} already listed, skipping`);
+    } else {
+      throw e;
+    }
+  }
 }
 
 // 3 · wire perps: collateral, markets, keeper
