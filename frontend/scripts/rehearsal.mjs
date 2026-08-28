@@ -22,12 +22,14 @@
 // Costs gas on whatever chain you point it at. Run it before every production
 // deploy; if it does not pass, the build does not ship.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GearApi } from '@gear-js/api';
 import { Keyring } from '@polkadot/api';
 import { u8aToHex } from '@polkadot/util';
+import { randomAsU8a } from '@polkadot/util-crypto';
+import { generateCodeHash } from '@gear-js/api';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
@@ -108,15 +110,37 @@ async function freeBalance(addr) {
   return data.free.toBigInt();
 }
 
-async function upload(wasm, initPayload, label) {
-  const gas = await api.program.calculateGas.initUpload(adminId, wasm, initPayload, 0, true);
+/**
+ * Instantiate a program, reusing code already on chain where possible.
+ *
+ * `uploadProgram` carries the whole WASM and fails outright if that code is already
+ * stored, which is both expensive and a hard error when deploying two instances of
+ * the same token. Uploading the code once and then creating instances from its
+ * `codeId` is cheaper and idempotent.
+ */
+async function instantiate(wasm, initPayload, label) {
+  const codeId = generateCodeHash(wasm);
+  const codeOnChain = await api.code.exists(codeId).catch(() => false);
+
+  if (!codeOnChain) {
+    const { extrinsic: codeTx } = await api.code.upload(wasm);
+    await signSend(codeTx, `${label}: code upload`);
+  }
+
+  const salt = u8aToHex(randomAsU8a(8));
+  const gas = await api.program.calculateGas.initCreate(adminId, codeId, initPayload, 0, true);
   let limit = (gas.min_limit.toBigInt() * 5n) / 2n;
   if (limit > blockMax) limit = blockMax;
-  const { programId, extrinsic } = api.program.upload({ code: wasm, gasLimit: limit, value: 0, initPayload });
-  await new Promise((res, rej) => {
+  const { programId, extrinsic } = api.program.create({ codeId, salt, gasLimit: limit, value: 0, initPayload });
+  await signSend(extrinsic, label);
+  return programId;
+}
+
+/** Sign, send, and reject with a decoded pallet error rather than a module index. */
+function signSend(extrinsic, label) {
+  return new Promise((res, rej) => {
     extrinsic.signAndSend(admin, ({ status, events, dispatchError }) => {
       if (dispatchError) {
-        // Decode the pallet error rather than printing an opaque module index.
         let detail = dispatchError.toString();
         if (dispatchError.isModule) {
           try {
@@ -132,7 +156,6 @@ async function upload(wasm, initPayload, label) {
       }
     }).catch(rej);
   });
-  return programId;
 }
 
 /** Transfer native VARA so a derived account can pay its own gas. */
@@ -187,20 +210,50 @@ const query = (sails, service, fn, from, ...args) =>
   sails.services[service].queries[fn](...args).withAddress(from).call();
 
 // ── 1 · Deploy throwaway tokens + DEX ───────────────────────────────────────────
-step('1 · deploying rehearsal tokens and a throwaway DEX');
+//
+// The test token's constructor pre-allocates balance/allowance shards, which costs
+// roughly 493 billion gas (~49 VARA) per instance. That is the single most expensive
+// thing here, so token addresses are cached and reused across runs: the first run
+// pays for them, every later run costs almost nothing. The DEX is redeployed every
+// time, because testing the current build is the entire point, and its init is cheap
+// (~1.2 billion gas).
+step('1 · rehearsal tokens and a throwaway DEX');
+const CACHE = resolve(__dirname, '.rehearsal-tokens.json');
 const salt = Date.now().toString(16);
 const tokenInit = (name, symbol) =>
   u8aToHex(
     api.createType('(String, String, String, u8, U256)', ['New', name, symbol, DEC, FAUCET]).toU8a(),
   );
 
-const BASE = await upload(readFileSync(TOKEN_WASM), tokenInit('Rehearsal Base', `rBASE${salt}`), 'base token');
-console.log(`    base  ${BASE}`);
-const QUOTE = await upload(readFileSync(TOKEN_WASM), tokenInit('Rehearsal Quote', `rQUOTE${salt}`), 'quote token');
-console.log(`    quote ${QUOTE}`);
+let cached = {};
+if (existsSync(CACHE)) {
+  try { cached = JSON.parse(readFileSync(CACHE, 'utf-8')); } catch { cached = {}; }
+}
+async function tokenFor(key, label) {
+  const known = process.env[`REHEARSAL_${key.toUpperCase()}`] || cached[key];
+  if (known) {
+    // Confirm it is really there before trusting the cache.
+    try {
+      await sailsFor(VFT_IDL, known).services.VftMetadata.queries.Decimals().call();
+      console.log(`    ${label.padEnd(5)} ${known} (reused)`);
+      return known;
+    } catch {
+      console.log(`    ${label} cached address unreachable, redeploying`);
+    }
+  }
+  const id = await instantiate(
+    readFileSync(TOKEN_WASM), tokenInit(`Rehearsal ${label}`, `r${label}${salt}`), `${label} token`);
+  cached[key] = id;
+  writeFileSync(CACHE, JSON.stringify(cached, null, 2));
+  console.log(`    ${label.padEnd(5)} ${id} (new)`);
+  return id;
+}
+
+const BASE = await tokenFor('base', 'BASE');
+const QUOTE = await tokenFor('quote', 'QUOTE');
 
 const dexInit = u8aToHex(api.createType('String', 'New').toU8a());
-const DEX = await upload(readFileSync(DEX_WASM), dexInit, 'dex');
+const DEX = await instantiate(readFileSync(DEX_WASM), dexInit, 'dex');
 console.log(`    dex   ${DEX}`);
 
 const dex = sailsFor(IDL_PATH, DEX);
