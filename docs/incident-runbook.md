@@ -26,6 +26,12 @@ Verified on the current program with `frontend/scripts/audit-probe.mjs` (read-on
 | Markets listed | 4 |
 | Paused | no |
 | Custodied value | 0 in all four tokens |
+| Perps | **closed** — no marks published, reserve 0 |
+
+**Perps are not open.** Both markets have `mark: 0`, so `fresh_mark` fails and no
+position can be opened. They open when the keeper starts publishing marks — which
+must not happen until the reserve is funded and the coverage-floor fix is deployed.
+Spot has no oracle dependency and trades normally with the keeper stopped.
 
 Re-check at any time:
 

@@ -1,5 +1,27 @@
 # Render Blueprint: thebook's mark-price keeper, as a background worker.
 #
+# ## DO NOT START THIS YET
+#
+# The keeper is what makes perps tradeable: no marks published means `fresh_mark`
+# fails and `open_position` is rejected, so perps are closed. That is currently the
+# correct state, and starting this worker is what opens them.
+#
+# Preconditions, all of which must hold first:
+#
+#   1. The perps reserve is funded (`scripts/fund-reserve.mjs`). It is currently 0,
+#      and the reserve is the counterparty to every position.
+#   2. The contract carries the fix making the coverage floor count the position
+#      being opened. Without it the first position can open against an empty
+#      reserve and have its profit truncated at settlement.
+#   3. `KEEPER_SEED` is set to the dedicated keeper key, never the admin seed.
+#
+# Spot trading needs none of this — it has no oracle dependency and works with the
+# keeper stopped. Leave this worker suspended until perps are genuinely ready.
+#
+# If Render still has a service named `thebook-market-runner`: that ran the legacy
+# virtual-balance services, which were deleted (audit C-02), along with the script
+# it started. Delete that service. Renaming here does not rename it there.
+#
 # `perps-keeper.mjs` does exactly one job: publish mark prices for the perp markets
 # so PnL and liquidations have a settlement price. It serves no HTTP, so it is a
 # Background Worker, not a Web Service.
