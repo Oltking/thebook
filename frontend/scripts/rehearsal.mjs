@@ -173,6 +173,19 @@ function signSendAs(extrinsic, who, label) {
   });
 }
 
+/** Ensure `who` holds at least `target` native VARA, sending only the shortfall. */
+async function topUpTo(who, target) {
+  const { data } = await api.query.system.account(who.address);
+  const have = data.free.toBigInt();
+  if (have >= target) {
+    console.log(`      ${who.address.slice(0, 8)}… has ${Number(have) / 1e12} VARA, no top-up`);
+    return;
+  }
+  const need = target - have;
+  console.log(`      topping ${who.address.slice(0, 8)}… up by ${Number(need) / 1e12} VARA`);
+  await fundNative(who.address, need);
+}
+
 /** Transfer native VARA so a derived account can pay its own gas. */
 async function fundNative(to, amount) {
   await new Promise((res, rej) => {
@@ -229,13 +242,22 @@ async function send(sails, service, fn, who, ...args) {
   return v && typeof v === 'object' && 'ok' in v ? v.ok : v;
 }
 
+/** Turn a raw submission failure into something that names itself. */
+function explain(e) {
+  const m = String(e?.message ?? e);
+  if (/InsufficientBalance/.test(m)) {
+    return `${m} (signer cannot reserve the gas limit; fund it with more native VARA)`;
+  }
+  return m;
+}
+
 /** Same, but expects a rejection. Returns the error for inspection. */
 async function sendExpectingError(sails, service, fn, who, ...args) {
   try {
     await send(sails, service, fn, who, ...args);
     return null;
   } catch (e) {
-    return String(e?.message ?? e);
+    return explain(e);
   }
 }
 
@@ -295,10 +317,19 @@ const dex = sailsFor(IDL_PATH, DEX);
 const base = sailsFor(VFT_IDL, BASE);
 const quote = sailsFor(VFT_IDL, QUOTE);
 
-step('    funding the derived trader and keeper for gas');
-await fundNative(trader.address, 5n * VARA);
-await fundNative(keeper.address, 2n * VARA);
-pass('native gas funded');
+// Each escrowing call reserves FALLBACK_GAS * valuePerGas (3 VARA) for the duration
+// of the transaction, refunded on completion. The trader makes ~20 of them, and the
+// reservation cannot be made at all if free balance is below it - which surfaces as
+// `gearBank.InsufficientBalance`, not as anything mentioning gas. Fund generously;
+// both accounts derive from the same seed, so the remainder is recoverable.
+// Top up to a target rather than transferring a fixed amount every run: the derived
+// accounts keep their balance between runs, so re-sending would drain admin into
+// them for no reason. Nothing is lost either way (same seed), but admin is the one
+// that has to afford the deploy.
+step('    topping up the derived trader and keeper for gas');
+await topUpTo(trader, 20n * VARA);
+await topUpTo(keeper, 4n * VARA);
+pass('native gas available');
 
 const bal = async (tok, who) =>
   BigInt((await tok.services.Vft.queries.BalanceOf(who).call()).toString());
@@ -315,12 +346,25 @@ const reversed = await sendExpectingError(dex, 'Spot', 'ListPair', admin, QUOTE,
 check(reversed !== null && /PairExists/.test(reversed), 'reverse orientation rejected');
 
 // ── 3 · Faucets ────────────────────────────────────────────────────────────────
+// The DEX is fresh every run but tokens and accounts persist, so this tops up to
+// what the run needs instead of assuming empty wallets. Every later assertion is a
+// delta against a snapshot for the same reason.
 step('3 · funding: wrap real wVARA, claim the throwaway quote');
-const WRAP = 5n * BASE_UNIT;          // 5 wVARA, recoverable via Burn
-await wrapVara(trader, WRAP);
-eq(await bal(base, traderId), WRAP, 'trader holds REAL wVARA (wrapped from native)');
-await send(quote, 'Faucet', 'Claim', admin);
-eq(await bal(quote, adminId), FAUCET, 'admin holds quote');
+const NEED_BASE = 4n * BASE_UNIT;
+const NEED_QUOTE = 10n * QUOTE_UNIT;
+
+const baseHeld = await bal(base, traderId);
+if (baseHeld < NEED_BASE) {
+  await wrapVara(trader, NEED_BASE - baseHeld);
+}
+check(await bal(base, traderId) >= NEED_BASE, 'trader holds enough REAL wVARA (wrapped from native)');
+
+if (await bal(quote, adminId) < NEED_QUOTE) {
+  // One claim per account; already having claimed is not a failure.
+  const claimed = await sendExpectingError(quote, 'Faucet', 'Claim', admin);
+  if (claimed && !/AlreadyClaimed/.test(claimed)) fail(`quote faucet: ${claimed}`);
+}
+check(await bal(quote, adminId) >= NEED_QUOTE, 'admin holds enough quote');
 
 // ── 4 · The core path: approve, rest a sell, cross it with a buy ────────────────
 step('4 · limit order crossing');
@@ -328,9 +372,11 @@ const PRICE = 2n * QUOTE_UNIT;   // 2 quote per whole base
 const QTY = 1n * BASE_UNIT;      // 1 wVARA
 const COST = (PRICE * QTY) / BASE_UNIT;
 
+const traderBase0 = await bal(base, traderId);
+const adminBase0 = await bal(base, adminId);
 await send(base, 'Vft', 'Approve', trader, DEX, QTY);
 const sellId = await send(dex, 'Spot', 'PlaceLimit', trader, pairId, 'Sell', PRICE, QTY);
-eq(await bal(base, traderId), WRAP - QTY, 'sell escrow left the wallet (real token TransferFrom)');
+eq(await bal(base, traderId), traderBase0 - QTY, 'sell escrow left the wallet (real token TransferFrom)');
 pass(`resting sell id=${sellId}`);
 
 const [, asks] = await query(dex, 'Spot', 'GetOrderbook', adminId, pairId, 20);
@@ -340,28 +386,31 @@ await send(quote, 'Vft', 'Approve', admin, DEX, COST);
 await send(dex, 'Spot', 'PlaceLimit', admin, pairId, 'Buy', PRICE, QTY);
 eq(await claimOf(BASE, adminId), QTY, 'buyer credited the base');
 eq(await claimOf(QUOTE, traderId), COST, 'seller credited the quote');
+check(true, 'crossing settled through claimable balances');
 eq(Number(await query(dex, 'Spot', 'RestingOrderCount', adminId)), 0, 'both orders retired from state');
 
 // ── 5 · Withdraw, including a partial (L-01) ───────────────────────────────────
 step('5 · withdrawal');
+const traderQuote0 = await bal(quote, traderId);
 const half = COST / 2n;
 await send(dex, 'Spot', 'Withdraw', trader, QUOTE, half);
-eq(await bal(quote, traderId), half, 'partial withdrawal reached the wallet');
+eq(await bal(quote, traderId), traderQuote0 + half, 'partial withdrawal reached the wallet');
 eq(await claimOf(QUOTE, traderId), COST - half, 'remainder still claimable');
 await send(dex, 'Spot', 'Withdraw', trader, QUOTE, null);
-eq(await bal(quote, traderId), COST, 'full withdrawal completes');
+eq(await bal(quote, traderId), traderQuote0 + COST, 'full withdrawal completes');
 eq(await claimOf(QUOTE, traderId), 0n, 'claim cleared');
 await send(dex, 'Spot', 'Withdraw', admin, BASE, null);
-eq(await bal(base, adminId), QTY, 'buyer withdrew the base');
+eq(await bal(base, adminId), adminBase0 + QTY, 'buyer withdrew the base');
 
 // ── 6 · Cancel refunds escrow exactly ──────────────────────────────────────────
 step('6 · cancel');
+const traderBase6 = await bal(base, traderId);
 await send(base, 'Vft', 'Approve', trader, DEX, QTY);
 const cancelId = await send(dex, 'Spot', 'PlaceLimit', trader, pairId, 'Sell', PRICE * 2n, QTY);
 await send(dex, 'Spot', 'CancelOrder', trader, cancelId);
 eq(await claimOf(BASE, traderId), QTY, 'cancel refunded the full escrow');
 await send(dex, 'Spot', 'Withdraw', trader, BASE, null);
-eq(await bal(base, traderId), WRAP - QTY, 'refund reached the wallet');
+eq(await bal(base, traderId), traderBase6, 'refund reached the wallet');
 
 // ── 7 · Market order slippage bound returns the escrow (H-03) ──────────────────
 step('7 · slippage bound');
@@ -406,7 +455,10 @@ check(wildMark !== null && /MarkDeviationTooLarge/.test(wildMark), 'mark deviati
 
 // Unbacked open must be refused: the reserve is still empty.
 // The trader needs quote to post perp margin; the faucet is one claim per account.
-await send(quote, 'Faucet', 'Claim', trader);
+if (await bal(quote, traderId) < 2000n * QUOTE_UNIT) {
+  const c = await sendExpectingError(quote, 'Faucet', 'Claim', trader);
+  if (c && !/AlreadyClaimed/.test(c)) fail(`trader quote faucet: ${c}`);
+}
 await send(quote, 'Vft', 'Approve', trader, DEX, 1000n * QUOTE_UNIT);
 const unbacked = await sendExpectingError(dex, 'PerpsV1', 'OpenPosition', trader, marketId, true, (100n * QUOTE_UNIT).toString(), 2);
 check(unbacked !== null && /InsufficientCoverage/.test(unbacked), 'open refused against an empty reserve');
