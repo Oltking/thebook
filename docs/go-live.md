@@ -125,8 +125,24 @@ Created by the same blueprint as `thebook-solvency-monitor`. It **signs nothing 
 needs no seed**, so start it before funding the reserve rather than after: its job is
 to notice the first time something is wrong.
 
-The only input it needs is `ALERT_WEBHOOK`, a Slack-compatible endpoint taking
-`{ text }`. Point it somewhere a human is actually paged.
+### What to put in `ALERT_WEBHOOK`
+
+An **incoming webhook URL** for wherever your team actually gets paged. The monitor
+posts both `text` (Slack) and `content` (Discord) in one payload, so either works
+without configuration:
+
+- **Slack** — api.slack.com/apps → your app → *Incoming Webhooks* → *Add New Webhook
+  to Workspace*, pick a channel. You get `https://hooks.slack.com/services/T…/B…/…`.
+- **Discord** — channel → *Edit Channel* → *Integrations* → *Webhooks* → *New Webhook*
+  → *Copy Webhook URL*. You get `https://discord.com/api/webhooks/…`.
+- **Anything else** — it receives JSON with `level`, `message`, `program` and `at`
+  alongside, so a generic endpoint or a PagerDuty/Opsgenie inbound integration works.
+
+**It is optional.** Without it the monitor still runs and still detects everything;
+alerts just go to the Render logs, which nobody is watching at 3am. The startup banner
+says `alerts: CONSOLE ONLY` when it is unset, so this cannot be forgotten silently.
+
+Treat the URL as a secret: anyone holding it can post into that channel.
 
 To run it locally instead:
 

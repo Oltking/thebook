@@ -30,7 +30,8 @@
 //   TOKENS         comma-separated token ids (default: the four mainnet tokens)
 //   INTERVAL_MS    poll interval (default 30000)
 //   THRESHOLD_PCT  alert if the held balance drops more than this between polls (default 5)
-//   ALERT_WEBHOOK  optional URL to POST alerts to (Slack-compatible {text})
+//   ALERT_WEBHOOK  optional URL to POST alerts to. Slack and Discord incoming
+//                  webhooks both work as-is; see `postAlert` for the payload.
 //   ONCE           set to run a single check and exit non-zero on any alert (for CI/cron)
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -96,16 +97,39 @@ async function alert(level, message) {
   const line = `[${new Date().toISOString()}] ${level}: ${message}`;
   if (level === 'OK') console.log(line);
   else console.error(line);
-  if (ALERT_WEBHOOK && level !== 'OK') {
-    try {
-      await fetch(ALERT_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `thebook ${level}: ${message}` }),
-      });
-    } catch (e) {
-      console.error(`  (webhook failed: ${e?.message || e})`);
-    }
+  if (ALERT_WEBHOOK && level !== 'OK') await postAlert(level, message);
+}
+
+/**
+ * POST an alert to whatever webhook is configured.
+ *
+ * Slack incoming webhooks read `text`; Discord reads `content`. Sending both means
+ * one env var works with either without the operator having to know which shape the
+ * script speaks — and an unrecognised extra field is ignored by both. A generic
+ * endpoint gets the structured fields alongside.
+ *
+ * A failed alert is logged and swallowed: the monitor must keep monitoring even when
+ * the place it reports to is down.
+ */
+async function postAlert(level, message) {
+  const text = `thebook ${level}: ${message}`;
+  try {
+    const res = await fetch(ALERT_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,               // Slack
+        content: text,      // Discord
+        level,              // generic consumers
+        message,
+        program: PROGRAM_ID,
+        at: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error(`  (webhook returned HTTP ${res.status})`);
+  } catch (e) {
+    console.error(`  (webhook failed: ${e?.message || e})`);
   }
 }
 
@@ -201,7 +225,10 @@ console.log(`\nthebook solvency monitor`);
 console.log(`  node:     ${NODE_ADDRESS}`);
 console.log(`  program:  ${PROGRAM_ID}`);
 console.log(`  tokens:   ${TOKENS.length}`);
-console.log(`  interval: ${INTERVAL_MS}ms\n`);
+console.log(`  interval: ${INTERVAL_MS}ms`);
+console.log(ALERT_WEBHOOK
+  ? '  alerts:   webhook configured\n'
+  : '  alerts:   CONSOLE ONLY — set ALERT_WEBHOOK so a human is actually told\n');
 
 await check();
 setInterval(() => { check().catch((e) => console.error(e)); }, INTERVAL_MS);
