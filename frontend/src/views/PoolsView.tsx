@@ -50,7 +50,17 @@ export function PoolsView() {
   const decB = pool ? Number(pool.dec_b) : 0;
 
   const tokens = useMemo(() => [tokenA, tokenB].filter(Boolean), [tokenA, tokenB]);
-  const symbols = useTokenSymbols(tokens);
+  // Resolve symbols for EVERY pool, not just the selected one: the pool picker
+  // labels them all, and anything unresolved falls back to a bare "A"/"B".
+  const allPoolTokens = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of pools) {
+      set.add(String(p.token_a));
+      set.add(String(p.token_b));
+    }
+    return [...set];
+  }, [pools]);
+  const symbols = useTokenSymbols(allPoolTokens);
   const symA = symbols[tokenA] ?? 'A';
   const symB = symbols[tokenB] ?? 'B';
   const { balances, refresh: refreshBalances } = useWalletBalances(tokens);
