@@ -29,6 +29,21 @@
 /** Matches the estimator's trap, and nothing else. */
 const ESTIMATOR_CANNOT_WAIT = /forbidden function/i;
 
+/**
+ * Gas limit used when estimation cannot run.
+ *
+ * This is NOT `'max'`. Gear reserves `gasLimit * valuePerGas` from the signer for
+ * the duration of the call and refunds what is unused — but the *reservation* is
+ * real, and on Vara the block gas limit prices out at roughly 75 VARA. Falling back
+ * to `'max'` would mean every trader needed 75 VARA idle in their wallet to place a
+ * single order, which is not a usable exchange.
+ *
+ * The value below is sized from measured consumption of the escrowing calls, with
+ * generous headroom, and costs about 2 VARA to reserve. Raise it only against a
+ * measurement, never on a hunch.
+ */
+export const FALLBACK_GAS = 20_000_000_000n;
+
 interface GasPreparable {
   calculateGas: (allowOtherPanics?: boolean, increaseGas?: number) => Promise<unknown>;
   withGas: (gas: bigint | 'max') => unknown;
@@ -49,6 +64,6 @@ export async function prepareGas(tx: GasPreparable, increaseGas = 100): Promise<
     // params, insufficient allowance, a rejected order — must still surface here,
     // before the user is asked to sign something that will fail.
     if (!ESTIMATOR_CANNOT_WAIT.test(message)) throw e;
-    tx.withGas('max');
+    tx.withGas(FALLBACK_GAS);
   }
 }

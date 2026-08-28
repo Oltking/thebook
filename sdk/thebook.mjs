@@ -31,6 +31,9 @@ import { SailsIdlParser } from 'sails-js-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Gas limit used when estimation cannot run; see prepareGas. ~2 VARA reserved. */
+const FALLBACK_GAS = 20_000_000_000n;
+
 // ── On-chain enums (order must match the program) ──
 export const Side = { Buy: 'Buy', Sell: 'Sell' };
 
@@ -157,7 +160,10 @@ export async function connectTheBook(opts = {}) {
       await tx.calculateGas(true);
     } catch (e) {
       if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;
-      tx.withGas('max');
+      // Not 'max': Gear reserves gasLimit * valuePerGas from the signer, and the
+      // block gas limit prices out around 75 VARA on Vara. An agent should not need
+      // that idle just to place an order. Sized from measured consumption.
+      tx.withGas(FALLBACK_GAS);
     }
   }
 
