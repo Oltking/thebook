@@ -92,8 +92,14 @@ For non-Rust callers, encode the payload as:
 
 ## Program ID
 
-Set per deployment. On Vara testnet (`wss://testnet.vara.network`), use the ID
-returned by the deploy step — see [DEPLOY.md](./DEPLOY.md).
+Set per deployment. thebookdex runs on **Vara mainnet**
+(`wss://rpc.vara.network`) with **real bridged tokens** — balances are real funds,
+not test or play money. Use the ID returned by the deploy step — see
+[DEPLOY.md](./DEPLOY.md).
+
+Before integrating, read the [risk disclosure](docs/risk-disclosure.md): the
+contract has not had an independent professional audit, and the program currently
+deployed is pending an audit-remediation redeploy.
 
 ## Website
 

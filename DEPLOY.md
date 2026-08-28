@@ -1,7 +1,16 @@
-# Deploying thebookdex to Vara Testnet
+# Deploying thebookdex
 
-End-to-end steps to build the contract, deploy it to Vara testnet, and point the
-frontend at the new program.
+End-to-end steps to build the contract, deploy it, and point the frontend at the new
+program.
+
+> **Which network?** Every signing script requires `NODE_ADDRESS` explicitly and has
+> **no default** — a script that signs must not guess a chain (audit H-09). Use
+> `wss://rpc.vara.network` for mainnet and `wss://testnet.vara.network` for testnet,
+> and pass it on the command line so a stale value in `frontend/.env` cannot redirect
+> a signed action.
+>
+> **Rehearse on testnet first.** The project's launch gate requires a testnet dress
+> rehearsal of the fixed contract with real VFT tokens before mainnet funds return.
 
 ## 0. Prerequisites
 
@@ -12,9 +21,9 @@ frontend at the new program.
   to produce a size-optimized `thebook.opt.wasm`. Install via `brew install binaryen`
   (macOS) or the Binaryen releases page.
 - Node 18+ and the frontend dependencies installed (`cd frontend && npm install`).
-- A **funded** testnet account. Get test VARA from the faucet:
-  <https://idea.gear-tech.io/programs?node=wss://testnet.vara.network> → faucet,
-  or the Vara testnet faucet bot.
+- A **funded** account on the target network. For testnet, get test VARA from the
+  faucet: <https://idea.gear-tech.io/programs?node=wss://testnet.vara.network>, or
+  the Vara testnet faucet bot. For mainnet, a real funded account.
 
 > **Toolchain note.** The toolchain is pinned to **Rust 1.95.0** in
 > `rust-toolchain.toml`. Rust 1.96 both (a) stopped passing `--allow-undefined` to
@@ -131,7 +140,8 @@ VITE_TOKEN_ETH=<wETH program id>
 VITE_TOKEN_VARA=<wVARA program id>
 ```
 
-The `VITE_TOKEN_*` ids are optional (virtual balances need no tokens). They only
+The `VITE_TOKEN_*` ids are legacy and unused: the virtual-balance services they
+belonged to were removed (audit C-02). They only
 matter if you enabled the optional real-custody path in §2.5.
 
 Then run locally or build:
@@ -177,7 +187,7 @@ the ingestion contract.
 
 ## §4 · One-shot redeploy (deploy-all)
 
-Redeploy the current source in one command. By default (virtual balances) this
+Redeploy the current source in one command. This
 deploys thebook, registers the admin, and prints the env values — no tokens needed.
 Add `WITH_TOKENS=1` to also deploy + wire the four wrapped tokens for the optional
 real-custody path.

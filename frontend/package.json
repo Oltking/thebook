@@ -33,7 +33,9 @@
     "sails-js-parser": "0.5.1"
   },
   "overrides": {
-    "@polkadot/types": "12.4.2"
+    "@gear-js/react-hooks": {
+      "nanoid": "^5.1.16"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
