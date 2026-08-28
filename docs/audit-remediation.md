@@ -96,8 +96,10 @@ API
       limits and a daily cap, and **fails closed** without the rate-limit store.
 - [x] H-06 The unauthenticated `prices.ts` POST branch is deleted; GET maintains the
       cache and history itself.
-- [x] M-16 `agent.ts` origin-locked, rate-limited, size-capped, user text fenced as
-      data, and the system prompt corrected to real funds on mainnet.
+- [x] M-16 `agent.ts` was hardened (origin lock, rate limit, size cap, user text
+      fenced as data, prompt corrected), then **deleted entirely** — its only caller
+      was the removed Hive, so a paid-key proxy was left reachable with nothing using
+      it. No server-held LLM key remains.
 - [x] L-09 Connection cache drops on failure, timeouts on connect and send, correct
       seed detection, failures return real status codes.
 - [x] L-10 Unused Redis clients removed; per-instance cache behaviour documented.
