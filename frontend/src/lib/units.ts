@@ -1,17 +1,46 @@
 // Convert between human decimal strings and on-chain smallest-units (bigint).
 // Spot amounts/prices are u128 in token smallest-units; a token declares its decimals.
 
-/** Parse a human decimal string ("1.25") to smallest-units given `decimals`. */
+/** A plain, unsigned decimal number: digits, at most one point, digits. */
+const DECIMAL = /^\d*(\.\d*)?$/;
+
+/**
+ * Parse a human decimal string ("1.25") to smallest-units given `decimals`.
+ *
+ * Returns `0n` for anything that is not a plain decimal number. This function sits
+ * on the order-entry path and used to hand its input straight to `BigInt()`, which
+ * made ordinary mistyping dangerous in two different ways (audit M-01):
+ *
+ *   "abc"   → threw, and with no error boundary in the tree that blanked the app
+ *   "1e3"   → threw the same way
+ *   "0x10"  → did *not* throw; `BigInt` parsed it as hex and silently returned
+ *             268.435456 for what the user typed as a small number
+ *   "1.2.3" → silently dropped the third component
+ *
+ * `inputMode="decimal"` is a keyboard hint, not a constraint — paste, desktop
+ * keyboards and autofill all bypass it — so the validation has to live here.
+ */
 export function parseUnits(value: string, decimals: number): bigint {
+  if (typeof value !== 'string') return 0n;
   const v = value.trim();
-  if (!v || v === '.') return 0n;
+  if (!v) return 0n;
   const neg = v.startsWith('-');
   const clean = (neg ? v.slice(1) : v).replace(/,/g, '');
+  // Rejects hex, exponents, whitespace, multiple points, and stray characters.
+  if (!DECIMAL.test(clean) || clean === '' || clean === '.') return 0n;
   const [whole = '0', frac = ''] = clean.split('.');
   const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals);
   const digits = `${whole}${fracPadded}`.replace(/^0+(?=\d)/, '');
   const out = BigInt(digits || '0');
   return neg ? -out : out;
+}
+
+/** Whether `value` is something `parseUnits` will accept as a number. Use this to
+ *  show the user an inline error rather than silently treating input as zero. */
+export function isValidDecimal(value: string): boolean {
+  const v = (value ?? '').trim().replace(/,/g, '');
+  const body = v.startsWith('-') ? v.slice(1) : v;
+  return body !== '' && body !== '.' && DECIMAL.test(body);
 }
 
 /** Format smallest-units to a human string with up to `maxFrac` fractional digits. */

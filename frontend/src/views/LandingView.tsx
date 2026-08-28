@@ -8,7 +8,6 @@ import { Logo } from '../components/ui/Logo';
 
 interface LandingViewProps {
   onLaunch: () => void;
-  onEnterHive: () => void;
 }
 
 const PRIMITIVES = [
@@ -67,7 +66,7 @@ function Reveal({ children, className, delay = 0 }: { children: React.ReactNode;
   );
 }
 
-export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
+export function LandingView({ onLaunch }: LandingViewProps) {
   const { prices } = useMarketData();
   const eth = prices.ETH ? Number(prices.ETH.price_usd_micro) / 1_000_000 : null;
 
@@ -104,8 +103,6 @@ export function LandingView({ onLaunch, onEnterHive }: LandingViewProps) {
             <motion.div className={styles.heroActions} variants={rise}>
               <motion.button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnLg}`} onClick={onLaunch}
                 whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Launch app</motion.button>
-              <motion.button className={`${styles.btn} ${styles.btnGhost} ${styles.btnLg}`} onClick={onEnterHive}
-                whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>Enter Agents</motion.button>
             </motion.div>
             <motion.div className={styles.heroStats} variants={rise}>
               <div><div className={styles.n}>{eth ? <CountUp value={eth} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>ETH on the book</div></div>

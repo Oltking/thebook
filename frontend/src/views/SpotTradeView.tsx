@@ -9,7 +9,7 @@ import { useAccount } from '@gear-js/react-hooks';
 import { useMarketData } from '../providers/MarketDataProvider';
 import { useViewport } from '../hooks/useViewport';
 import { TradeChart } from '../components/chart/TradeChart';
-import { parseUnits, formatUnits, notional } from '../lib/units';
+import { parseUnits, formatUnits, notional, isValidDecimal } from '../lib/units';
 import { knownToken } from '../consts';
 import styles from './SpotTradeView.module.css';
 
@@ -17,7 +17,11 @@ type Side = 'Buy' | 'Sell';
 type OrderType = 'Limit' | 'Market';
 type Level = [bigint, bigint];
 
-const MAX_U128 = (1n << 128n) - 1n;
+/** How many book levels to request per side. */
+const BOOK_DEPTH = 50;
+/** Slippage tolerances offered for market orders, in basis points. */
+const SLIPPAGE_CHOICES = [50, 100, 300] as const;
+const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
 
 export function SpotTradeView() {
   const { pairs } = useSpotPairs();
@@ -55,6 +59,9 @@ export function SpotTradeView() {
   const [priceStr, setPriceStr] = useState('');
   const [qtyStr, setQtyStr] = useState('');
   const [maxSpendStr, setMaxSpendStr] = useState('');
+  // Market orders are bounded by this: the worst fill the user will accept. The
+  // contract reverts and returns the escrow if the book cannot meet it (audit H-03).
+  const [slippageBps, setSlippageBps] = useState<number>(DEFAULT_SLIPPAGE_BPS);
   const [err, setErr] = useState<string | null>(null);
 
   const priceRaw = pair ? parseUnits(priceStr, quoteDec) : 0n;
@@ -84,7 +91,7 @@ export function SpotTradeView() {
   const refreshBook = useCallback(async () => {
     if (!program || !pair) return;
     try {
-      const [bids, asks] = await program.spot.getOrderbook(BigInt(pair.id as any)).call();
+      const [bids, asks] = await program.spot.getOrderbook(BigInt(pair.id as any), BOOK_DEPTH).call();
       const toLevels = (rows: any[]): Level[] => rows.map((l) => [BigInt(l[0]), BigInt(l[1])]);
       setBook({ bids: toLevels(bids), asks: toLevels(asks) });
     } catch {
@@ -136,6 +143,23 @@ export function SpotTradeView() {
   const baseUnit = 10n ** BigInt(baseDec);
   const baseBal = balances[base] ?? 0n;
   const quoteBal = balances[quote] ?? 0n;
+
+  // Decimals of the token this order escrows — used to show the exact approval amount.
+  const escrowDec = side === 'Buy' ? quoteDec : baseDec;
+
+  // ── Slippage bounds for market orders (audit H-03) ──
+  // Worst acceptable fill, derived from the reference price and the chosen tolerance.
+  // A market order without one sweeps the book at whatever prices happen to exist.
+  const slipNum = BigInt(10_000 - slippageBps);
+  const minBaseOut = useMemo(() => {
+    if (otype !== 'Market' || side !== 'Buy' || effPrice <= 0n || maxSpendRaw <= 0n) return 0n;
+    // Base we should receive for the budget at the reference price, less tolerance.
+    return (maxSpendRaw * baseUnit * slipNum) / (effPrice * 10_000n);
+  }, [otype, side, effPrice, maxSpendRaw, baseUnit, slipNum]);
+  const minQuoteOut = useMemo(() => {
+    if (otype !== 'Market' || side !== 'Sell' || effPrice <= 0n || qtyRaw <= 0n) return 0n;
+    return (notional(effPrice, qtyRaw, baseDec) * slipNum) / 10_000n;
+  }, [otype, side, effPrice, qtyRaw, baseDec, slipNum]);
 
   // Set the amount / max-spend to `pct`% of the balance that funds this order:
   // selling spends base; buying spends quote (converted to base at effPrice).
@@ -203,10 +227,12 @@ export function SpotTradeView() {
         const buyQty =
           effPrice > 0n ? (maxSpendRaw * baseUnit * 102n) / (effPrice * 100n) : qtyRaw;
         if (buyQty <= 0n) throw new Error('Enter a max spend');
-        await actions.marketBuy(id, buyQty, maxSpendRaw);
+        if (minBaseOut <= 0n) throw new Error('No reference price yet — use a limit order');
+        await actions.marketBuy(id, buyQty, maxSpendRaw, minBaseOut);
       } else {
         if (qtyRaw <= 0n) throw new Error('Enter an amount');
-        await actions.marketSell(id, qtyRaw);
+        if (minQuoteOut <= 0n) throw new Error('No reference price yet — use a limit order');
+        await actions.marketSell(id, qtyRaw, minQuoteOut);
       }
       setQtyStr('');
       setMaxSpendStr('');
@@ -287,17 +313,25 @@ export function SpotTradeView() {
 
             {otype === 'Limit' && (
               <div className={styles.field}>
-                <span className={styles.label}>
+                <label className={styles.label} htmlFor="spot-price">
                   <span>Price</span>
                   <span className={styles.hint}>{quoteSym} per {baseSym}</span>
-                </span>
+                </label>
                 <input
+                  id="spot-price"
+                  name="price"
                   className={styles.input}
                   inputMode="decimal"
+                  autoComplete="off"
+                  aria-describedby="spot-price-err"
+                  aria-invalid={priceStr !== '' && !isValidDecimal(priceStr)}
                   placeholder={oracleRaw > 0n ? formatUnits(oracleRaw, quoteDec, priceFrac) : '0.00'}
                   value={priceStr}
                   onChange={(e) => setPriceStr(e.target.value)}
                 />
+                {priceStr !== '' && !isValidDecimal(priceStr) && (
+                  <p id="spot-price-err" className={styles.err}>Enter a number, for example 1234.56</p>
+                )}
                 <div className={styles.chips}>
                   {bestBid > 0n && (
                     <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestBid, quoteDec, quoteDec))}>
@@ -326,35 +360,51 @@ export function SpotTradeView() {
             {/* Primary size input: a quote budget for a market buy, else a base amount. */}
             {otype === 'Market' && side === 'Buy' ? (
               <div className={styles.field}>
-                <span className={styles.label}>
+                <label className={styles.label} htmlFor="spot-max-spend">
                   <span>Max spend ({quoteSym})</span>
                   <span className={styles.hint}>Avail {formatUnits(quoteBal, quoteDec, 4)} {quoteSym}</span>
-                </span>
+                </label>
                 <input
+                  id="spot-max-spend"
+                  name="maxSpend"
                   className={styles.input}
                   inputMode="decimal"
+                  autoComplete="off"
+                  aria-describedby="spot-max-spend-err"
+                  aria-invalid={maxSpendStr !== '' && !isValidDecimal(maxSpendStr)}
                   placeholder="0.00"
                   value={maxSpendStr}
                   onChange={(e) => setMaxSpendStr(e.target.value)}
                 />
+                {maxSpendStr !== '' && !isValidDecimal(maxSpendStr) && (
+                  <p id="spot-max-spend-err" className={styles.err}>Enter a number, for example 250.00</p>
+                )}
               </div>
             ) : (
               <div className={styles.field}>
-                <span className={styles.label}>
+                <label className={styles.label} htmlFor="spot-amount">
                   <span>Amount ({baseSym})</span>
                   <span className={styles.hint}>
                     {side === 'Buy'
                       ? `Avail ${formatUnits(quoteBal, quoteDec, 4)} ${quoteSym}`
                       : `Avail ${formatUnits(baseBal, baseDec, 6)} ${baseSym}`}
                   </span>
-                </span>
+                </label>
                 <input
+                  id="spot-amount"
+                  name="amount"
                   className={styles.input}
                   inputMode="decimal"
+                  autoComplete="off"
+                  aria-describedby="spot-amount-err"
+                  aria-invalid={qtyStr !== '' && !isValidDecimal(qtyStr)}
                   placeholder="0.00"
                   value={qtyStr}
                   onChange={(e) => setQtyStr(e.target.value)}
                 />
+                {qtyStr !== '' && !isValidDecimal(qtyStr) && (
+                  <p id="spot-amount-err" className={styles.err}>Enter a number, for example 0.25</p>
+                )}
               </div>
             )}
 
@@ -385,6 +435,38 @@ export function SpotTradeView() {
               </div>
             </div>
 
+            {/* Slippage tolerance, market orders only. A market order is the one
+                place a user can be filled at a price they never saw, so the bound
+                and the worst case are both stated before they sign (audit H-03). */}
+            {otype === 'Market' && (
+              <div className={styles.sizer}>
+                <span className={styles.label}>
+                  <span>Max slippage</span>
+                  <span className={styles.hint}>Reverts if the fill is worse</span>
+                </span>
+                <div className={styles.chips} role="group" aria-label="Max slippage">
+                  {SLIPPAGE_CHOICES.map((bps) => (
+                    <button
+                      type="button"
+                      key={bps}
+                      className={`${styles.chip} ${slippageBps === bps ? styles.chipOn : ''}`}
+                      aria-pressed={slippageBps === bps}
+                      onClick={() => setSlippageBps(bps)}
+                    >
+                      {bps / 100}%
+                    </button>
+                  ))}
+                </div>
+                {(minBaseOut > 0n || minQuoteOut > 0n) && (
+                  <p className={styles.hint}>
+                    {side === 'Buy'
+                      ? `You receive at least ${formatUnits(minBaseOut, baseDec, Math.min(baseDec, 6))} ${baseSym}`
+                      : `You receive at least ${formatUnits(minQuoteOut, quoteDec, priceFrac)} ${quoteSym}`}
+                  </p>
+                )}
+              </div>
+            )}
+
             {estimate && (
               <div className={styles.total}>
                 <span>{side === 'Buy' && otype === 'Limit' ? 'Total' : 'You get'}</span>
@@ -403,8 +485,13 @@ export function SpotTradeView() {
                 allowance={allowance}
                 needed={needed}
                 symbol={escrowSym}
-                onApprove={(amt) => actions.approve(escrowToken, side === 'Buy' ? MAX_U128 : amt)}
+                // Approve exactly what this order escrows, both sides. The buy path
+                // used to send an unlimited allowance under a "for this order"
+                // label, which staked the user's whole balance on the contract
+                // rather than their order size (audit H-07).
+                onApprove={(amt) => actions.approve(escrowToken, amt)}
                 onApproved={refreshAllowances}
+                amountLabel={`${formatUnits(needed, escrowDec, Math.min(escrowDec, 6))} ${escrowSym}`}
               >
                 <button
                   className={`${styles.submit} ${side === 'Buy' ? styles.buy : styles.sell}`}
@@ -461,7 +548,7 @@ function SidePanel({
   const refresh = useCallback(async () => {
     if (!program || !account) return;
     try {
-      const mine = await program.spot.getMyOrders().withAddress(account.decodedAddress).call();
+      const mine = await program.spot.getMyOrders(0, 200).withAddress(account.decodedAddress).call();
       setOrders((Array.isArray(mine) ? mine : []).filter((o: SpotOrder) => String(o.pair_id) === pairId));
     } catch {
       /* transient read error; keep last */

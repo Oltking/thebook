@@ -10,11 +10,14 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+/** Live venue health, read from the real spot CLOB. */
 interface DexStatus {
-  agents: number;
-  trades: number;
-  orders: number;
-  running: boolean;
+  /** Curated markets. */
+  pairs: number;
+  /** Orders currently resting on the book (completed orders are not retained). */
+  restingOrders: number;
+  /** Global halt. Cancel and withdraw stay open while paused. */
+  paused: boolean;
 }
 
 export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
@@ -25,18 +28,21 @@ export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
     if (!program || !isReady) return;
     let active = true;
 
-    const fetch = () =>
-      program.orderbook.getStatus().call()
-        .then((r: any) => {
-          if (!active || !r) return;
-          setStatus({
-            agents: Number(r[0]),
-            trades: Number(r[1]),
-            orders: Number(r[2]),
-            running: Boolean(r[3]),
-          });
-        })
-        .catch(() => {});
+    const fetch = async () => {
+      try {
+        const [pairs, restingOrders, paused] = await Promise.all([
+          program.spot.pairCount().call(),
+          program.spot.restingOrderCount().call(),
+          program.spot.isPaused().call(),
+        ]);
+        if (!active) return;
+        setStatus({
+          pairs: Number(pairs),
+          restingOrders: Number(restingOrders),
+          paused: Boolean(paused),
+        });
+      } catch { /* keep the last good reading */ }
+    };
 
     fetch();
     const id = setInterval(() => { if (!document.hidden) fetch(); }, 10_000);
@@ -68,24 +74,30 @@ export function Sidebar({ activeTab, setActiveTab, onNavigate }: SidebarProps) {
       </nav>
       <div className={styles.footer}>
         <div className={styles.marketStatus}>
-          <div className={styles.label}>Market Status</div>
-          <div className={styles.value} style={{ color: status?.running ? 'var(--buy-green, #26a69a)' : 'var(--text-secondary)' }}>
-            {status ? (status.running ? 'Live' : 'Idle') : '-'}
+          <div className={styles.label}>Venue</div>
+          <div
+            className={styles.value}
+            style={{ color: status && !status.paused ? 'var(--buy-green, #26a69a)' : 'var(--sell-red)' }}
+          >
+            {status ? (status.paused ? 'Paused' : 'Live') : '-'}
           </div>
         </div>
+        {status?.paused && (
+          <div className={styles.marketStatus}>
+            <div className={styles.label} style={{ gridColumn: '1 / -1' }}>
+              Trading is halted. Cancelling orders and withdrawing stay open.
+            </div>
+          </div>
+        )}
         {status && (
           <>
             <div className={styles.marketStatus}>
-              <div className={styles.label}>Traders</div>
-              <div className={styles.value}>{status.agents}</div>
+              <div className={styles.label}>Markets</div>
+              <div className={styles.value}>{status.pairs}</div>
             </div>
             <div className={styles.marketStatus}>
-              <div className={styles.label}>Trades</div>
-              <div className={styles.value}>{status.trades}</div>
-            </div>
-            <div className={styles.marketStatus}>
-              <div className={styles.label}>Open Orders</div>
-              <div className={styles.value}>{status.orders}</div>
+              <div className={styles.label}>Resting Orders</div>
+              <div className={styles.value}>{status.restingOrders}</div>
             </div>
           </>
         )}

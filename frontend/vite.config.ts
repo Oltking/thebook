@@ -62,19 +62,12 @@ export default defineConfig({
           '**/paseo-*.js',
         ],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:\/\/rpc\.vara\.network\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'vara-rpc-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60, // 1 hour
-              },
-            },
-          },
-        ],
+        // No runtime caching. The only rule here matched https://rpc.vara.network,
+        // but the app talks to the node over a WebSocket, which service workers do
+        // not intercept — so it never fired (audit L-13). Chain reads and prices
+        // must not be served from a cache anyway: a stale balance or price on a
+        // trading screen is worse than a slow one.
+        runtimeCaching: [],
       },
     }),
   ],

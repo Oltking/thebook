@@ -80,14 +80,18 @@ export function useSpotActions() {
     approve,
     placeLimit: (pairId: bigint, side: Side, price: bigint, qty: bigint) =>
       call<bigint>(() => program!.spot.placeLimit(pairId, side, price, qty)),
-    marketBuy: (pairId: bigint, qty: bigint, maxQuote: bigint) =>
-      call<bigint>(() => program!.spot.marketBuy(pairId, qty, maxQuote)),
-    marketSell: (pairId: bigint, qty: bigint) =>
-      call<bigint>(() => program!.spot.marketSell(pairId, qty)),
+    // Market orders carry an explicit slippage bound: the worst fill the caller will
+    // accept. Without one a taker sweeps whatever happens to be resting, which on a
+    // thin book is an open invitation to pull quotes and leave a lowball (audit H-03).
+    marketBuy: (pairId: bigint, qty: bigint, maxQuote: bigint, minBaseOut: bigint) =>
+      call<bigint>(() => program!.spot.marketBuy(pairId, qty, maxQuote, minBaseOut)),
+    marketSell: (pairId: bigint, qty: bigint, minQuoteOut: bigint) =>
+      call<bigint>(() => program!.spot.marketSell(pairId, qty, minQuoteOut)),
     cancelOrder: (orderId: bigint) =>
       call<null>(() => program!.spot.cancelOrder(orderId)),
-    withdraw: (token: string) =>
-      call<bigint>(() => program!.spot.withdraw(token as `0x${string}`)),
+    /** Withdraw `amount` of a claimable token, or the whole balance when omitted. */
+    withdraw: (token: string, amount?: bigint) =>
+      call<bigint>(() => program!.spot.withdraw(token as `0x${string}`, amount ?? null)),
 
     // Perps (margin escrowed in the collateral token; needs a prior approve of it).
     openPosition: (marketId: bigint, isLong: boolean, margin: bigint, leverage: number) =>

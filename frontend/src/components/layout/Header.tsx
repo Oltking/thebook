@@ -3,11 +3,10 @@ import { web3Accounts, web3Enable } from '@polkadot/extension-dapp';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
-import { Wallet, UserPlus, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
+import { Wallet, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './Header.module.css';
 import { Logo } from '../ui/Logo';
-import { usePortfolio } from '../../hooks/usePortfolio';
 import { useToast } from '../ui/Toast';
 import { useViewport } from '../../hooks/useViewport';
 import { AccountSelector } from '../ui/AccountSelector';
@@ -17,17 +16,10 @@ import { formatUsdPrice } from '../../lib/format';
 
 interface HeaderProps {
   onMenuClick: () => void;
-  onEnterHive: () => void;
-  /** Which world this header sits in. Drives the active switch side + extras. */
-  world?: 'trade' | 'hive';
-  onExitHive?: () => void;
-  onDeploy?: () => void;
 }
 
-
-export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, onDeploy }: HeaderProps) {
+export function Header({ onMenuClick }: HeaderProps) {
   const { account, login, logout } = useAccount();
-  const { portfolio, loading } = usePortfolio();
   const { error } = useToast();
   const { isMobile } = useViewport();
   const { prices } = useMarketData();
@@ -74,28 +66,16 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
     setShowAccountSelector(false);
   }, [login]);
 
-  const handleJoin = useCallback(() => {
-    // Agent creation requires a name + strategy, so open the wizard rather than
-    // joining blind. The wizard calls join(name, strategy) on submit.
-    window.dispatchEvent(new Event('thebookdex:open-wizard'));
-  }, []);
-
-  const formatUsd = (val: bigint | number | string) => {
-    return (Number(val) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2 });
-  };
-
   const priceTicker = [
     { asset: 'BTC', data: prices.BTC },
     { asset: 'ETH', data: prices.ETH },
     { asset: 'VARA', data: prices.VARA },
   ];
 
-  const isHive = world === 'hive';
-
   return (
     <>
-      <header className={`${styles.header} ${isHive ? styles.headerFull : ''}`}>
-        {isMobile && !isHive && (
+      <header className={styles.header}>
+        {isMobile && (
           <button onClick={onMenuClick} className={styles.menuBtn} aria-label="Open menu">
             <Menu size={22} />
           </button>
@@ -103,15 +83,6 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
         <div className={styles.logo}>
           <Logo className={styles.logoMark} />
           <span className={styles.logoText}><span className={styles.accent}>the</span>book</span>
-        </div>
-
-        {/* Hive / Trade world switch - centered, same position as the Hive's.
-            The Hive is the first side of the app, so it sits on the left. */}
-        <div className={styles.modeSwitch} role="tablist" aria-label="Mode">
-          <button role="tab" className={isHive ? styles.modeOn : ''} aria-selected={isHive}
-            onClick={!isHive ? onEnterHive : undefined}>⬡ Agents</button>
-          <button role="tab" className={!isHive ? styles.modeOn : ''} aria-selected={!isHive}
-            onClick={isHive ? onExitHive : undefined}>Trade</button>
         </div>
 
         {/* Live public price ticker. Hidden once connected, where the right side
@@ -138,28 +109,8 @@ export function Header({ onMenuClick, onEnterHive, world = 'trade', onExitHive, 
 
         <div className={styles.actions}>
           <ThemeToggle className={styles.headerThemeToggle} />
-          {isHive && onDeploy && (
-            <button className={styles.deployHeaderBtn} onClick={onDeploy}>
-              {isMobile ? '+ Agent' : '+ Deploy agent'}
-            </button>
-          )}
-          {account && !isMobile && (
-            <div className={styles.balanceInfo}>
-              <span className={styles.balanceLabel}>Balance:</span>
-              <span className={styles.balanceValue}>
-                {portfolio ? `$${formatUsd(portfolio.usd)}` : '---'}
-              </span>
-            </div>
-          )}
-
           {account ? (
             <div className={styles.accountInfo}>
-              {!portfolio && (
-                <button onClick={handleJoin} className={styles.joinButton} disabled={loading}>
-                  <UserPlus size={16} />
-                  {loading ? '...' : 'Create Agent'}
-                </button>
-              )}
               {!isMobile && (
                 <span className={styles.address}>{account.decodedAddress.slice(0, 6)}...{account.decodedAddress.slice(-4)}</span>
               )}

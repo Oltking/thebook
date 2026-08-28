@@ -2,11 +2,11 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { SkeletonCard } from './components/ui/Skeleton';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const PerpsTradeView = lazy(() => import('./views/PerpsTradeView').then(m => ({ default: m.PerpsTradeView })));
 const SpotPortfolioView = lazy(() => import('./views/SpotPortfolioView').then(m => ({ default: m.SpotPortfolioView })));
-const HiveView = lazy(() => import('./views/hive/HiveView').then(m => ({ default: m.HiveView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
 
 function PageLoader() {
@@ -17,73 +17,59 @@ function PageLoader() {
   );
 }
 
-const TABS = ['trade', 'futures', 'swap', 'pools', 'portfolio'];
+const TABS = ['trade', 'perps', 'portfolio'];
 
 // The app has its own address so a refresh keeps you inside it. The public
 // landing is the root ("/"); the app lives under "/app". An "app." subdomain
 // (app.thesite) counts as being in the app too, so you can point DNS at the
-// same deploy and land straight in. The Hive is the first side of the app, so a
-// bare "/app" lands there; "/app/<tab>" opens the trading side on that tab.
-function readLocation(): { entered: boolean; mode: 'trade' | 'hive'; tab: string } {
+// same deploy and land straight in. "/app/<tab>" opens the app on that tab.
+function readLocation(): { entered: boolean; tab: string } {
   const host = window.location.hostname;
   const onAppHost = host === 'app' || host.startsWith('app.');
   const path = window.location.pathname.replace(/\/+$/, '');
   const seg = path.split('/').filter(Boolean); // e.g. ['app','futures']
   const inApp = onAppHost || seg[0] === 'app';
-  if (!inApp) return { entered: false, mode: 'trade', tab: 'trade' };
+  if (!inApp) return { entered: false, tab: 'trade' };
   // On an app host the app segments start at 0; on a path they start after 'app'.
   const rest = onAppHost ? seg : seg.slice(1);
-  // v1: the trade app is the default face. The Hive (agent world) still assumes the
-  // legacy virtual-balance model, so it's parked behind an explicit "/hive" path
-  // rather than being the landing side (see task: rework/park the Hive).
-  if (rest[0] === 'hive') return { entered: true, mode: 'hive', tab: 'trade' };
-  if (!rest[0]) return { entered: true, mode: 'trade', tab: 'trade' };
+  // The Hive (the agent world) was removed with the legacy virtual-balance
+  // services it ran on — see audit C-02. "/hive" now lands on the trade app.
+  if (!rest[0]) return { entered: true, tab: 'trade' };
   const tab = TABS.includes(rest[0]) ? rest[0] : 'trade';
-  return { entered: true, mode: 'trade', tab };
+  return { entered: true, tab };
 }
 
-// Build the URL that reflects the current world, respecting an app.* host.
-function urlFor(entered: boolean, mode: 'trade' | 'hive', tab: string): string {
+// Build the URL that reflects the current view, respecting an app.* host.
+function urlFor(entered: boolean, tab: string): string {
   const onAppHost = window.location.hostname.startsWith('app.') || window.location.hostname === 'app';
   const base = onAppHost ? '' : '/app';
   if (!entered) return '/';
-  if (mode === 'hive') return `${base}/hive`;
   return `${base}/${tab}`;
 }
 
 function App() {
   const initial = readLocation();
   const [activeTab, setActiveTab] = useState(initial.tab);
-  // Two worlds: the trading app and The Hive (agent ecosystem). The "Agent" nav
-  // item crosses into the Hive; the Hive's own switch crosses back.
-  const [mode, setMode] = useState<'trade' | 'hive'>(initial.mode);
   // Public landing is the front door; entering the app moves the URL to /app so
-  // a refresh stays put. v1 enters the trade app by default (the Hive is parked).
+  // a refresh stays put.
   const [entered, setEntered] = useState(initial.entered);
-  const enterApp = (toHive = false) => {
-    setMode(toHive ? 'hive' : 'trade');
-    setEntered(true);
-  };
+  const enterApp = () => setEntered(true);
 
-  const navigate = (tab: string) => {
-    if (tab === 'agent') { setMode('hive'); return; }
-    setActiveTab(tab);
-  };
+  const navigate = (tab: string) => setActiveTab(tab);
 
   // Keep the URL in sync with the world so refresh / back / forward work.
   useEffect(() => {
-    const target = urlFor(entered, mode, activeTab);
+    const target = urlFor(entered, activeTab);
     if (window.location.pathname !== target) {
       window.history.pushState(null, '', target);
     }
-  }, [entered, mode, activeTab]);
+  }, [entered, activeTab]);
 
   // Respond to browser back/forward.
   useEffect(() => {
     const onPop = () => {
       const loc = readLocation();
       setEntered(loc.entered);
-      setMode(loc.mode);
       setActiveTab(loc.tab);
     };
     window.addEventListener('popstate', onPop);
@@ -103,10 +89,10 @@ function App() {
     }
   };
 
-  // Which world is on screen, for the crossfade between landing / trade / hive.
+  // Which world is on screen, for the crossfade between landing and the app.
   // NOTE: animate OPACITY ONLY. transform/filter would create a containing block
-  // and break the fixed header, sidebar and Hive positioning.
-  const world = !entered ? 'landing' : mode === 'hive' ? 'hive' : 'trade';
+  // and break the fixed header and sidebar positioning.
+  const world = entered ? 'trade' : 'landing';
   const fade = {
     initial: { opacity: 0 },
     animate: { opacity: 1 },
@@ -121,27 +107,24 @@ function App() {
       <AnimatePresence mode="wait">
         {world === 'landing' && (
           <motion.div key="landing" {...fade}>
-            <Suspense fallback={<PageLoader />}>
-              <LandingView onLaunch={() => enterApp(false)} onEnterHive={() => enterApp(true)} />
-            </Suspense>
-          </motion.div>
-        )}
-        {world === 'hive' && (
-          <motion.div key="hive" {...fade}>
-            <Suspense fallback={<PageLoader />}>
-              <HiveView
-                onExitHive={() => setMode('trade')}
-                onDeploy={() => window.dispatchEvent(new Event('thebookdex:open-wizard'))}
-              />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <LandingView onLaunch={enterApp} />
+              </Suspense>
+            </ErrorBoundary>
           </motion.div>
         )}
         {world === 'trade' && (
           <motion.div key="trade" {...fade}>
-            <Layout activeTab={activeTab} setActiveTab={navigate} onEnterHive={() => setMode('hive')}>
-              <Suspense fallback={<PageLoader />}>
-                {renderContent()}
-              </Suspense>
+            <Layout activeTab={activeTab} setActiveTab={navigate}>
+              {/* Keyed on the tab so recovering from an error on one view doesn't
+                  leave the next one stuck in the failed state. The chrome stays
+                  mounted either way, so cancel/withdraw remain reachable. */}
+              <ErrorBoundary key={activeTab}>
+                <Suspense fallback={<PageLoader />}>
+                  {renderContent()}
+                </Suspense>
+              </ErrorBoundary>
             </Layout>
           </motion.div>
         )}

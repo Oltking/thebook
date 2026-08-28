@@ -10,10 +10,9 @@ interface LayoutProps {
   children: ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onEnterHive: () => void;
 }
 
-export function Layout({ children, activeTab, setActiveTab, onEnterHive }: LayoutProps) {
+export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
   const { isMobile } = useViewport();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -25,7 +24,7 @@ export function Layout({ children, activeTab, setActiveTab, onEnterHive }: Layou
       </a>
       {!isMobile && <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />}
       <div className={styles.main}>
-        <Header onMenuClick={() => setDrawerOpen(true)} onEnterHive={onEnterHive} />
+        <Header onMenuClick={() => setDrawerOpen(true)} />
         <main id="main-content" className={styles.content}>
           {children}
         </main>

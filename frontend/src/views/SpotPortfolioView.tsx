@@ -30,7 +30,7 @@ export function SpotPortfolioView() {
   const refreshOrders = useCallback(async () => {
     if (!program || !account) { setOrders([]); return; }
     try {
-      const mine = await program.spot.getMyOrders().withAddress(account.decodedAddress).call();
+      const mine = await program.spot.getMyOrders(0, 200).withAddress(account.decodedAddress).call();
       setOrders(Array.isArray(mine) ? mine : []);
     } catch { /* keep last */ }
   }, [program, account]);

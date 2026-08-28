@@ -19,7 +19,8 @@ export function useSpotPairs() {
     if (!program) return;
     setLoading(true);
     try {
-      const rows = await program.spot.getPairs().call();
+      // Paginated read; the curated list is small, one page covers it (audit L-05).
+      const rows = await program.spot.getPairs(0, 200).call();
       setPairs(Array.isArray(rows) ? rows : []);
     } catch (e) {
       console.error('useSpotPairs: failed to read pairs', e);
@@ -199,7 +200,7 @@ export function usePerpPositions() {
   const refresh = useCallback(async () => {
     if (!program || !account) { setPositions([]); return; }
     try {
-      const rows = await program.perpsV1.getPositions(account.decodedAddress).call();
+      const rows = await program.perpsV1.getPositions(account.decodedAddress, 0, 200).call();
       setPositions((Array.isArray(rows) ? rows : []).map((r: any) => ({
         id: BigInt(r[0]), marketId: BigInt(r[1]), isLong: !!r[2], notional: BigInt(r[3]),
         entry: BigInt(r[4]), margin: BigInt(r[5]), leverage: Number(r[6]), pnl: BigInt(r[7]),
