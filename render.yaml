@@ -63,7 +63,40 @@ services:
         value: wss://rpc.vara.network
       - key: INTERVAL_MS
         value: "10000"
-      - key: KEEPER_SEED     # keeper-only key — must NOT be the admin seed (H-09)
+      - key: KEEPER_SEED          # keeper-only key, must NOT be the admin seed (H-09)
         sync: false
-      - key: PROGRAM_ID      # the deployed DEX program id
+      - key: THEBOOK_PROGRAM_ID   # the deployed DEX program id
+        value: 0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774
+
+  # ── Solvency monitor ────────────────────────────────────────────────────────
+  #
+  # Read-only: it signs nothing and needs no seed, so it is safe to run from the
+  # moment the program holds anything. Start it BEFORE funding the reserve, not
+  # after — its job is to notice the first time something is wrong.
+  #
+  # Asserts, per token, every 30s:
+  #   balance_of(program) >= escrow + dust + reserve
+  # and alerts on sudden balance drops, thin perp coverage, and pause changes
+  # nobody initiated.
+  #
+  # ALERT_WEBHOOK must point somewhere a human is actually paged. A monitor
+  # reporting into a channel nobody reads is not monitoring.
+  - type: worker
+    name: thebook-solvency-monitor
+    runtime: node
+    plan: starter
+    rootDir: frontend
+    buildCommand: npm install && npm install --prefix ../sdk
+    startCommand: node scripts/solvency-monitor.mjs
+    autoDeploy: true
+    envVars:
+      - key: NODE_ADDRESS
+        value: wss://rpc.vara.network
+      - key: PROGRAM_ID
+        value: 0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774
+      - key: INTERVAL_MS
+        value: "30000"
+      - key: THRESHOLD_PCT
+        value: "5"
+      - key: ALERT_WEBHOOK      # Slack-compatible {text} endpoint
         sync: false
