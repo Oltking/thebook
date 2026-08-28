@@ -4,29 +4,33 @@
 // dropped — suppress the tuple-shape lint crate-wide instead.
 #![allow(clippy::type_complexity)]
 
+//! thebook — a non-custodial spot CLOB and cash-settled perps venue on Vara.
+//!
+//! The program exposes exactly two services, both over a single `SpotState`:
+//! `Spot` (the order book, escrow, and claimable balances) and `PerpsV1`.
+//!
+//! The legacy virtual-balance services (`orderbook`, `amm`, `perps`) and their
+//! `DexState` were removed in the audit remediation. They shared this program's
+//! account — and therefore its real token balance — while running a ledger anyone
+//! could mint into via `Join`, which `Withdraw` then paid out in real tokens
+//! (finding C-02). That module also carried `call_agent_service`, an
+//! unauthenticated arbitrary cross-program call that let any caller spend the
+//! program's own token balance (finding C-01). Neither has a safe version, so
+//! neither came back.
+
 use sails_rs::cell::RefCell;
 use sails_rs::gstd::msg;
 use sails_rs::prelude::*;
 
-pub mod amm;
-pub mod orderbook;
-pub mod perps;
 pub mod perps_spot;
 pub mod spot;
-pub mod state;
 pub mod types;
 
-pub use amm::AmmService;
-pub use orderbook::OrderbookService;
-pub use perps::PerpsService;
 pub use perps_spot::PerpsService as SpotPerpsService;
 pub use spot::{SpotService, SpotState};
-pub use state::DexState;
 
 pub struct Program {
-    state: RefCell<DexState>,
-    /// v1 mainnet spot CLOB state (real VFT escrow). Separate from the legacy
-    /// virtual-balance `state` so the two paths never entangle during the rewrite.
+    /// v1 spot CLOB + perps state (real VFT escrow, claimable balances).
     spot: RefCell<SpotState>,
 }
 
@@ -35,33 +39,15 @@ impl Program {
     // Sails constructor (route "New"); a `Default` impl would be meaningless here.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        // The deployer becomes admin for autopilot management (legacy) and the initial
-        // spot listing authority. On mainnet, admin is transferred to the multisig.
-        let deployer = msg::source();
-        let state = DexState {
-            admin: deployer,
-            ..DexState::default()
-        };
+        // The deployer becomes the initial admin / listing authority. On mainnet,
+        // admin is transferred to the multisig via the two-step handover.
         let spot = SpotState {
-            admin: deployer,
+            admin: msg::source(),
             ..SpotState::default()
         };
         Self {
-            state: RefCell::new(state),
             spot: RefCell::new(spot),
         }
-    }
-
-    pub fn orderbook(&self) -> OrderbookService<'_> {
-        OrderbookService::new(&self.state)
-    }
-
-    pub fn amm(&self) -> AmmService<'_> {
-        AmmService::new(&self.state)
-    }
-
-    pub fn perps(&self) -> PerpsService<'_> {
-        PerpsService::new(&self.state)
     }
 
     pub fn spot(&self) -> SpotService<'_> {
