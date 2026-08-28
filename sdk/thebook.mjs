@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { GearApi } from '@gear-js/api';
 import { Keyring } from '@polkadot/api';
-import { u8aToHex, stringToU8a } from '@polkadot/util';
+import { u8aToHex, u8aConcat, compactToU8a, stringToU8a } from '@polkadot/util';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
@@ -93,6 +93,12 @@ export async function connectTheBook(opts = {}) {
 
   const keyring = new Keyring({ type: 'sr25519' });
   const account = keyring.addFromUri(seed);
+  /** This account as a 32-byte actor id.
+   *
+   *  VFT queries take an `actor_id`, not an SS58 string: passing `account.address`
+   *  fails to decode ("Expected input with 32 bytes, found 48"). Query *routing*
+   *  (`withAddress`) accepts SS58 happily, which is why this only bites arguments. */
+  const accountId = u8aToHex(account.addressRaw);
 
   // Gasless: request (once, lazily) a sponsor-funded voucher for this agent from the
   // configured endpoint, and reuse it for every tx. Silent fallback to self-paid gas.
@@ -170,7 +176,36 @@ export async function connectTheBook(opts = {}) {
     }
   }
 
-// Send a state-changing call and wait until it's finalized. Surfaces the
+/** wVARA on Vara mainnet: the wrapper program around native VARA. */
+  const WVARA = '0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17';
+
+  /**
+   * Call a raw Sails route on another program, optionally attaching native value.
+   *
+   * wVARA's wrapper lives on a `VftNativeExchange` service that the shared VFT IDL
+   * does not describe, so the route bytes are built directly: SCALE string service,
+   * SCALE string method, then the encoded arguments. `Mint` is payable, so the
+   * attached `value` is what gets wrapped.
+   */
+  async function sendRaw(programId, service, fn, argBytes = new Uint8Array(), value = 0n) {
+    const enc = (str) => {
+      const bytes = new TextEncoder().encode(str);
+      return u8aConcat(compactToU8a(bytes.length), bytes);
+    };
+    const payload = u8aToHex(u8aConcat(enc(service), enc(fn), argBytes));
+    const source = accountId;
+    const gas = await api.program.calculateGas.handle(source, programId, payload, value, true);
+    const limit = (gas.min_limit.toBigInt() * 5n) / 2n;
+    const tx = api.message.send({ destination: programId, payload, gasLimit: limit, value });
+    return new Promise((resolve, reject) => {
+      tx.signAndSend(account, { nonce: -1 }, ({ status, dispatchError }) => {
+        if (dispatchError) return reject(new Error(dispatchError.toString()));
+        if (status.isInBlock || status.isFinalized) resolve(true);
+      }).catch(reject);
+    });
+  }
+
+  // Send a state-changing call and wait until it's finalized. Surfaces the
   // program's own error (e.g. UnknownPair, InsufficientAllowance) as a thrown Error.
   async function send(service, fn, args) {
     const tx = sails.services[service].functions[fn](...args);
@@ -258,8 +293,8 @@ export async function connectTheBook(opts = {}) {
       // than one order's worth (audit H-07, M-11).
       approve: (token, amount) => sendVft(token, 'Approve', [programId, amount]),
       // The wallet's real balance / current DEX allowance for a token (smallest-units).
-      balanceOf: (token) => queryVft(token, 'BalanceOf', [account.address]),
-      allowance: (token) => queryVft(token, 'Allowance', [account.address, programId]),
+      balanceOf: (token) => queryVft(token, 'BalanceOf', [accountId]),
+      allowance: (token) => queryVft(token, 'Allowance', [accountId, programId]),
       // Admin/multisig only. `listPair` verifies the decimals you pass against each
       // token's own metadata and rejects a mismatch.
       listPair: (base, quote, baseDec, quoteDec) =>
@@ -301,6 +336,38 @@ export async function connectTheBook(opts = {}) {
         const [escrow, dust, reserve] = await query('Spot', 'GetSolvency', [token]);
         return { escrow: BigInt(escrow), dust: BigInt(dust), reserve: BigInt(reserve) };
       },
+    },
+
+    // ── Native VARA <-> wVARA ──
+    //
+    // The exchange only understands VFT tokens, but gas is paid in native VARA, so
+    // crossing between them is something every user and agent needs. wVARA wraps
+    // native VARA 1:1 through its `VftNativeExchange` service.
+    //
+    // This is a wrapper, not a trade: no price, no slippage, no counterparty. One
+    // VARA is always exactly one wVARA, minus the gas to do it.
+    vara: {
+      /** Wrap native VARA into wVARA. Amount in smallest-units (12 decimals). */
+      wrap: (amount) => sendRaw(WVARA, 'VftNativeExchange', 'Mint', new Uint8Array(), BigInt(amount)),
+      /** Burn wVARA back into native VARA.
+       *
+       *  The amount is `U256`, matching the VFT balance type, not `u128`. Encoded as
+       *  u128 it is 16 bytes, the router cannot match the signature, and the program
+       *  reports it as an unknown route rather than a bad argument — which reads as
+       *  "unwrapping is not supported" when it is really "wrong integer width". */
+      unwrap: (amount) =>
+        sendRaw(WVARA, 'VftNativeExchange', 'Burn', api.createType('U256', amount).toU8a()),
+      /** This account's wVARA balance (smallest-units). */
+      async wrapped() {
+        return BigInt((await queryVft(WVARA, 'BalanceOf', [accountId])).toString());
+      },
+      /** This account's native VARA balance (smallest-units). */
+      async native() {
+        const { data } = await api.query.system.account(account.address);
+        return BigInt(data.free.toString());
+      },
+      /** The wVARA program id, for building pairs and pools. */
+      token: WVARA,
     },
 
     // ── v1 AMM: constant-product pools over the same real VFT tokens ──

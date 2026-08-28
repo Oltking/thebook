@@ -262,6 +262,36 @@ server.tool('thebook_my_orders', "This wallet's resting orders. Filled and cance
   {}, tool((b) => b.spot.myOrders()),
 );
 
+// ── Native VARA <-> wVARA ──
+//
+// The exchange only understands VFT tokens, but gas is paid in native VARA, so this
+// is a constant need. It is a 1:1 wrapper, not a trade: no price, no slippage, no
+// counterparty. Not spend-capped for that reason — wrapping does not risk value, it
+// changes the form value is held in, and the caller keeps every unit either way.
+server.tool('thebook_vara_balances', "This wallet's native VARA and wrapped wVARA balances, in smallest-units (12 decimals).",
+  {},
+  tool(async (b) => ({
+    nativeVara: (await b.vara.native()).toString(),
+    wrappedVara: (await b.vara.wrapped()).toString(),
+    wvaraToken: b.vara.token,
+    note: 'Native VARA pays gas. wVARA is the tradeable token. They convert 1:1.',
+  })),
+);
+server.tool('thebook_wrap_vara', 'Convert native VARA into wVARA so it can be traded, pooled, or used as collateral. 1:1, no price or slippage. Keep some native VARA back for gas.',
+  { amount: bnStr.describe('Smallest-units of VARA to wrap (12 decimals: 1 VARA = 1000000000000)') },
+  tool(async (b, { amount }) => {
+    await b.vara.wrap(BigInt(amount));
+    return `Wrapped ${Number(amount) / 1e12} VARA into wVARA. Now holding ${(await b.vara.wrapped()).toString()} wVARA.`;
+  }),
+);
+server.tool('thebook_unwrap_vara', 'Convert wVARA back into native VARA, for example to pay gas. 1:1, no price or slippage.',
+  { amount: bnStr.describe('Smallest-units of wVARA to unwrap (12 decimals: 1 wVARA = 1000000000000)') },
+  tool(async (b, { amount }) => {
+    await b.vara.unwrap(BigInt(amount));
+    return `Unwrapped ${Number(amount) / 1e12} wVARA into native VARA. Now holding ${(await b.vara.native()).toString()} native VARA.`;
+  }),
+);
+
 // ── Liquidity pools ──
 server.tool('thebook_pools', 'List the AMM liquidity pools with their reserves and total shares.',
   {}, tool((b) => b.amm.pools()),
