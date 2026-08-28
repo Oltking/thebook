@@ -838,6 +838,24 @@ export class PerpsV1 {
   }
 
   /**
+   * `(collateral token, keeper)`. The collateral token is what margin is escrowed
+   * in, so a client can attribute locked margin to the right token instead of
+   * showing a wallet balance that silently dropped.
+  */
+  public getConfig(): QueryBuilder<[ActorId, ActorId]> {
+    return new QueryBuilder<[ActorId, ActorId]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetConfig',
+      null,
+      null,
+      '([u8;32], [u8;32])',
+    );
+  }
+
+  /**
    * Liquidation price for a position (0 if none).
   */
   public getLiqPrice(position_id: number | string | bigint): QueryBuilder<bigint> {

@@ -17,28 +17,11 @@ export const PROGRAM_ID_CONFIGURED =
 
 export const NETWORK_NAME = import.meta.env.VITE_NETWORK_NAME ?? 'Vara Mainnet';
 
-const ZERO_ADDR =
-  '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
-
-// The four wrapped test tokens the DEX custodies. Each is a separate VFT program
-// deployed from `token/`; users claim from its faucet then deposit into the DEX.
-// Program IDs are environment-driven so the same build works across deployments.
-export interface TokenMeta {
-  kind: TokenKind;
-  label: string;
-  symbol: string;
-  decimals: number;
-  programId: `0x${string}`;
-}
-
-export const TOKENS: TokenMeta[] = [
-  { kind: 'Usd', label: 'Tether USD', symbol: 'USDT', decimals: 6, programId: (import.meta.env.VITE_TOKEN_USD ?? ZERO_ADDR) as `0x${string}` },
-  { kind: 'Btc', label: 'Bitcoin', symbol: 'wBTC', decimals: 6, programId: (import.meta.env.VITE_TOKEN_BTC ?? ZERO_ADDR) as `0x${string}` },
-  { kind: 'Eth', label: 'Ethereum', symbol: 'wETH', decimals: 6, programId: (import.meta.env.VITE_TOKEN_ETH ?? ZERO_ADDR) as `0x${string}` },
-  { kind: 'Vara', label: 'Vara', symbol: 'wVARA', decimals: 6, programId: (import.meta.env.VITE_TOKEN_VARA ?? ZERO_ADDR) as `0x${string}` },
-];
-
-export const TOKENS_CONFIGURED = TOKENS.every((t) => t.programId !== ZERO_ADDR);
+// NOTE: the `TOKENS` / `TokenMeta` registry that used to live here described the
+// four wrapped tokens of the legacy virtual-balance model, keyed by a `TokenKind`
+// enum the contract no longer has. v1 reads its markets from `Spot/GetPairs` and
+// each token's decimals from the pair itself, so nothing needs a static list.
+// The `VITE_TOKEN_*` env vars are likewise unused.
 
 // Registry of the curated Vara-mainnet bridged tokens (addresses lowercased). The
 // on-chain VftMetadata/Symbol query is occasionally slow or fails; falling back to

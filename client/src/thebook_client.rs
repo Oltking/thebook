@@ -517,6 +517,10 @@ pub mod perps_v_1 {
             &mut self,
             amount: u128,
         ) -> sails_rs::client::PendingCall<io::WithdrawReserve, Self::Env>;
+        /// `(collateral token, keeper)`. The collateral token is what margin is escrowed
+        /// in, so a client can attribute locked margin to the right token instead of
+        /// showing a wallet balance that silently dropped.
+        fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env>;
         /// Liquidation price for a position (0 if none).
         fn get_liq_price(
             &self,
@@ -608,6 +612,9 @@ pub mod perps_v_1 {
         ) -> sails_rs::client::PendingCall<io::WithdrawReserve, Self::Env> {
             self.pending_call((amount,))
         }
+        fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env> {
+            self.pending_call(())
+        }
         fn get_liq_price(
             &self,
             position_id: u64,
@@ -647,6 +654,7 @@ pub mod perps_v_1 {
         sails_rs::io_struct_impl!(SetMark (market_id: u64, price: u128) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetMarketCap (market_id: u64, max_oi: u128) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(WithdrawReserve (amount: u128) -> Result<u128, super::PerpsError>);
+        sails_rs::io_struct_impl!(GetConfig () -> (ActorId,ActorId,));
         sails_rs::io_struct_impl!(GetLiqPrice (position_id: u64) -> u128);
         sails_rs::io_struct_impl!(GetMarkets () -> Vec<super::PerpMarket>);
         sails_rs::io_struct_impl!(GetPositions (owner: ActorId, offset: u32, limit: u32) -> Vec<(u64,u64,bool,u128,u128,u128,u32,i128,)>);

@@ -37,8 +37,13 @@ it must be replaced before it is used — not after.
       confirms the program holds nothing in any of the four tokens.
 - [x] P0.4 `/api/voucher` hardened and fails closed. `[U]` Removing `SPONSOR_SEED`
       from Vercel remains the instant kill switch.
-- [ ] P0.5 `[U]` **Rotate the Groq key and the sponsor seed.** Both sat in a plaintext
-      dotfile. Nothing in the repo can do this.
+- [x] P0.5 Groq key: **the endpoint is deleted.** `/api/agent` and its only caller
+      (the Hive's agent brief) were removed, so there is no server-held LLM key left
+      to rotate — delete `GROQ_API_KEY` from Vercel rather than rotating it.
+- [ ] P0.5 `[U]` **Rotate the sponsor seed.** It sat unencrypted in `frontend/.env`
+      on a development machine and in the Vercel dashboard. Verified never committed:
+      `.env` is untracked and a full history scan finds no secret values. The exposure
+      is local-machine only, not the repository.
 - [x] P0.6 Notify holders — **no holders to notify:** zero custodied balance, and
       `Spot/GetPairs` shows markets listed but the books empty.
 
@@ -141,7 +146,7 @@ None of these can be done from the repository. All are required before real fund
 - [ ] **Testnet dress rehearsal** of the fixed contract with real VFT tokens.
 - [ ] **At least one committed market maker.** Empty books are what make thin-book
       attacks worth attempting, even with slippage bounds in place.
-- [ ] Rotate the Groq key and sponsor seed (P0.5).
+- [ ] Rotate the sponsor seed, and delete `GROQ_API_KEY` from Vercel (P0.5).
 - [ ] Run the solvency monitor against the new program before opening deposits.
 
 ---

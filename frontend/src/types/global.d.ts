@@ -1,146 +1,14 @@
 import { ActorId } from 'sails-js';
 
 declare global {
-  // ── Custom app + VFT globals (not from the thebook IDL; re-added after codegen) ──
-  export interface PriceFeed {
-    symbol: string;
-    price_usd_micro: number | string | bigint;
-    change_24h_bps: number;
-    market_cap_usd: number | string | bigint;
-    volume_24h_usd: number | string | bigint;
-    updated_at_block: number;
-  }
-  export interface Pagination { offset: number; limit: number; }
-  export type FaucetError = "AlreadyClaimed" | "MintFailed";
-
-  export type ContractError = "NotAuthorized" | "NotAdmin" | "BadParams" | "JoinFirst" | "InsufficientUsd" | "InsufficientAsset" | "OrderNotFound" | "OrderAlreadyDone" | "NoLiquidity" | "NoBuyers" | "PoolExists" | "PoolNotFound" | "SameAssetPool" | "InsufficientLiquidity" | "SlippageExceeded" | "ZeroAmount" | "AgentCallFailed" | "BookFull" | "NoMarkPrice" | "LeverageTooHigh" | "PositionNotFound" | "WrongDirection" | "NotLiquidatable" | "StaleMark";
+  export type SpotError = "NotAdmin" | "BadParams" | "PairExists" | "NoPair" | "PairInactive" | "BookFull" | "NoOrder" | "NotOwner" | "NothingToClaim" | "TransferFailed" | "Paused" | "SlippageExceeded" | "Overflow" | "DecimalsMismatch" | "NotPendingAdmin";
 
   /**
-   * The four balances the DEX custodies, each backed by a real VFT on-chain.
-   * `Usd` is a separate kind because the orderbook denominates in USD but the
-   * `Asset` enum only covers the tradeable tokens (BTC/ETH/VARA).
+   * `Ord` matters: `Side` is part of the spot price-level index key
+   * `(pair_id, side, price)`, which is what makes matching walk levels instead of
+   * every order ever placed.
   */
-  export type TokenKind = "Usd" | "Btc" | "Eth" | "Vara";
-
-  /**
-   * The trading persona a user picks when creating their agent. Display/behaviour
-   * hint today; drives autopilot strategy selection in a later phase.
-  */
-  export type AgentStrategy = "ArbitrageHunter" | "MarketMaker" | "Momentum";
-
-  export type Asset = "BTC" | "ETH" | "VARA";
-
   export type Side = "Buy" | "Sell";
-
-  export interface LeaderEntry {
-    id: ActorId;
-    name: string;
-    strategy: AgentStrategy;
-    usd: number | string | bigint;
-    net_worth: number | string | bigint;
-  }
-
-  export type OrderStatus = "Open" | "Partial" | "Filled" | "Cancelled";
-
-  export interface OrderPlacedEvent {
-    trader: ActorId;
-    side: Side;
-    asset: Asset;
-    price: number | string | bigint;
-    qty: number | string | bigint;
-    order_id: number | string | bigint;
-  }
-
-  export interface OrderCancelledEvent {
-    trader: ActorId;
-    order_id: number | string | bigint;
-  }
-
-  export interface TradeEvent {
-    trade_id: number | string | bigint;
-    asset: Asset;
-    price: number | string | bigint;
-    qty: number | string | bigint;
-    buyer: ActorId;
-    seller: ActorId;
-  }
-
-  export interface LpPosition {
-    pool_id: number | string | bigint;
-    provider: ActorId;
-    amount: number | string | bigint;
-    share_a: number | string | bigint;
-    share_b: number | string | bigint;
-  }
-
-  export interface Pool {
-    id: number | string | bigint;
-    asset_a: Asset;
-    asset_b: Asset;
-    reserve_a: number | string | bigint;
-    reserve_b: number | string | bigint;
-    total_lp: number | string | bigint;
-    creator: ActorId;
-  }
-
-  export interface PoolCreatedEvent {
-    pool_id: number | string | bigint;
-    asset_a: Asset;
-    asset_b: Asset;
-    creator: ActorId;
-  }
-
-  export interface LiquidityAddedEvent {
-    pool_id: number | string | bigint;
-    provider: ActorId;
-    amount_a: number | string | bigint;
-    amount_b: number | string | bigint;
-    lp_minted: number | string | bigint;
-  }
-
-  export interface LiquidityRemovedEvent {
-    pool_id: number | string | bigint;
-    provider: ActorId;
-    amount_a: number | string | bigint;
-    amount_b: number | string | bigint;
-    lp_burned: number | string | bigint;
-  }
-
-  export interface SwapExecutedEvent {
-    pool_id: number | string | bigint;
-    trader: ActorId;
-    asset_in: Asset;
-    amount_in: number | string | bigint;
-    asset_out: Asset;
-    amount_out: number | string | bigint;
-    fee: number | string | bigint;
-  }
-
-  export interface MarkPriceEvent {
-    asset: Asset;
-    price: number | string | bigint;
-  }
-
-  export interface PerpOpenedEvent {
-    owner: ActorId;
-    asset: Asset;
-    is_long: boolean;
-    size: number | string | bigint;
-    entry: number | string | bigint;
-    margin: number | string | bigint;
-    leverage: number;
-  }
-
-  export interface PerpClosedEvent {
-    owner: ActorId;
-    asset: Asset;
-    exit: number | string | bigint;
-    payout: number | string | bigint;
-    pnl: number | string | bigint;
-    liquidated: boolean;
-  }
-
-  export type SpotError = "NotAdmin" | "BadParams" | "PairExists" | "NoPair" | "PairInactive" | "BookFull" | "NoOrder" | "NotOwner" | "NothingToClaim" | "TransferFailed";
 
   export interface SpotOrder {
     id: number | string | bigint;
@@ -160,9 +28,18 @@ declare global {
     */
     filled: number | string | bigint;
     status: SpotStatus;
+    /**
+     * Tokens escrowed when the order was placed (quote for a buy, base for a sell).
+    */
+    escrowed: number | string | bigint;
+    /**
+     * How much of `escrowed` has been paid out or refunded. The remainder at
+     * removal time is rounding dust (audit M-06).
+    */
+    released: number | string | bigint;
   }
 
-  export type SpotStatus = "Open" | "PartiallyFilled" | "Filled" | "Cancelled";
+  export type SpotStatus = "Open" | "PartiallyFilled";
 
   export interface SpotPair {
     id: number | string | bigint;
@@ -175,7 +52,7 @@ declare global {
     */
     quote: ActorId;
     /**
-     * Declared decimals of each token, read from the VFT at listing time.
+     * Decimals of each token, verified against the VFT's own metadata at listing.
     */
     base_dec: number;
     quote_dec: number;
@@ -185,7 +62,7 @@ declare global {
     active: boolean;
   }
 
-  export type PerpsError = "NotAdmin" | "NotKeeper" | "BadParams" | "NoMarket" | "MarketInactive" | "StaleMark" | "LeverageTooHigh" | "InsufficientMargin" | "PositionNotFound" | "NotLiquidatable" | "BookFull" | "TransferFailed" | "NoCollateral" | "OiCapExceeded";
+  export type PerpsError = "NotAdmin" | "NotKeeper" | "BadParams" | "NoMarket" | "MarketInactive" | "StaleMark" | "LeverageTooHigh" | "InsufficientMargin" | "PositionNotFound" | "NotLiquidatable" | "BookFull" | "TransferFailed" | "NoCollateral" | "OiCapExceeded" | "Paused" | "MarkDeviationTooLarge" | "InsufficientCoverage" | "Overflow";
 
   export interface PerpMarket {
     id: number | string | bigint;
@@ -206,8 +83,42 @@ declare global {
     long_oi: number | string | bigint;
     short_oi: number | string | bigint;
     /**
-     * Max open interest per side (u128::MAX = unlimited until the admin tightens it).
+     * Max open interest per side. Required at market creation: there is no
+     * unlimited default, because the safe value should not depend on an operator
+     * remembering a second call (audit M-03).
     */
     max_oi: number | string | bigint;
+    /**
+     * Cumulative funding index in `FUNDING_SCALE` units. Rises while longs are the
+     * crowded side, falls while shorts are. Longs pay the increase, shorts receive
+     * its negation; both settle against the reserve, which is the counterparty.
+    */
+    cum_funding: number | string | bigint;
+    /**
+     * Block `cum_funding` was last advanced.
+    */
+    funding_block: number;
   }
+
+  /* ── Hand-written types ───────────────────────────────────────────────────────
+   * Not generated from the IDL. `PriceFeed` and `Asset` describe the off-chain
+   * market-data feed, which has no on-chain counterpart — the contract never sees
+   * these prices. Keep them below the generated block so regenerating the client
+   * does not silently drop them.
+   */
+
+  export interface PriceFeed {
+    symbol: string;
+    price_usd_micro: number | string | bigint;
+    change_24h_bps: number;
+    market_cap_usd: number | string | bigint;
+    volume_24h_usd: number | string | bigint;
+    updated_at_block: number;
+  }
+
+  /** Assets the off-chain price feed covers. */
+  export type Asset = "BTC" | "ETH" | "VARA";
+
+  export interface Pagination { offset: number; limit: number; }
+  export type FaucetError = "AlreadyClaimed" | "MintFailed";
 };

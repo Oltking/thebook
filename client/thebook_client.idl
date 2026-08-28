@@ -314,6 +314,10 @@ service PerpsV1 {
   /// silently truncate what winning traders received rather than failing loudly
   /// (audit H-05).
   WithdrawReserve : (amount: u128) -> result (u128, PerpsError);
+  /// `(collateral token, keeper)`. The collateral token is what margin is escrowed
+  /// in, so a client can attribute locked margin to the right token instead of
+  /// showing a wallet balance that silently dropped.
+  query GetConfig : () -> struct { actor_id, actor_id };
   /// Liquidation price for a position (0 if none).
   query GetLiqPrice : (position_id: u64) -> u128;
   query GetMarkets : () -> vec PerpMarket;

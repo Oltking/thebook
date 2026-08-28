@@ -801,6 +801,15 @@ impl<'a> PerpsService<'a> {
         self.state.borrow().perp_markets.clone()
     }
 
+    /// `(collateral token, keeper)`. The collateral token is what margin is escrowed
+    /// in, so a client can attribute locked margin to the right token instead of
+    /// showing a wallet balance that silently dropped.
+    #[export]
+    pub fn get_config(&self) -> (ActorId, ActorId) {
+        let st = self.state.borrow();
+        (st.perp_collateral, st.perp_keeper)
+    }
+
     #[export]
     pub fn get_reserve(&self) -> u128 {
         self.state.borrow().perp_reserve
