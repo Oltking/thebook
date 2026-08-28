@@ -579,12 +579,18 @@ impl<'a> PerpsService<'a> {
             if side_oi.saturating_add(notional) > m.max_oi {
                 return Err(PerpsError::OiCapExceeded);
             }
-            // Coverage floor: refuse new risk when the reserve is already thin
-            // relative to what it owes (audit M-04).
-            let liability = reserve_liability(&st);
-            if liability > 0
-                && st.perp_reserve.saturating_mul(10_000) / liability.max(1) < MIN_COVERAGE_BPS
-            {
+            // Coverage floor: refuse new risk when the reserve is thin relative to
+            // what it would owe *including this position* (audit M-04).
+            //
+            // Measuring only existing positions leaves the floor inert exactly when
+            // it matters most: with an empty book the liability is 0, the check is
+            // skipped, and the first position opens against a reserve that may hold
+            // nothing. That trader can win and then be paid only `margin + reserve`
+            // — their profit silently truncated, which is the outcome this floor
+            // exists to prevent. The position being opened must count.
+            let prospective = reserve_liability(&st)
+                .saturating_add(notional.saturating_mul(RESERVE_BUFFER_BPS) / 10_000);
+            if st.perp_reserve.saturating_mul(10_000) / prospective.max(1) < MIN_COVERAGE_BPS {
                 return Err(PerpsError::InsufficientCoverage);
             }
             (st.perp_collateral, entry, msg::source())

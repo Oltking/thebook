@@ -819,6 +819,61 @@ async fn set_mark(e: &Env, market: u64, price: u128) {
         .unwrap();
 }
 
+/// Audit M-04: the coverage floor must bite on the FIRST position too.
+///
+/// Measuring liability over existing positions only left the floor inert with an
+/// empty book: the first trader could open against a reserve holding nothing, win,
+/// and be paid only their margin back.
+#[tokio::test]
+async fn perps_first_open_is_refused_against_an_empty_reserve() {
+    let e = deploy().await;
+    let dex = e.program.id();
+
+    // Perps configured, market listed, mark published — but the reserve is NOT funded.
+    let _: () = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetCollateral>((e.usd,))
+        .await
+        .unwrap()
+        .unwrap();
+    let _: () = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetKeeper>((ActorId::from(CAROL),))
+        .await
+        .unwrap()
+        .unwrap();
+    let market: u64 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), u128::MAX / 2))
+        .await
+        .unwrap()
+        .unwrap();
+    set_mark(&e, market, 2000).await;
+
+    let reserve: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetReserve>(())
+        .await
+        .unwrap();
+    assert_eq!(reserve, 0, "precondition: the reserve is empty");
+
+    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    let before = balance_of(&e.env, e.usd, BOB).await;
+    let res: Result<u64, _> = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .await
+        .unwrap();
+    assert!(res.is_err(), "an unbacked position must not open");
+    // Refused before the escrow, so nothing left the wallet.
+    assert_eq!(balance_of(&e.env, e.usd, BOB).await, before);
+    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 0);
+}
+
 /// Audit M-03: a market cannot be created without an explicit open-interest cap.
 #[tokio::test]
 async fn perps_market_requires_an_oi_cap() {
