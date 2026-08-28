@@ -12,8 +12,9 @@
 //
 // Env (auto-loaded from .env / .env.deploy):
 //   VARA_SEED     admin/deployer seed (required; must hold mainnet VARA for gas)
-//   NODE_ADDRESS  Vara RPC (default wss://rpc.vara.network — MAINNET)
-//   KEEPER        optional ss58/hex account allowed to push perp marks (default: admin)
+//   NODE_ADDRESS  Vara RPC (REQUIRED — no default; this script signs)
+//   KEEPER        REQUIRED ss58/hex account allowed to push perp marks. Must be a
+//                 dedicated key, NOT the admin seed (audit H-04, H-09).
 //   DEX_WASM      default ../../target/wasm32-gear/release/thebook.opt.wasm
 //   IDL_PATH      default ../../client/thebook_client.idl (has New + all services)
 //
@@ -30,6 +31,7 @@ import { decodeAddress } from '@polkadot/util-crypto';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
+import { requireNode, fail } from './lib/env.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
@@ -40,14 +42,27 @@ for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.en
   if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
-const NODE_ADDRESS = CLI_NODE ?? process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
+// Required, no default: this script signs (audit H-09).
+const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const SEED = process.env.VARA_SEED;
 const KEEPER = process.env.KEEPER;
+// Deploy paused unless explicitly told otherwise — see the note at the pause call.
+const LAND_PAUSED = process.env.DEPLOY_UNPAUSED !== '1';
 const DEX_WASM = process.env.DEX_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook.opt.wasm');
 const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
 
-function fail(m) { console.error(`\n  ✗ ${m}\n`); process.exit(1); }
+// Preflight. Everything that can be checked BEFORE the first signed transaction is
+// checked here — a deploy that fails half-way leaves a live program with markets
+// listed and no keeper, which is worse than not deploying at all.
 if (!SEED) fail('VARA_SEED is required (a funded mainnet admin seed).');
+if (!KEEPER) {
+  fail(
+    'KEEPER is required — a dedicated account allowed to publish mark prices.\n' +
+    '    It must NOT be the admin seed: the contract no longer accepts admin as an\n' +
+    '    implicit keeper, and an always-on worker should not hold listing, pause and\n' +
+    '    reserve authority (audit H-04, H-09).',
+  );
+}
 if (!existsSync(DEX_WASM)) fail(`DEX WASM not found at ${DEX_WASM}. Build: cargo build --release`);
 if (!existsSync(IDL_PATH)) fail(`IDL not found at ${IDL_PATH}.`);
 
@@ -151,9 +166,6 @@ for (const m of PERP_MARKETS) {
 // The keeper must be its OWN key, not the admin: the contract no longer accepts
 // admin as an implicit keeper, and an always-on worker should not hold listing,
 // pause and reserve authority (audit H-04, H-09).
-if (!KEEPER) {
-  fail('KEEPER is required — a dedicated keeper account, separate from the admin seed.');
-}
 const keeperHex = u8aToHex(decodeAddress(KEEPER));
 if (keeperHex === sourceId) {
   fail('KEEPER must not be the admin account. Generate a separate keeper key.');
@@ -161,10 +173,25 @@ if (keeperHex === sourceId) {
 await call('PerpsV1', 'SetKeeper', keeperHex);
 console.log(`    keeper = ${keeperHex}`);
 
+// 4 · Land PAUSED by default.
+//
+// A fresh program has empty books, no funded reserve, no running keeper and no
+// multisig — none of the launch gate is satisfied at the moment it goes live. Leaving
+// it open invites the first deposit into exactly that state. Pausing blocks new
+// orders and positions while leaving cancel and withdraw open, so nothing can be
+// trapped; open it with Spot/SetPaused(false) when the gate is actually met.
+if (LAND_PAUSED) {
+  await call('Spot', 'SetPaused', true);
+  console.log(`\n  venue is PAUSED (set DEPLOY_UNPAUSED=1 to skip this)`);
+}
+
 console.log(`\n  ✓ deploy complete\n`);
 console.log(`  Put this in frontend/.env, then redeploy the frontend:`);
 console.log(`    VITE_PROGRAM_ID=${PROGRAM_ID}\n`);
 console.log(`  Next — none of this is optional before real funds:`);
+if (LAND_PAUSED) {
+  console.log(`    • the venue is PAUSED. Open it last, with Spot/SetPaused(false)`);
+}
 console.log(`    • fund the perps reserve: approve wUSDT to the DEX, then PerpsV1/FundReserve`);
 console.log(`    • start the mark keeper on its own key (scripts/perps-keeper.mjs)`);
 console.log(`    • start the solvency monitor (scripts/solvency-monitor.mjs)`);
