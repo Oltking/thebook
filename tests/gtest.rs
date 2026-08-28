@@ -1166,6 +1166,268 @@ async fn perps_liquidation_pays_the_liquidator() {
     assert_solvent(&e, e.usd).await;
 }
 
+// ── AMM ─────────────────────────────────────────────────────────────────────────────
+
+use thebook_client::amm::io as amm_io;
+
+/// Create a pool over the two test tokens and seed it.
+async fn setup_pool(e: &Env, seed_a: u128, seed_b: u128) -> u64 {
+    let dex = e.program.id();
+    let pool: u64 = e
+        .program
+        .amm()
+        .pending_call::<amm_io::CreatePool>((e.eth, e.usd, 6u8, 6u8))
+        .await
+        .unwrap()
+        .unwrap();
+    claim_and_approve(&e.env, e.eth, dex, ALICE, seed_a).await;
+    claim_and_approve(&e.env, e.usd, dex, ALICE, seed_b).await;
+    let _: u128 = e
+        .program
+        .amm()
+        .pending_call::<amm_io::AddLiquidity>((pool, seed_a, seed_b, 0u128))
+        .await
+        .unwrap()
+        .unwrap();
+    pool
+}
+
+/// Decimals are verified against the token, exactly as spot listing does (M-14).
+#[tokio::test]
+async fn amm_pool_creation_verifies_decimals() {
+    let e = deploy().await;
+    let wrong: Result<u64, _> = e
+        .program
+        .amm()
+        .pending_call::<amm_io::CreatePool>((e.eth, e.usd, 18u8, 6u8))
+        .await
+        .unwrap();
+    assert!(
+        wrong.is_err(),
+        "a decimals value the token disagrees with must be rejected"
+    );
+
+    let ok: u64 = e
+        .program
+        .amm()
+        .pending_call::<amm_io::CreatePool>((e.eth, e.usd, 6u8, 6u8))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ok, 0);
+
+    // The same pair in reverse would split liquidity across two pools.
+    let dup: Result<u64, _> = e
+        .program
+        .amm()
+        .pending_call::<amm_io::CreatePool>((e.usd, e.eth, 6u8, 6u8))
+        .await
+        .unwrap();
+    assert!(dup.is_err(), "reverse orientation must be rejected");
+}
+
+/// Only the admin curates pools, same as spot listing.
+#[tokio::test]
+async fn amm_only_admin_creates_pools() {
+    let e = deploy().await;
+    let denied: Result<u64, _> = as_dex(&e.env, e.program.id(), BOB)
+        .amm()
+        .pending_call::<amm_io::CreatePool>((e.eth, e.usd, 6u8, 6u8))
+        .await
+        .unwrap();
+    assert!(denied.is_err());
+}
+
+/// The whole point of the design: fees accrue into the reserves, so the SAME shares
+/// are worth more afterwards. No separate reward pot, no claim call.
+#[tokio::test]
+async fn amm_liquidity_provider_earns_the_swap_fees() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let pool = setup_pool(&e, 80_000, 80_000).await;
+
+    let (shares, a0, b0): (u128, u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::GetPosition>((pool,))
+        .await
+        .unwrap();
+    assert!(shares > 0, "provider holds shares");
+
+    // BOB trades back and forth. Each leg leaves its 0.3% behind in the pool.
+    claim_and_approve(&e.env, e.usd, dex, BOB, 100_000).await;
+    for _ in 0..3 {
+        let out: u128 = as_dex(&e.env, dex, BOB)
+            .amm()
+            .pending_call::<amm_io::Swap>((pool, e.usd, 10_000u128, 0u128))
+            .await
+            .unwrap()
+            .unwrap();
+        // Swap the proceeds back, approving the base leg for the return trip.
+        let _: bool = as_tok(&e.env, e.eth, BOB)
+            .vft()
+            .pending_call::<tok_vft_io::Approve>((dex, U256::from(out)))
+            .await
+            .unwrap();
+        let _: u128 = as_dex(&e.env, dex, BOB)
+            .spot()
+            .pending_call::<spot_io::Withdraw>((e.eth, Some(out)))
+            .await
+            .unwrap()
+            .unwrap();
+        let _: u128 = as_dex(&e.env, dex, BOB)
+            .amm()
+            .pending_call::<amm_io::Swap>((pool, e.eth, out, 0u128))
+            .await
+            .unwrap()
+            .unwrap();
+        let back = claim_of(&e.env, dex, BOB, e.usd).await;
+        let _: u128 = as_dex(&e.env, dex, BOB)
+            .spot()
+            .pending_call::<spot_io::Withdraw>((e.usd, Some(back)))
+            .await
+            .unwrap()
+            .unwrap();
+        let _: bool = as_tok(&e.env, e.usd, BOB)
+            .vft()
+            .pending_call::<tok_vft_io::Approve>((dex, U256::from(50_000u128)))
+            .await
+            .unwrap();
+    }
+
+    let (shares_after, a1, b1): (u128, u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::GetPosition>((pool,))
+        .await
+        .unwrap();
+    assert_eq!(shares_after, shares, "share count is unchanged");
+    assert!(
+        a1 + b1 > a0 + b0,
+        "the same shares must be worth more after fees ({a0}+{b0} -> {a1}+{b1})",
+    );
+    assert_solvent(&e, e.eth).await;
+    assert_solvent(&e, e.usd).await;
+}
+
+/// Deposit and withdraw round-trip, and the slippage bound is honoured.
+#[tokio::test]
+async fn amm_add_and_remove_round_trip() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let pool = setup_pool(&e, 80_000, 80_000).await;
+
+    let (shares, _, _): (u128, u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::GetPosition>((pool,))
+        .await
+        .unwrap();
+
+    // An unmeetable bound rejects without burning anything.
+    let refused: Result<(u128, u128), _> = e
+        .program
+        .amm()
+        .pending_call::<amm_io::RemoveLiquidity>((pool, shares, u128::MAX, 0u128))
+        .await
+        .unwrap();
+    assert!(refused.is_err(), "an unmeetable minimum must be rejected");
+    let (still, _, _): (u128, u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::GetPosition>((pool,))
+        .await
+        .unwrap();
+    assert_eq!(still, shares, "a rejected removal must not burn shares");
+
+    // Burning everything returns the reserves, less the permanently locked minimum.
+    let (got_a, got_b): (u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::RemoveLiquidity>((pool, shares, 0u128, 0u128))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(got_a > 0 && got_b > 0);
+    assert!(got_a < 80_000, "the locked minimum stays behind");
+    assert_eq!(claim_of(&e.env, dex, ALICE, e.eth).await, got_a);
+    assert_solvent(&e, e.eth).await;
+    assert_solvent(&e, e.usd).await;
+}
+
+/// Cannot withdraw more than you own, and someone else's shares are not yours.
+#[tokio::test]
+async fn amm_cannot_remove_shares_you_do_not_hold() {
+    let e = deploy().await;
+    let pool = setup_pool(&e, 100_000, 100_000).await;
+    let taken: Result<(u128, u128), _> = as_dex(&e.env, e.program.id(), BOB)
+        .amm()
+        .pending_call::<amm_io::RemoveLiquidity>((pool, 1_000u128, 0u128, 0u128))
+        .await
+        .unwrap();
+    assert!(taken.is_err(), "BOB holds no shares in this pool");
+}
+
+/// A pause stops swaps and deposits but must never trap a provider's liquidity.
+#[tokio::test]
+async fn amm_pause_never_traps_liquidity() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let pool = setup_pool(&e, 100_000, 100_000).await;
+    let _: () = e
+        .program
+        .spot()
+        .pending_call::<spot_io::SetPaused>((true,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    let swap: Result<u128, _> = as_dex(&e.env, dex, BOB)
+        .amm()
+        .pending_call::<amm_io::Swap>((pool, e.usd, 10_000u128, 0u128))
+        .await
+        .unwrap();
+    assert!(swap.is_err(), "paused venue refuses swaps");
+
+    let (shares, _, _): (u128, u128, u128) = e
+        .program
+        .amm()
+        .pending_call::<amm_io::GetPosition>((pool,))
+        .await
+        .unwrap();
+    let out: Result<(u128, u128), _> = e
+        .program
+        .amm()
+        .pending_call::<amm_io::RemoveLiquidity>((pool, shares, 0u128, 0u128))
+        .await
+        .unwrap();
+    assert!(out.is_ok(), "removing liquidity must work while paused");
+    assert_solvent(&e, e.eth).await;
+}
+
+/// Pool reserves are program-held tokens and must appear in the solvency read, or a
+/// monitor would treat a funded pool as unexplained surplus.
+#[tokio::test]
+async fn amm_reserves_are_counted_in_solvency() {
+    let e = deploy().await;
+    let before: (u128, u128, u128) = e
+        .program
+        .spot()
+        .pending_call::<spot_io::GetSolvency>((e.eth,))
+        .await
+        .unwrap();
+    setup_pool(&e, 80_000, 80_000).await;
+    let after: (u128, u128, u128) = e
+        .program
+        .spot()
+        .pending_call::<spot_io::GetSolvency>((e.eth,))
+        .await
+        .unwrap();
+    assert_eq!(after.2, before.2 + 80_000, "pool reserves counted as owed");
+    assert_solvent(&e, e.eth).await;
+}
+
 // ── The deleted attack surface ──────────────────────────────────────────────────────
 
 /// Audit C-01 and C-02, as a structural regression test.
@@ -1180,11 +1442,15 @@ async fn perps_liquidation_pays_the_liquidator() {
 #[test]
 fn legacy_attack_surface_is_gone() {
     let idl = include_str!("../client/thebook_client.idl");
+    // NOTE: `service Amm` is deliberately NOT banned. The legacy AMM was deleted
+    // with C-02 and a real one was built in its place: the old one swapped virtual
+    // balances and made zero cross-program calls, the new one custodies real VFT
+    // tokens. What must stay gone are the virtual-balance entry points themselves.
     for banned in [
         "CallAgentService", // C-01: arbitrary cross-program call
         "SeedHouse",        // C-02: virtual house stockpile
+        "Join :",           // C-02: the free-money grant
         "service Orderbook",
-        "service Amm",
         "service Perps ",
     ] {
         assert!(
@@ -1195,4 +1461,10 @@ fn legacy_attack_surface_is_gone() {
     // The services that should be there, are.
     assert!(idl.contains("service Spot"));
     assert!(idl.contains("service PerpsV1"));
+    assert!(idl.contains("service Amm"));
+    // And the AMM is the real one: pools are keyed by token program, not by an
+    // `Asset` enum over virtual balances, and every value-moving call is bounded.
+    assert!(idl.contains("CreatePool : (token_a: actor_id, token_b: actor_id"));
+    assert!(idl.contains("min_shares: u128"));
+    assert!(idl.contains("min_amount_out: u128"));
 }

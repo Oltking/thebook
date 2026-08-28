@@ -6,6 +6,7 @@ impl sails_rs::client::Program for ThebookClientProgram {}
 pub trait ThebookClient {
     type Env: sails_rs::client::GearEnv;
     fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env>;
+    fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env>;
     fn perps_v_1(&self) -> sails_rs::client::Service<perps_v_1::PerpsV1Impl, Self::Env>;
 }
 impl<E: sails_rs::client::GearEnv> ThebookClient
@@ -14,6 +15,9 @@ impl<E: sails_rs::client::GearEnv> ThebookClient
     type Env = E;
     fn spot(&self) -> sails_rs::client::Service<spot::SpotImpl, Self::Env> {
         self.service(stringify!(Spot))
+    }
+    fn amm(&self) -> sails_rs::client::Service<amm::AmmImpl, Self::Env> {
+        self.service(stringify!(Amm))
     }
     fn perps_v_1(&self) -> sails_rs::client::Service<perps_v_1::PerpsV1Impl, Self::Env> {
         self.service(stringify!(PerpsV1))
@@ -429,6 +433,224 @@ pub mod spot {
     }
 }
 
+pub mod amm {
+    use super::*;
+    pub trait Amm {
+        type Env: sails_rs::client::GearEnv;
+        /// Deposit both tokens and receive LP shares.
+        ///
+        /// `min_shares` is the caller's bound: deposits are minted at the pool's ratio at
+        /// execution time, which another trade can move between signing and landing.
+        /// Requires a prior `approve` of each token.
+        fn add_liquidity(
+            &mut self,
+            pool_id: u64,
+            amount_a: u128,
+            amount_b: u128,
+            min_shares: u128,
+        ) -> sails_rs::client::PendingCall<io::AddLiquidity, Self::Env>;
+        /// Create a pool for a token pair. Admin-only, like spot listing: a pool is a
+        /// curated market, not something anyone can conjure.
+        ///
+        /// Decimals are verified against each token's own `VftMetadata` and rejected on
+        /// mismatch, for the same reason listing does it (audit M-14).
+        fn create_pool(
+            &mut self,
+            token_a: ActorId,
+            token_b: ActorId,
+            dec_a: u8,
+            dec_b: u8,
+        ) -> sails_rs::client::PendingCall<io::CreatePool, Self::Env>;
+        /// Burn shares and take back the corresponding fraction of both reserves,
+        /// including the fees accrued into them.
+        ///
+        /// Credited to claimable balances (withdraw with `Spot/Withdraw`), and never
+        /// gated on the pause or on the pool being active: a provider must always be
+        /// able to leave.
+        fn remove_liquidity(
+            &mut self,
+            pool_id: u64,
+            shares: u128,
+            min_a: u128,
+            min_b: u128,
+        ) -> sails_rs::client::PendingCall<io::RemoveLiquidity, Self::Env>;
+        /// Stop or resume deposits and swaps on a pool. Removing liquidity is never
+        /// blocked, so delisting cannot strand a provider's funds.
+        fn set_pool_active(
+            &mut self,
+            pool_id: u64,
+            active: bool,
+        ) -> sails_rs::client::PendingCall<io::SetPoolActive, Self::Env>;
+        /// Swap `amount_in` of `token_in` for the other token, receiving at least
+        /// `min_amount_out`. Requires a prior `approve` of `token_in`.
+        ///
+        /// The output is credited to the caller's claimable balance, on the same
+        /// settlement path as spot, so no swap depends on a transfer succeeding mid-way.
+        fn swap(
+            &mut self,
+            pool_id: u64,
+            token_in: ActorId,
+            amount_in: u128,
+            min_amount_out: u128,
+        ) -> sails_rs::client::PendingCall<io::Swap, Self::Env>;
+        fn get_pool(&self, pool_id: u64) -> sails_rs::client::PendingCall<io::GetPool, Self::Env>;
+        fn get_pools(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetPools, Self::Env>;
+        /// The caller's LP shares in a pool, and what they are currently worth.
+        fn get_position(
+            &self,
+            pool_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetPosition, Self::Env>;
+        /// Quote a swap without executing it: `(amount_out, fee)`.
+        fn quote_swap(
+            &self,
+            pool_id: u64,
+            token_in: ActorId,
+            amount_in: u128,
+        ) -> sails_rs::client::PendingCall<io::QuoteSwap, Self::Env>;
+    }
+    pub struct AmmImpl;
+    impl<E: sails_rs::client::GearEnv> Amm for sails_rs::client::Service<AmmImpl, E> {
+        type Env = E;
+        fn add_liquidity(
+            &mut self,
+            pool_id: u64,
+            amount_a: u128,
+            amount_b: u128,
+            min_shares: u128,
+        ) -> sails_rs::client::PendingCall<io::AddLiquidity, Self::Env> {
+            self.pending_call((pool_id, amount_a, amount_b, min_shares))
+        }
+        fn create_pool(
+            &mut self,
+            token_a: ActorId,
+            token_b: ActorId,
+            dec_a: u8,
+            dec_b: u8,
+        ) -> sails_rs::client::PendingCall<io::CreatePool, Self::Env> {
+            self.pending_call((token_a, token_b, dec_a, dec_b))
+        }
+        fn remove_liquidity(
+            &mut self,
+            pool_id: u64,
+            shares: u128,
+            min_a: u128,
+            min_b: u128,
+        ) -> sails_rs::client::PendingCall<io::RemoveLiquidity, Self::Env> {
+            self.pending_call((pool_id, shares, min_a, min_b))
+        }
+        fn set_pool_active(
+            &mut self,
+            pool_id: u64,
+            active: bool,
+        ) -> sails_rs::client::PendingCall<io::SetPoolActive, Self::Env> {
+            self.pending_call((pool_id, active))
+        }
+        fn swap(
+            &mut self,
+            pool_id: u64,
+            token_in: ActorId,
+            amount_in: u128,
+            min_amount_out: u128,
+        ) -> sails_rs::client::PendingCall<io::Swap, Self::Env> {
+            self.pending_call((pool_id, token_in, amount_in, min_amount_out))
+        }
+        fn get_pool(&self, pool_id: u64) -> sails_rs::client::PendingCall<io::GetPool, Self::Env> {
+            self.pending_call((pool_id,))
+        }
+        fn get_pools(
+            &self,
+            offset: u32,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::GetPools, Self::Env> {
+            self.pending_call((offset, limit))
+        }
+        fn get_position(
+            &self,
+            pool_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetPosition, Self::Env> {
+            self.pending_call((pool_id,))
+        }
+        fn quote_swap(
+            &self,
+            pool_id: u64,
+            token_in: ActorId,
+            amount_in: u128,
+        ) -> sails_rs::client::PendingCall<io::QuoteSwap, Self::Env> {
+            self.pending_call((pool_id, token_in, amount_in))
+        }
+    }
+
+    pub mod io {
+        use super::*;
+        sails_rs::io_struct_impl!(AddLiquidity (pool_id: u64, amount_a: u128, amount_b: u128, min_shares: u128) -> Result<u128, super::AmmError>);
+        sails_rs::io_struct_impl!(CreatePool (token_a: ActorId, token_b: ActorId, dec_a: u8, dec_b: u8) -> Result<u64, super::AmmError>);
+        sails_rs::io_struct_impl!(RemoveLiquidity (pool_id: u64, shares: u128, min_a: u128, min_b: u128) -> Result<(u128,u128,), super::AmmError>);
+        sails_rs::io_struct_impl!(SetPoolActive (pool_id: u64, active: bool) -> Result<(), super::AmmError>);
+        sails_rs::io_struct_impl!(Swap (pool_id: u64, token_in: ActorId, amount_in: u128, min_amount_out: u128) -> Result<u128, super::AmmError>);
+        sails_rs::io_struct_impl!(GetPool (pool_id: u64) -> Option<super::AmmPool>);
+        sails_rs::io_struct_impl!(GetPools (offset: u32, limit: u32) -> Vec<super::AmmPool>);
+        sails_rs::io_struct_impl!(GetPosition (pool_id: u64) -> (u128,u128,u128,));
+        sails_rs::io_struct_impl!(QuoteSwap (pool_id: u64, token_in: ActorId, amount_in: u128) -> (u128,u128,));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum AmmEvents {
+            PoolCreated {
+                pool_id: u64,
+                token_a: ActorId,
+                token_b: ActorId,
+            },
+            PoolActiveSet {
+                pool_id: u64,
+                active: bool,
+            },
+            LiquidityAdded {
+                pool_id: u64,
+                provider: ActorId,
+                amount_a: u128,
+                amount_b: u128,
+                shares: u128,
+            },
+            LiquidityRemoved {
+                pool_id: u64,
+                provider: ActorId,
+                amount_a: u128,
+                amount_b: u128,
+                shares: u128,
+            },
+            Swapped {
+                pool_id: u64,
+                trader: ActorId,
+                token_in: ActorId,
+                amount_in: u128,
+                token_out: ActorId,
+                amount_out: u128,
+                fee: u128,
+            },
+        }
+        impl sails_rs::client::Event for AmmEvents {
+            const EVENT_NAMES: &'static [Route] = &[
+                "PoolCreated",
+                "PoolActiveSet",
+                "LiquidityAdded",
+                "LiquidityRemoved",
+                "Swapped",
+            ];
+        }
+        impl sails_rs::client::ServiceWithEvents for AmmImpl {
+            type Event = AmmEvents;
+        }
+    }
+}
+
 pub mod perps_v_1 {
     use super::*;
     pub trait PerpsV1 {
@@ -827,6 +1049,52 @@ pub struct SpotPair {
     pub base_dec: u8,
     pub quote_dec: u8,
     /// Delisted pairs reject new orders but still allow cancel/withdraw.
+    pub active: bool,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum AmmError {
+    NotAdmin,
+    BadParams,
+    /// A pool for this token pair already exists, in either orientation.
+    PoolExists,
+    NoPool,
+    /// Pool exists but is delisted; no new deposits or swaps.
+    PoolInactive,
+    /// The global pool cap is reached.
+    TooManyPools,
+    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
+    TransferFailed,
+    /// Trading is paused. Removing liquidity remains open.
+    Paused,
+    /// The result would be worse than the caller's stated bound.
+    SlippageExceeded,
+    /// Caller does not hold that many shares.
+    InsufficientShares,
+    /// The deposit or swap is too small to move any reserve.
+    AmountTooSmall,
+    /// An amount overflowed. Trapping beats a silently wrong number.
+    Overflow,
+    /// The token's on-chain decimals do not match the value supplied at creation.
+    DecimalsMismatch,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct AmmPool {
+    pub id: u64,
+    pub token_a: ActorId,
+    pub token_b: ActorId,
+    /// Decimals of each token, verified against the VFT's own metadata at creation.
+    pub dec_a: u8,
+    pub dec_b: u8,
+    /// Real tokens held by this program on behalf of the pool.
+    pub reserve_a: u128,
+    pub reserve_b: u128,
+    /// Total LP shares issued, including the permanently locked minimum.
+    pub total_shares: u128,
+    /// Delisted pools reject deposits and swaps; removing liquidity stays open.
     pub active: bool,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]

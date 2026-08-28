@@ -76,6 +76,48 @@ type SpotPair = struct {
   active: bool,
 };
 
+type AmmError = enum {
+  NotAdmin,
+  BadParams,
+  /// A pool for this token pair already exists, in either orientation.
+  PoolExists,
+  NoPool,
+  /// Pool exists but is delisted; no new deposits or swaps.
+  PoolInactive,
+  /// The global pool cap is reached.
+  TooManyPools,
+  /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
+  TransferFailed,
+  /// Trading is paused. Removing liquidity remains open.
+  Paused,
+  /// The result would be worse than the caller's stated bound.
+  SlippageExceeded,
+  /// Caller does not hold that many shares.
+  InsufficientShares,
+  /// The deposit or swap is too small to move any reserve.
+  AmountTooSmall,
+  /// An amount overflowed. Trapping beats a silently wrong number.
+  Overflow,
+  /// The token's on-chain decimals do not match the value supplied at creation.
+  DecimalsMismatch,
+};
+
+type AmmPool = struct {
+  id: u64,
+  token_a: actor_id,
+  token_b: actor_id,
+  /// Decimals of each token, verified against the VFT's own metadata at creation.
+  dec_a: u8,
+  dec_b: u8,
+  /// Real tokens held by this program on behalf of the pool.
+  reserve_a: u128,
+  reserve_b: u128,
+  /// Total LP shares issued, including the permanently locked minimum.
+  total_shares: u128,
+  /// Delisted pools reject deposits and swaps; removing liquidity stays open.
+  active: bool,
+};
+
 type PerpsError = enum {
   NotAdmin,
   NotKeeper,
@@ -261,6 +303,78 @@ service Spot {
     };
     AdminChanged: struct {
       admin: actor_id
+    };
+  }
+};
+
+service Amm {
+  /// Deposit both tokens and receive LP shares.
+  /// 
+  /// `min_shares` is the caller's bound: deposits are minted at the pool's ratio at
+  /// execution time, which another trade can move between signing and landing.
+  /// Requires a prior `approve` of each token.
+  AddLiquidity : (pool_id: u64, amount_a: u128, amount_b: u128, min_shares: u128) -> result (u128, AmmError);
+  /// Create a pool for a token pair. Admin-only, like spot listing: a pool is a
+  /// curated market, not something anyone can conjure.
+  /// 
+  /// Decimals are verified against each token's own `VftMetadata` and rejected on
+  /// mismatch, for the same reason listing does it (audit M-14).
+  CreatePool : (token_a: actor_id, token_b: actor_id, dec_a: u8, dec_b: u8) -> result (u64, AmmError);
+  /// Burn shares and take back the corresponding fraction of both reserves,
+  /// including the fees accrued into them.
+  /// 
+  /// Credited to claimable balances (withdraw with `Spot/Withdraw`), and never
+  /// gated on the pause or on the pool being active: a provider must always be
+  /// able to leave.
+  RemoveLiquidity : (pool_id: u64, shares: u128, min_a: u128, min_b: u128) -> result (struct { u128, u128 }, AmmError);
+  /// Stop or resume deposits and swaps on a pool. Removing liquidity is never
+  /// blocked, so delisting cannot strand a provider's funds.
+  SetPoolActive : (pool_id: u64, active: bool) -> result (null, AmmError);
+  /// Swap `amount_in` of `token_in` for the other token, receiving at least
+  /// `min_amount_out`. Requires a prior `approve` of `token_in`.
+  /// 
+  /// The output is credited to the caller's claimable balance, on the same
+  /// settlement path as spot, so no swap depends on a transfer succeeding mid-way.
+  Swap : (pool_id: u64, token_in: actor_id, amount_in: u128, min_amount_out: u128) -> result (u128, AmmError);
+  query GetPool : (pool_id: u64) -> opt AmmPool;
+  query GetPools : (offset: u32, limit: u32) -> vec AmmPool;
+  /// The caller's LP shares in a pool, and what they are currently worth.
+  query GetPosition : (pool_id: u64) -> struct { u128, u128, u128 };
+  /// Quote a swap without executing it: `(amount_out, fee)`.
+  query QuoteSwap : (pool_id: u64, token_in: actor_id, amount_in: u128) -> struct { u128, u128 };
+
+  events {
+    PoolCreated: struct {
+      pool_id: u64,
+      token_a: actor_id,
+      token_b: actor_id,
+    };
+    PoolActiveSet: struct {
+      pool_id: u64,
+      active: bool,
+    };
+    LiquidityAdded: struct {
+      pool_id: u64,
+      provider: actor_id,
+      amount_a: u128,
+      amount_b: u128,
+      shares: u128,
+    };
+    LiquidityRemoved: struct {
+      pool_id: u64,
+      provider: actor_id,
+      amount_a: u128,
+      amount_b: u128,
+      shares: u128,
+    };
+    Swapped: struct {
+      pool_id: u64,
+      trader: actor_id,
+      token_in: actor_id,
+      amount_in: u128,
+      token_out: actor_id,
+      amount_out: u128,
+      fee: u128,
     };
   }
 };

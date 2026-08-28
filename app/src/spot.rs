@@ -238,6 +238,15 @@ pub struct SpotState {
     pub next_perp_market: u64,
     pub perp_positions: Vec<crate::perps_spot::PerpPosition>,
     pub next_perp_pos: u64,
+
+    // ── AMM (constant-product pools over the same real VFT tokens) ──
+    /// Curated liquidity pools. Reserves are real tokens the program holds, on the
+    /// same footing as spot escrow, and are counted by `get_solvency`.
+    pub amm_pools: Vec<crate::amm_spot::AmmPool>,
+    pub next_pool_id: u64,
+    /// LP shares per (provider, pool). A share is a claim on a fraction of the pool,
+    /// not a balance of anything withdrawable on its own.
+    pub lp_shares: BTreeMap<(ActorId, u64), u128>,
 }
 
 impl SpotState {
@@ -658,15 +667,26 @@ impl<'a> SpotService<'a> {
     #[export]
     pub fn get_solvency(&self, token: ActorId) -> (u128, u128, u128) {
         let st = self.state.borrow();
-        let reserve = if st.perp_collateral == token {
+        let perp = if st.perp_collateral == token {
             st.perp_reserve
         } else {
             0
         };
+        // AMM reserves are real tokens this program holds, so they belong on the
+        // "owed" side of the invariant. Without them a monitor would read a funded
+        // pool as unexplained surplus, and a drained one as still solvent.
+        let pooled: u128 = st
+            .amm_pools
+            .iter()
+            .map(|p| {
+                (if p.token_a == token { p.reserve_a } else { 0 })
+                    .saturating_add(if p.token_b == token { p.reserve_b } else { 0 })
+            })
+            .fold(0u128, |a, b| a.saturating_add(b));
         (
             *st.escrow.get(&token).unwrap_or(&0),
             *st.dust.get(&token).unwrap_or(&0),
-            reserve,
+            perp.saturating_add(pooled),
         )
     }
 
@@ -1234,10 +1254,14 @@ impl<'a> SpotService<'a> {
 /// reply that can never arrive, and the caller sees their transaction silently do
 /// nothing. `list_pair` (two metadata reads) reproduced exactly that on mainnet.
 ///
-/// A VFT transfer or metadata read costs well under this cap; measured, a full
-/// `market_buy` round trip burns about 7.7 billion gas in total. Capping each inner
-/// call leaves the outer method enough to finish and to receive its replies.
-const VFT_CALL_GAS: u64 = 5_000_000_000;
+/// Sizing, measured rather than guessed: a full `market_buy` round trip against the
+/// real bridged tokens burns about 7.7 billion gas in total, so a single inner call
+/// needs only a few billion. The gtest token is heavier (its constructor alone costs
+/// 493 billion, since it pre-allocates sharded balance maps) and a 5 billion cap made
+/// its `TransferFrom` fail outright. 10 billion clears both with room, while still
+/// leaving a two-call method like `add_liquidity` enough budget for its second call
+/// and its replies out of a 30 billion transaction limit.
+const VFT_CALL_GAS: u64 = 10_000_000_000;
 
 fn vft_call_gas() -> u64 {
     VFT_CALL_GAS.min(exec::gas_available() / 2)

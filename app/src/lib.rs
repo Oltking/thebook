@@ -22,10 +22,12 @@ use sails_rs::cell::RefCell;
 use sails_rs::gstd::msg;
 use sails_rs::prelude::*;
 
+pub mod amm_spot;
 pub mod perps_spot;
 pub mod spot;
 pub mod types;
 
+pub use amm_spot::AmmService;
 pub use perps_spot::PerpsService as SpotPerpsService;
 pub use spot::{SpotService, SpotState};
 
@@ -52,6 +54,12 @@ impl Program {
 
     pub fn spot(&self) -> SpotService<'_> {
         SpotService::new(&self.spot)
+    }
+
+    // The AMM shares the spot state so pool payouts settle through the same
+    // claimable balances, and pool reserves are counted by `Spot/GetSolvency`.
+    pub fn amm(&self) -> AmmService<'_> {
+        AmmService::new(&self.spot)
     }
 
     // Perps share the spot state so margin/PnL settle through the same claimable
