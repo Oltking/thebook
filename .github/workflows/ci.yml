@@ -61,9 +61,11 @@ jobs:
       - name: Deleted attack surface stays deleted
         run: |
           set -e
+          # Strip comments first: the module docs explain what was removed and why,
+          # and that prose must not trip the guard that enforces it.
           for banned in call_agent_service SeedHouse INITIAL_USD DexState; do
-            if grep -rn --include='*.rs' "$banned" app/ ; then
-              echo "::error::'$banned' is back — see audit C-01/C-02"
+            if grep -rn --include='*.rs' "$banned" app/ | grep -vE '^\S+:[0-9]+:\s*(//|/\*|\*)'; then
+              echo "::error::'$banned' is back in code — see audit C-01/C-02"
               exit 1
             fi
           done
