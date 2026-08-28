@@ -1,39 +1,47 @@
-# Render Blueprint: runs thebook's single always-on signer as a background worker.
+# Render Blueprint: thebook's mark-price keeper, as a background worker.
 #
-# `market-runner.mjs` does BOTH jobs in one process, one signer:
-#   1. pushes live BTC/ETH/VARA mark prices on-chain (so perps have a settlement
-#      price), and
-#   2. quotes two-sided house liquidity around each mark (so USDT-only agents always
-#      have a counterparty).
+# `perps-keeper.mjs` does exactly one job: publish mark prices for the perp markets
+# so PnL and liquidations have a settlement price. It serves no HTTP, so it is a
+# Background Worker, not a Web Service.
 #
-# Both are admin-only and must sign as the SAME account, so this MUST be the only
-# process signing from VARA_SEED. Do not run a second market-runner against the
-# same seed — two signers collide on the nonce.
+# ## What changed, and why
 #
-# It serves no HTTP, so it's a Background Worker, not a Web Service.
+# This used to run `market-runner.mjs`, which pushed marks *and* quoted synthetic
+# two-sided liquidity for the legacy virtual-balance services. Those services were
+# removed (audit C-02), and with them the runner. Two further problems went with it
+# (audit H-04, H-09):
 #
-# Deploy: Render → New → Blueprint → pick this repo. Set the two secret env vars
-# (VARA_SEED, PROGRAM_ID) when prompted; they are sync:false so they live in the
-# dashboard, never in git. The frontend + /api/voucher are deployed separately on
-# Vercel (thebookdex.xyz), not here.
+#   * It signed with VARA_SEED — the DEX admin, listing authority and reserve
+#     controller — from an always-on worker. The keeper now has its OWN key
+#     (KEEPER_SEED) with no admin rights, and the contract no longer accepts admin
+#     as an implicit keeper. Set the keeper account once with `PerpsV1/SetKeeper`.
+#   * NODE_ADDRESS was pinned to TESTNET here while the frontend ran on mainnet.
+#     It is now explicit, and every signing script refuses to run without it rather
+#     than defaulting to a chain.
+#
+# This must be the only process signing from KEEPER_SEED — two signers collide on
+# the nonce.
+#
+# Deploy: Render → New → Blueprint → pick this repo. Set the secret env vars
+# (KEEPER_SEED, PROGRAM_ID) when prompted; they are sync:false so they live in the
+# dashboard, never in git. The frontend and the API functions are deployed
+# separately on Vercel, not here.
 services:
   - type: worker
-    name: thebook-market-runner
+    name: thebook-perps-keeper
     runtime: node
     plan: starter          # background workers require a paid instance type
     rootDir: frontend
-    # The runner imports ../../sdk/thebook.mjs, so install the SDK's deps too.
+    # The keeper imports ../../sdk/thebook.mjs, so install the SDK's deps too.
     buildCommand: npm install && npm install --prefix ../sdk
-    startCommand: node scripts/market-runner.mjs
+    startCommand: node scripts/perps-keeper.mjs
     autoDeploy: true
     envVars:
       - key: NODE_ADDRESS
-        value: wss://testnet.vara.network
+        value: wss://rpc.vara.network
       - key: INTERVAL_MS
         value: "10000"
-      - key: ASSETS
-        value: "BTC,ETH,VARA"
-      - key: VARA_SEED       # the DEX admin/deployer seed (secret)
+      - key: KEEPER_SEED     # keeper-only key — must NOT be the admin seed (H-09)
         sync: false
-      - key: PROGRAM_ID      # the deployed DEX program id (0x56a07b10…a1d7)
+      - key: PROGRAM_ID      # the deployed DEX program id
         sync: false

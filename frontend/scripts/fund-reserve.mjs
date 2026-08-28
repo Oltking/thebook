@@ -20,6 +20,12 @@ import { u8aToHex, u8aConcat } from '@polkadot/util';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
+import { requireNode } from './lib/env.mjs';
+
+// Captured before any dotfile is loaded: an explicitly-passed NODE_ADDRESS must
+// win, so a stale value in frontend/.env cannot redirect a signed action to the
+// wrong chain (audit H-09).
+const CLI_NODE = process.env.NODE_ADDRESS;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
@@ -27,7 +33,8 @@ for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.en
   if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
-const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
+// Required, no default: this script signs (audit H-09).
+const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const SEED = process.env.VARA_SEED;
 const THEBOOK_ID = process.env.THEBOOK_ID ?? process.env.PROGRAM_ID ?? process.env.VITE_PROGRAM_ID;
 const IDL_PATH = process.env.IDL_PATH ?? resolve(repoRoot, 'client/thebook_client.idl');
@@ -81,6 +88,19 @@ async function sendRaw(dest, payload, label) {
   });
 }
 
+/** Send a VFT call (e.g. Approve) to a token program as the admin. */
+async function callVft(token, fn, ...args) {
+  const vft = new Sails(parser);
+  vft.parseIdl(readFileSync(resolve(repoRoot, 'sdk/vft.idl'), 'utf8'));
+  vft.setProgramId(token);
+  vft.setApi(api);
+  const tx = vft.services.Vft.functions[fn](...args);
+  tx.withAccount(admin);
+  await tx.calculateGas(true);
+  const { response } = await tx.signAndSend();
+  return response();
+}
+
 async function callDex(service, fn, ...args) {
   const tx = sails.services[service].functions[fn](...args);
   tx.withAccount(admin);
@@ -89,17 +109,20 @@ async function callDex(service, fn, ...args) {
   return response();
 }
 
-// 0 · make sure the admin has a DEX account. Virtual-balance model: Join grants
-//     the admin its starting USD directly, so there is no claim/deposit step.
-process.stdout.write('  registering admin (Join) … ');
-try { await callDex('Orderbook', 'Join', 'admin', 'ArbitrageHunter'); console.log('ok'); }
-catch (e) { console.log(`(already joined or ${String(e?.message || e).slice(0, 40)})`); }
+// The reserve is REAL collateral now: the admin approves the DEX to pull `AMOUNT`
+// of the collateral token, then funds. There is no `Join` and no granted balance —
+// that was the virtual-balance path removed in audit C-02.
+const COLLATERAL = process.env.COLLATERAL_TOKEN;
+if (!COLLATERAL) fail('COLLATERAL_TOKEN is required (the collateral VFT program id).');
 
-// 1 · move granted USD into the house reserve
-process.stdout.write('  funding reserve … ');
-await callDex('Perps', 'FundReserve', AMOUNT.toString());
+process.stdout.write(`  approving ${AMOUNT} to the DEX … `);
+await callVft(COLLATERAL, 'Approve', THEBOOK_ID, AMOUNT.toString());
 console.log('ok');
 
-console.log(`\n  ✓ reserve funded with ${AMOUNT} cents\n`);
+process.stdout.write('  funding reserve … ');
+await callDex('PerpsV1', 'FundReserve', AMOUNT.toString());
+console.log('ok');
+
+console.log(`\n  ✓ reserve funded with ${AMOUNT} (collateral smallest-units)\n`);
 await api.disconnect();
 process.exit(0);

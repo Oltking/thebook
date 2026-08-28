@@ -1,16 +1,18 @@
 // Perps mark-price keeper for thebookdex v1 perpetual futures.
 //
 // Pushes live mark prices on-chain to the PerpsV1 service on a fixed cadence.
-// It signs as the perps keeper account, so VARA_SEED must be the account set
+// It signs as the perps keeper account, so KEEPER_SEED must be the account set
 // via PerpsV1/SetKeeper (the admin by default). Each tick fetches the live USD
 // price of ETH and VARA, converts to micro-USD ($1 = 1e6) as a BigInt, and
 // calls PerpsV1/SetMark for each perp market. Micro-USD is fine because perp
 // PnL is ratio-based (the unit cancels), we just stay consistent.
 //
-//   VARA_SEED="<keeper seed>"  node scripts/perps-keeper.mjs
+//   KEEPER_SEED="<keeper seed>"  node scripts/perps-keeper.mjs
 //
 // Env auto-loaded from .env.deploy then .env.
-//   VARA_SEED            keeper account seed (required)
+//   KEEPER_SEED          keeper account seed (required). Must be a dedicated key
+//                        with NO admin rights: the contract no longer accepts the
+//                        admin as an implicit keeper (audit H-04, H-09).
 //   THEBOOK_PROGRAM_ID   perps program id (default: live mainnet program)
 //   NODE_ADDRESS         RPC node (default wss://rpc.vara.network)
 //   INTERVAL_MS          loop cadence (default 15000)
@@ -21,17 +23,29 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { connectTheBook } from '../../sdk/thebook.mjs';
+import { requireNode } from './lib/env.mjs';
+
+// Captured before any dotfile is loaded: an explicitly-passed NODE_ADDRESS must
+// win, so a stale value in frontend/.env cannot redirect a signed action to the
+// wrong chain (audit H-09).
+const CLI_NODE = process.env.NODE_ADDRESS;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 for (const f of [resolve(__dirname, '..', '.env.deploy'), resolve(__dirname, '..', '.env')]) {
   if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
-const SEED = process.env.VARA_SEED;
+// VARA_SEED is accepted only as a legacy fallback and warned about: the keeper
+// must not be the admin key.
+const SEED = process.env.KEEPER_SEED ?? process.env.VARA_SEED;
+if (!process.env.KEEPER_SEED && process.env.VARA_SEED) {
+  console.warn('  ! Using VARA_SEED. Set KEEPER_SEED to a dedicated keeper key with no admin rights (audit H-09).');
+}
 const PROGRAM_ID = process.env.THEBOOK_PROGRAM_ID ?? '0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484';
-const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://rpc.vara.network';
+// Required, no default: this script signs (audit H-09).
+const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000);
 const fail = (m) => { console.error(`\n  ✗ ${m}\n`); process.exit(1); };
-if (!SEED) fail('VARA_SEED is required (the perps keeper seed).');
+if (!SEED) fail('KEEPER_SEED is required (a dedicated perps keeper seed, not the admin).');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6

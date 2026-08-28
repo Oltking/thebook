@@ -33,6 +33,12 @@ import { u8aToHex, u8aConcat } from '@polkadot/util';
 import { waitReady } from '@polkadot/wasm-crypto';
 import { Sails } from 'sails-js';
 import { SailsIdlParser } from 'sails-js-parser';
+import { requireNode } from './lib/env.mjs';
+
+// Captured before any dotfile is loaded: an explicitly-passed NODE_ADDRESS must
+// win, so a stale value in frontend/.env cannot redirect a signed action to the
+// wrong chain (audit H-09).
+const CLI_NODE = process.env.NODE_ADDRESS;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
@@ -40,7 +46,8 @@ for (const f of [resolve(__dirname, '..', '.env'), resolve(__dirname, '..', '.en
   if (existsSync(f)) { try { process.loadEnvFile(f); } catch { /* ignore */ } }
 }
 
-const NODE_ADDRESS = process.env.NODE_ADDRESS ?? 'wss://testnet.vara.network';
+// Required, no default: this script signs (audit H-09).
+const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const SEED = process.env.VARA_SEED;
 const DEX_WASM = process.env.DEX_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook.opt.wasm');
 const TOKEN_WASM = process.env.TOKEN_WASM ?? resolve(repoRoot, 'target/wasm32-gear/release/thebook_token.opt.wasm');
