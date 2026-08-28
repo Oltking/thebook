@@ -510,8 +510,88 @@ eq(await claimOf(QUOTE, traderId), payout, 'payout is claimable');
 await send(dex, 'Spot', 'Withdraw', trader, QUOTE, null);
 pass('perp payout withdrawn to the wallet');
 
-// ── 10 · Solvency invariant ────────────────────────────────────────────────────
-step('10 · solvency');
+// ── 10 · AMM: real pools over the real bridged token ───────────────────────────
+step('10 · amm');
+const poolId = await send(dex, 'Amm', 'CreatePool', admin, BASE, QUOTE, BASE_DEC, QUOTE_DEC);
+pass(`pool id=${poolId} (real wVARA / throwaway quote)`);
+const badDec = await sendExpectingError(dex, 'Amm', 'CreatePool', admin, BASE, QUOTE, 18, QUOTE_DEC);
+check(badDec !== null, 'duplicate pair rejected');
+
+// Seed it from the trader, who holds both sides.
+const SEED_A = 1n * BASE_UNIT;        // 1 wVARA
+const SEED_B = 2n * QUOTE_UNIT;       // 2 quote, so the pool prices wVARA at 2
+await send(base, 'Vft', 'Approve', trader, DEX, SEED_A);
+await send(quote, 'Vft', 'Approve', trader, DEX, SEED_B);
+const traderBaseAmm = await bal(base, traderId);
+const shares = await send(dex, 'Amm', 'AddLiquidity', trader, poolId, SEED_A, SEED_B, 0);
+check(BigInt(shares) > 0n, `minted ${shares} LP shares`);
+eq(await bal(base, traderId), traderBaseAmm - SEED_A, 'deposit left the wallet (real token)');
+
+const [held0] = await query(dex, 'Amm', 'GetPosition', traderId, poolId);
+check(BigInt(held0) === BigInt(shares), 'position reports the minted shares');
+
+/**
+ * Liquidity backing one share, as sqrt(k) / total_shares.
+ *
+ * Comparing the two reserves directly does not work: a one-directional swap moves
+ * the pool along the curve, so the base side falls while the quote side rises, and
+ * whether that looks like a gain depends entirely on the price you value them at.
+ * sqrt(reserve_a * reserve_b) is the pool's own invariant and is price-independent,
+ * so growth in it per share is exactly the fee accrual and nothing else.
+ */
+const isqrt = (n) => {
+  if (n <= 1n) return n;
+  let x = n; let y = (x + 1n) / 2n;
+  while (y < x) { x = y; y = (x + n / x) / 2n; }
+  return x;
+};
+async function backingPerShare(id) {
+  const p = await query(dex, 'Amm', 'GetPool', adminId, id);
+  const pool = Array.isArray(p) ? p[0] : p;
+  const k = BigInt(pool.reserve_a) * BigInt(pool.reserve_b);
+  // Scaled so integer division does not flatten the difference.
+  return (isqrt(k) * 1_000_000_000n) / BigInt(pool.total_shares);
+}
+const backing0 = await backingPerShare(poolId);
+
+// Admin trades against the pool. Each leg leaves 0.3% behind.
+await send(quote, 'Vft', 'Approve', admin, DEX, 400_000n);
+for (let i = 0; i < 3; i += 1) {
+  const out = await send(dex, 'Amm', 'Swap', admin, poolId, QUOTE, 100_000n, 0);
+  check(BigInt(out) > 0n, `swap ${i + 1} returned ${out} base`);
+}
+
+// The whole design claim: the same shares are backed by more liquidity afterwards,
+// measured on the pool's own invariant so no price assumption creeps in.
+const [held1] = await query(dex, 'Amm', 'GetPosition', traderId, poolId);
+eq(BigInt(held1), BigInt(held0), 'share count unchanged by trading');
+const backing1 = await backingPerShare(poolId);
+check(
+  backing1 > backing0,
+  `liquidity backing each share grew with fees (${backing0} -> ${backing1})`,
+);
+
+// An unmeetable bound must not burn shares.
+const badRemove = await sendExpectingError(
+  dex, 'Amm', 'RemoveLiquidity', trader, poolId, held1, (2n ** 120n).toString(), 0);
+check(badRemove !== null && /SlippageExceeded/.test(badRemove), 'unmeetable removal bound rejected');
+const [stillHeld] = await query(dex, 'Amm', 'GetPosition', traderId, poolId);
+eq(BigInt(stillHeld), BigInt(held1), 'rejected removal burned nothing');
+
+// Removing liquidity works even while paused: a provider must always be able to exit.
+await send(dex, 'Spot', 'SetPaused', admin, true);
+const pausedSwap = await sendExpectingError(dex, 'Amm', 'Swap', admin, poolId, QUOTE, 1000n, 0);
+check(pausedSwap !== null && /Paused/.test(pausedSwap), 'paused venue refuses swaps');
+const [outA, outB] = await send(dex, 'Amm', 'RemoveLiquidity', trader, poolId, held1, 0, 0);
+pass(`removed liquidity while paused: ${outA} base, ${outB} quote`);
+await send(dex, 'Spot', 'SetPaused', admin, false);
+check(BigInt(outA) > 0n && BigInt(outB) > 0n, 'both sides returned');
+await send(dex, 'Spot', 'Withdraw', trader, BASE, null);
+await send(dex, 'Spot', 'Withdraw', trader, QUOTE, null);
+pass('LP proceeds withdrawn to the wallet');
+
+// ── 11 · Solvency invariant ────────────────────────────────────────────────────
+step('11 · solvency');
 for (const [label, tok, id] of [['base', base, BASE], ['quote', quote, QUOTE]]) {
   const [escrow, dust, reserve] = await dex.services.Spot.queries.GetSolvency(id).call();
   const held = await bal(tok, DEX);
