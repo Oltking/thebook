@@ -5,7 +5,7 @@
 // wVARA/wETH) — we only reference their addresses, we do NOT deploy them.
 //
 // Run ONCE with the admin seed (it becomes the DEX admin; transfer to the multisig
-// afterwards with Spot/TransferAdmin + PerpsV1/SetKeeper as needed).
+// afterwards with Spot/ProposeAdmin + AcceptAdmin, and PerpsV1/SetKeeper).
 //
 // Usage (from frontend/):
 //   VARA_SEED="<funded mainnet admin seed>" node scripts/deploy-mainnet.mjs
@@ -67,7 +67,16 @@ const MARKETS = [
   { name: 'VARA/USDC', base: T.wVARA, quote: T.wUSDC },
 ];
 // Perp markets (mark feed by symbol). Collateral = wUSDT.
-const PERP_MARKETS = ['ETH', 'VARA'];
+//
+// `maxOi` is REQUIRED at creation and has no unlimited default: the reserve's
+// directional exposure must be bounded from the first block, not by an operator
+// remembering a separate `SetMarketCap` call (audit M-03). These are conservative
+// opening caps in wUSDT smallest-units (6 decimals) — raise them deliberately once
+// the reserve is funded and the market has traded.
+const PERP_MARKETS = [
+  { symbol: 'ETH', maxOi: 25_000_000_000n },   // 25,000 wUSDT per side
+  { symbol: 'VARA', maxOi: 10_000_000_000n },  // 10,000 wUSDT per side
+];
 
 await waitReady();
 const api = await GearApi.create({ providerAddress: NODE_ADDRESS });
@@ -133,22 +142,34 @@ for (const m of MARKETS) {
 console.log('\n  wiring perps:');
 await call('PerpsV1', 'SetCollateral', T.wUSDT.addr);
 console.log(`    collateral = wUSDT`);
-for (const sym of PERP_MARKETS) {
-  const id = await call('PerpsV1', 'AddMarket', sym);
-  console.log(`    market ${sym.padEnd(5)} id=${id}`);
+for (const m of PERP_MARKETS) {
+  const id = await call('PerpsV1', 'AddMarket', m.symbol, m.maxOi.toString());
+  console.log(`    market ${m.symbol.padEnd(5)} id=${id}  max_oi=${m.maxOi} (per side)`);
 }
 // actor_id args must be 32-byte hex, not an SS58 string.
-const keeperHex = KEEPER ? u8aToHex(decodeAddress(KEEPER)) : sourceId;
+//
+// The keeper must be its OWN key, not the admin: the contract no longer accepts
+// admin as an implicit keeper, and an always-on worker should not hold listing,
+// pause and reserve authority (audit H-04, H-09).
+if (!KEEPER) {
+  fail('KEEPER is required — a dedicated keeper account, separate from the admin seed.');
+}
+const keeperHex = u8aToHex(decodeAddress(KEEPER));
+if (keeperHex === sourceId) {
+  fail('KEEPER must not be the admin account. Generate a separate keeper key.');
+}
 await call('PerpsV1', 'SetKeeper', keeperHex);
 console.log(`    keeper = ${keeperHex}`);
 
 console.log(`\n  ✓ deploy complete\n`);
 console.log(`  Put this in frontend/.env, then redeploy the frontend:`);
 console.log(`    VITE_PROGRAM_ID=${PROGRAM_ID}\n`);
-console.log(`  Next:`);
+console.log(`  Next — none of this is optional before real funds:`);
 console.log(`    • fund the perps reserve: approve wUSDT to the DEX, then PerpsV1/FundReserve`);
-console.log(`    • start the mark keeper (PerpsV1/SetMark for ETH, VARA)`);
-console.log(`    • transfer admin to the multisig: Spot/TransferAdmin\n`);
+console.log(`    • start the mark keeper on its own key (scripts/perps-keeper.mjs)`);
+console.log(`    • start the solvency monitor (scripts/solvency-monitor.mjs)`);
+console.log(`    • hand admin to the multisig: Spot/ProposeAdmin, then AcceptAdmin`);
+console.log(`      from the multisig itself — the handover is two-step by design\n`);
 
 await api.disconnect();
 process.exit(0);

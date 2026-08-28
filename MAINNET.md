@@ -122,11 +122,23 @@ derivatives-regulation review. None of this is on the v1 critical path.
 ---
 
 ## Launch-blockers (must be true before mainnet)
-1. New custody contract written and **audited**.
-2. Real bridged USDT/USDC address confirmed and pinned.
-3. Multisig live and set as admin.
-4. At least one external MM committed so books aren't empty.
-5. All testnet endpoints, program IDs, and "free money" copy removed.
+
+> **This list was written, then shipped past.** The 27 August 2026 security
+> assessment found all five unmet while the frontend was live on mainnet against
+> real bridged tokens (finding C-04). Treat it as binding, not aspirational.
+> Current state of each is tracked in [docs/audit-remediation.md](docs/audit-remediation.md).
+
+| # | Blocker | Status |
+|---|---|---|
+| 1 | New custody contract written and **audited** | Written and remediated; **no independent audit yet** |
+| 2 | Real bridged USDT/USDC address confirmed and pinned | Done — `docs/mainnet-addresses.md` |
+| 3 | Multisig live and set as admin | **Not done** — admin is still a single key. Two-step `ProposeAdmin`/`AcceptAdmin` now exists to do it safely |
+| 4 | At least one external MM committed so books aren't empty | **Not done** |
+| 5 | All testnet endpoints, program IDs, and "free money" copy removed | Done — the free-money code itself is deleted, not just the copy |
+
+Add a sixth, which the assessment made unavoidable:
+
+| 6 | The remediated build is **redeployed** and the old program retired | **Not done** — the program on mainnet still carries C-01 |
 
 ## Suggested sequence
 1. Confirm the stablecoin address + shortlist initial pairs.
