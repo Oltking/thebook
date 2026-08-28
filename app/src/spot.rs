@@ -92,18 +92,66 @@ pub enum SpotError {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum SpotEvent {
-    PairListed { pair_id: u64, base: ActorId, quote: ActorId, base_dec: u8, quote_dec: u8 },
-    PairDelisted { pair_id: u64 },
-    PairRelisted { pair_id: u64 },
-    OrderPlaced { order_id: u64, pair_id: u64, trader: ActorId, side: Side, price: u128, qty: u128 },
-    Trade { pair_id: u64, taker_order: u64, maker_order: u64, buyer: ActorId, seller: ActorId, price: u128, qty: u128 },
-    OrderCancelled { order_id: u64, pair_id: u64, trader: ActorId, refunded: u128 },
-    OrderClosed { order_id: u64, pair_id: u64, trader: ActorId, filled: u128 },
-    Withdrawn { who: ActorId, token: ActorId, amount: u128 },
-    DustSwept { token: ActorId, amount: u128 },
-    PausedSet { paused: bool },
-    AdminProposed { pending: ActorId },
-    AdminChanged { admin: ActorId },
+    PairListed {
+        pair_id: u64,
+        base: ActorId,
+        quote: ActorId,
+        base_dec: u8,
+        quote_dec: u8,
+    },
+    PairDelisted {
+        pair_id: u64,
+    },
+    PairRelisted {
+        pair_id: u64,
+    },
+    OrderPlaced {
+        order_id: u64,
+        pair_id: u64,
+        trader: ActorId,
+        side: Side,
+        price: u128,
+        qty: u128,
+    },
+    Trade {
+        pair_id: u64,
+        taker_order: u64,
+        maker_order: u64,
+        buyer: ActorId,
+        seller: ActorId,
+        price: u128,
+        qty: u128,
+    },
+    OrderCancelled {
+        order_id: u64,
+        pair_id: u64,
+        trader: ActorId,
+        refunded: u128,
+    },
+    OrderClosed {
+        order_id: u64,
+        pair_id: u64,
+        trader: ActorId,
+        filled: u128,
+    },
+    Withdrawn {
+        who: ActorId,
+        token: ActorId,
+        amount: u128,
+    },
+    DustSwept {
+        token: ActorId,
+        amount: u128,
+    },
+    PausedSet {
+        paused: bool,
+    },
+    AdminProposed {
+        pending: ActorId,
+    },
+    AdminChanged {
+        admin: ActorId,
+    },
 }
 
 // ── Data model ──────────────────────────────────────────────────────────────────────
@@ -253,10 +301,11 @@ impl SpotState {
         self.level_remove(order.pair_id, order.side, order.price, id);
         let leftover = order.escrowed.saturating_sub(order.released);
         if leftover > 0
-            && let Some(tok) = self.escrow_token(&order) {
-                self.escrow_sub(tok, leftover);
-                *self.dust.entry(tok).or_insert(0) += leftover;
-            }
+            && let Some(tok) = self.escrow_token(&order)
+        {
+            self.escrow_sub(tok, leftover);
+            *self.dust.entry(tok).or_insert(0) += leftover;
+        }
         Some(order)
     }
 }
@@ -323,9 +372,11 @@ fn crossing_ids(
     let push_level = |ids: &VecDeque<u64>, out: &mut Vec<u64>| {
         for &id in ids.iter() {
             if let Some(o) = st.orders.get(&id)
-                && o.trader != exclude && o.filled < o.qty {
-                    out.push(id);
-                }
+                && o.trader != exclude
+                && o.filled < o.qty
+            {
+                out.push(id);
+            }
         }
     };
     match taker {
@@ -384,11 +435,9 @@ impl<'a> SpotService<'a> {
             let st = self.state.borrow();
             // Reject either orientation: the same asset pair listed twice splits
             // liquidity across two books that never cross.
-            if st
-                .pairs
-                .iter()
-                .any(|p| (p.base == base && p.quote == quote) || (p.base == quote && p.quote == base))
-            {
+            if st.pairs.iter().any(|p| {
+                (p.base == base && p.quote == quote) || (p.base == quote && p.quote == base)
+            }) {
                 return Err(SpotError::PairExists);
             }
         }
@@ -406,19 +455,30 @@ impl<'a> SpotService<'a> {
         let id = {
             let mut st = self.state.borrow_mut();
             // Re-check after the awaits: another listing could have landed meanwhile.
-            if st
-                .pairs
-                .iter()
-                .any(|p| (p.base == base && p.quote == quote) || (p.base == quote && p.quote == base))
-            {
+            if st.pairs.iter().any(|p| {
+                (p.base == base && p.quote == quote) || (p.base == quote && p.quote == base)
+            }) {
                 return Err(SpotError::PairExists);
             }
             let id = st.next_pair_id;
             st.next_pair_id += 1;
-            st.pairs.push(SpotPair { id, base, quote, base_dec, quote_dec, active: true });
+            st.pairs.push(SpotPair {
+                id,
+                base,
+                quote,
+                base_dec,
+                quote_dec,
+                active: true,
+            });
             id
         };
-        let _ = self.emit_event(SpotEvent::PairListed { pair_id: id, base, quote, base_dec, quote_dec });
+        let _ = self.emit_event(SpotEvent::PairListed {
+            pair_id: id,
+            base,
+            quote,
+            base_dec,
+            quote_dec,
+        });
         Ok(id)
     }
 
@@ -504,12 +564,24 @@ impl<'a> SpotService<'a> {
     #[export]
     pub fn get_pairs(&self, offset: u32, limit: u32) -> Vec<SpotPair> {
         let (skip, take) = page_bounds(offset, limit);
-        self.state.borrow().pairs.iter().skip(skip).take(take).cloned().collect()
+        self.state
+            .borrow()
+            .pairs
+            .iter()
+            .skip(skip)
+            .take(take)
+            .cloned()
+            .collect()
     }
 
     #[export]
     pub fn get_pair(&self, pair_id: u64) -> Option<SpotPair> {
-        self.state.borrow().pairs.iter().find(|p| p.id == pair_id).cloned()
+        self.state
+            .borrow()
+            .pairs
+            .iter()
+            .find(|p| p.id == pair_id)
+            .cloned()
     }
 
     #[export]
@@ -520,7 +592,11 @@ impl<'a> SpotService<'a> {
     /// Aggregated resting depth for a pair: (bids desc by price, asks asc by price),
     /// each level `(price, remaining_qty)`, capped at `depth` levels per side.
     #[export]
-    pub fn get_orderbook(&self, pair_id: u64, depth: u32) -> (Vec<(u128, u128)>, Vec<(u128, u128)>) {
+    pub fn get_orderbook(
+        &self,
+        pair_id: u64,
+        depth: u32,
+    ) -> (Vec<(u128, u128)>, Vec<(u128, u128)>) {
         let st = self.state.borrow();
         let cap = depth.clamp(1, MAX_PAGE) as usize;
         let level_qty = |ids: &VecDeque<u64>| -> u128 {
@@ -568,7 +644,12 @@ impl<'a> SpotService<'a> {
     #[export]
     pub fn get_claim(&self, token: ActorId) -> u128 {
         let caller = msg::source();
-        *self.state.borrow().claims.get(&(caller, token)).unwrap_or(&0)
+        *self
+            .state
+            .borrow()
+            .claims
+            .get(&(caller, token))
+            .unwrap_or(&0)
     }
 
     /// Escrow, dust, and reserve held for a token. With the token's own
@@ -577,7 +658,11 @@ impl<'a> SpotService<'a> {
     #[export]
     pub fn get_solvency(&self, token: ActorId) -> (u128, u128, u128) {
         let st = self.state.borrow();
-        let reserve = if st.perp_collateral == token { st.perp_reserve } else { 0 };
+        let reserve = if st.perp_collateral == token {
+            st.perp_reserve
+        } else {
+            0
+        };
         (
             *st.escrow.get(&token).unwrap_or(&0),
             *st.dust.get(&token).unwrap_or(&0),
@@ -628,7 +713,11 @@ impl<'a> SpotService<'a> {
             if st.orders.len() >= MAX_OPEN_ORDERS {
                 return Err(SpotError::BookFull);
             }
-            let pair = st.pairs.iter().find(|p| p.id == pair_id).ok_or(SpotError::NoPair)?;
+            let pair = st
+                .pairs
+                .iter()
+                .find(|p| p.id == pair_id)
+                .ok_or(SpotError::NoPair)?;
             if !pair.active {
                 return Err(SpotError::PairInactive);
             }
@@ -691,7 +780,11 @@ impl<'a> SpotService<'a> {
                 }
                 let p_match = o_price;
                 let proceeds = notional(p_match, fill, base_dec)?;
-                let (buyer, seller) = if side == Side::Buy { (caller, o_trader) } else { (o_trader, caller) };
+                let (buyer, seller) = if side == Side::Buy {
+                    (caller, o_trader)
+                } else {
+                    (o_trader, caller)
+                };
                 // Buyer receives base; seller receives quote at the resting price.
                 st.credit(buyer, base, fill);
                 st.credit(seller, quote, proceeds);
@@ -737,15 +830,14 @@ impl<'a> SpotService<'a> {
                     price: p_match,
                     qty: fill,
                 });
-                if maker_done
-                    && let Some(done) = st.retire(mid) {
-                        events.push(SpotEvent::OrderClosed {
-                            order_id: mid,
-                            pair_id,
-                            trader: done.trader,
-                            filled: done.filled,
-                        });
-                    }
+                if maker_done && let Some(done) = st.retire(mid) {
+                    events.push(SpotEvent::OrderClosed {
+                        order_id: mid,
+                        pair_id,
+                        trader: done.trader,
+                        filled: done.filled,
+                    });
+                }
                 rem -= fill;
             }
 
@@ -756,9 +848,18 @@ impl<'a> SpotService<'a> {
                 let filled = order.filled;
                 st.orders.insert(oid, order);
                 st.retire(oid);
-                events.push(SpotEvent::OrderClosed { order_id: oid, pair_id, trader: caller, filled });
+                events.push(SpotEvent::OrderClosed {
+                    order_id: oid,
+                    pair_id,
+                    trader: caller,
+                    filled,
+                });
             } else {
-                order.status = if order.filled == 0 { SpotStatus::Open } else { SpotStatus::PartiallyFilled };
+                order.status = if order.filled == 0 {
+                    SpotStatus::Open
+                } else {
+                    SpotStatus::PartiallyFilled
+                };
                 st.level_push(&order);
                 st.orders.insert(oid, order);
             }
@@ -820,7 +921,11 @@ impl<'a> SpotService<'a> {
     /// full balance when `amount` is `None` (audit L-01). Debits optimistically and
     /// restores the claim if the on-chain transfer fails. Never gated on the pause.
     #[export]
-    pub async fn withdraw(&mut self, token: ActorId, amount: Option<u128>) -> Result<u128, SpotError> {
+    pub async fn withdraw(
+        &mut self,
+        token: ActorId,
+        amount: Option<u128>,
+    ) -> Result<u128, SpotError> {
         let caller = msg::source();
         let amount = {
             let mut st = self.state.borrow_mut();
@@ -844,7 +949,11 @@ impl<'a> SpotService<'a> {
             *st.claims.entry((caller, token)).or_insert(0) += amount;
             return Err(SpotError::TransferFailed);
         }
-        let _ = self.emit_event(SpotEvent::Withdrawn { who: caller, token, amount });
+        let _ = self.emit_event(SpotEvent::Withdrawn {
+            who: caller,
+            token,
+            amount,
+        });
         Ok(amount)
     }
 
@@ -870,13 +979,19 @@ impl<'a> SpotService<'a> {
         let caller = msg::source();
         let (base, quote, base_dec) = {
             let st = self.state.borrow();
-            let pair = st.pairs.iter().find(|p| p.id == pair_id).ok_or(SpotError::NoPair)?;
+            let pair = st
+                .pairs
+                .iter()
+                .find(|p| p.id == pair_id)
+                .ok_or(SpotError::NoPair)?;
             if !pair.active {
                 return Err(SpotError::PairInactive);
             }
             (pair.base, pair.quote, pair.base_dec)
         };
-        let scale = 10u128.checked_pow(base_dec as u32).ok_or(SpotError::BadParams)?;
+        let scale = 10u128
+            .checked_pow(base_dec as u32)
+            .ok_or(SpotError::BadParams)?;
         if !vft_transfer_from(quote, caller, max_quote).await {
             return Err(SpotError::TransferFailed);
         }
@@ -903,7 +1018,8 @@ impl<'a> SpotService<'a> {
                 let mut cost = notional(o_price, fill, base_dec)?;
                 if spent + cost > max_quote {
                     let budget = max_quote - spent;
-                    let affordable = budget.checked_mul(scale).ok_or(SpotError::Overflow)? / o_price;
+                    let affordable =
+                        budget.checked_mul(scale).ok_or(SpotError::Overflow)? / o_price;
                     fill = fill.min(affordable);
                     if fill == 0 {
                         break;
@@ -944,16 +1060,19 @@ impl<'a> SpotService<'a> {
                     price: o_price,
                     qty: fill,
                 });
-                let done = st.orders.get(&mid).map(|m| m.filled >= m.qty).unwrap_or(false);
-                if done
-                    && let Some(d) = st.retire(mid) {
-                        events.push(SpotEvent::OrderClosed {
-                            order_id: mid,
-                            pair_id,
-                            trader: d.trader,
-                            filled: d.filled,
-                        });
-                    }
+                let done = st
+                    .orders
+                    .get(&mid)
+                    .map(|m| m.filled >= m.qty)
+                    .unwrap_or(false);
+                if done && let Some(d) = st.retire(mid) {
+                    events.push(SpotEvent::OrderClosed {
+                        order_id: mid,
+                        pair_id,
+                        trader: d.trader,
+                        filled: d.filled,
+                    });
+                }
             }
             // Refund the unspent budget; a market order never rests.
             st.credit(caller, quote, max_quote - spent);
@@ -982,7 +1101,11 @@ impl<'a> SpotService<'a> {
         let caller = msg::source();
         let (base, quote, base_dec) = {
             let st = self.state.borrow();
-            let pair = st.pairs.iter().find(|p| p.id == pair_id).ok_or(SpotError::NoPair)?;
+            let pair = st
+                .pairs
+                .iter()
+                .find(|p| p.id == pair_id)
+                .ok_or(SpotError::NoPair)?;
             if !pair.active {
                 return Err(SpotError::PairInactive);
             }
@@ -1045,16 +1168,19 @@ impl<'a> SpotService<'a> {
                     price: o_price,
                     qty: fill,
                 });
-                let done = st.orders.get(&mid).map(|m| m.filled >= m.qty).unwrap_or(false);
-                if done
-                    && let Some(d) = st.retire(mid) {
-                        events.push(SpotEvent::OrderClosed {
-                            order_id: mid,
-                            pair_id,
-                            trader: d.trader,
-                            filled: d.filled,
-                        });
-                    }
+                let done = st
+                    .orders
+                    .get(&mid)
+                    .map(|m| m.filled >= m.qty)
+                    .unwrap_or(false);
+                if done && let Some(d) = st.retire(mid) {
+                    events.push(SpotEvent::OrderClosed {
+                        order_id: mid,
+                        pair_id,
+                        trader: d.trader,
+                        filled: d.filled,
+                    });
+                }
             }
             // Refund whatever couldn't be sold.
             st.credit(caller, base, rem);
@@ -1092,9 +1218,18 @@ pub fn vft_route(service: &str, method: &str, args: Vec<u8>) -> Vec<u8> {
 /// prior `approve`. Returns whether the on-chain transfer succeeded.
 pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bool {
     let dex = exec::program_id();
-    let payload = vft_route("Vft", "TransferFrom", (from, dex, U256::from(value)).encode());
+    let payload = vft_route(
+        "Vft",
+        "TransferFrom",
+        (from, dex, U256::from(value)).encode(),
+    );
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(token, RawPayload(payload), gas as u128, 0) {
+    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+        token,
+        RawPayload(payload),
+        gas as u128,
+        0,
+    ) {
         Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
         Err(_) => false,
     }
@@ -1104,7 +1239,12 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
 pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
     let payload = vft_route("Vft", "Transfer", (to, U256::from(value)).encode());
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(token, RawPayload(payload), gas as u128, 0) {
+    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+        token,
+        RawPayload(payload),
+        gas as u128,
+        0,
+    ) {
         Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
         Err(_) => false,
     }
@@ -1115,7 +1255,12 @@ pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
 pub async fn vft_decimals(token: ActorId) -> Option<u8> {
     let payload = vft_route("VftMetadata", "Decimals", Vec::new());
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<u8>>(token, RawPayload(payload), gas as u128, 0) {
+    match msg::send_for_reply_as::<RawPayload, SailsReply<u8>>(
+        token,
+        RawPayload(payload),
+        gas as u128,
+        0,
+    ) {
         Ok(fut) => fut.await.map(|r| r.0).ok(),
         Err(_) => None,
     }
@@ -1195,7 +1340,14 @@ mod tests {
     #[test]
     fn retiring_an_order_unindexes_it_and_books_dust() {
         let mut st = SpotState::default();
-        st.pairs.push(SpotPair { id: 0, base: aid(7), quote: aid(8), base_dec: 6, quote_dec: 6, active: true });
+        st.pairs.push(SpotPair {
+            id: 0,
+            base: aid(7),
+            quote: aid(8),
+            base_dec: 6,
+            quote_dec: 6,
+            active: true,
+        });
         rest(&mut st, 0, Side::Sell, 10, 100, aid(1));
         st.escrow_add(aid(7), 100);
         if let Some(o) = st.orders.get_mut(&0) {
@@ -1203,7 +1355,10 @@ mod tests {
         }
         st.retire(0);
         assert!(st.orders.is_empty());
-        assert!(st.levels.is_empty(), "level index must not leak removed orders");
+        assert!(
+            st.levels.is_empty(),
+            "level index must not leak removed orders"
+        );
         assert_eq!(*st.dust.get(&aid(7)).unwrap(), 3);
         assert_eq!(*st.escrow.get(&aid(7)).unwrap(), 97);
     }

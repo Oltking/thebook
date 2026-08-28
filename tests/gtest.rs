@@ -15,10 +15,10 @@
 //! enforced by the compiler and by `legacy_attack_surface_is_gone`, which asserts
 //! against the generated IDL. The third (C-03) is a live runtime test.
 
-use sails_rs::client::*;
-use sails_rs::gtest::*;
 use sails_rs::ActorId;
 use sails_rs::U256;
+use sails_rs::client::*;
+use sails_rs::gtest::*;
 
 use thebook::WASM_BINARY;
 use thebook_client::perps_v_1::io as perp1_io;
@@ -82,7 +82,12 @@ async fn deploy() -> Env {
             .unwrap();
         ids.push(token.id());
     }
-    Env { env, program, usd: ids[0], eth: ids[1] }
+    Env {
+        env,
+        program,
+        usd: ids[0],
+        eth: ids[1],
+    }
 }
 
 fn alloc_ids() -> Vec<ActorId> {
@@ -198,7 +203,10 @@ async fn spot_listing_rejects_wrong_decimals() {
         .pending_call::<spot_io::ListPair>((e.eth, e.usd, 18u8, 6u8))
         .await
         .unwrap();
-    assert!(wrong.is_err(), "a decimals value the token disagrees with must be rejected");
+    assert!(
+        wrong.is_err(),
+        "a decimals value the token disagrees with must be rejected"
+    );
     // The correct value still lists.
     assert_eq!(list_eth_usd(&e).await, 0);
 }
@@ -214,7 +222,10 @@ async fn spot_listing_rejects_reverse_orientation() {
         .pending_call::<spot_io::ListPair>((e.usd, e.eth, 6u8, 6u8))
         .await
         .unwrap();
-    assert!(reversed.is_err(), "reverse orientation splits liquidity and must be rejected");
+    assert!(
+        reversed.is_err(),
+        "reverse orientation splits liquidity and must be rejected"
+    );
 }
 
 /// Audit M-14: delisting is reversible.
@@ -223,7 +234,13 @@ async fn spot_delist_is_reversible() {
     let e = deploy().await;
     let dex = e.program.id();
     let pair = list_eth_usd(&e).await;
-    let _: () = e.program.spot().pending_call::<spot_io::DelistPair>((pair,)).await.unwrap().unwrap();
+    let _: () = e
+        .program
+        .spot()
+        .pending_call::<spot_io::DelistPair>((pair,))
+        .await
+        .unwrap()
+        .unwrap();
 
     claim_and_approve(&e.env, e.eth, dex, BOB, 300_000).await;
     let blocked: Result<u64, _> = as_dex(&e.env, dex, BOB)
@@ -233,7 +250,13 @@ async fn spot_delist_is_reversible() {
         .unwrap();
     assert!(blocked.is_err(), "a delisted pair takes no new orders");
 
-    let _: () = e.program.spot().pending_call::<spot_io::RelistPair>((pair,)).await.unwrap().unwrap();
+    let _: () = e
+        .program
+        .spot()
+        .pending_call::<spot_io::RelistPair>((pair,))
+        .await
+        .unwrap()
+        .unwrap();
     let ok: Result<u64, _> = as_dex(&e.env, dex, BOB)
         .spot()
         .pending_call::<spot_io::PlaceLimit>((pair, Side::Sell, 200u128, 300_000u128))
@@ -260,7 +283,10 @@ async fn admin_handover_requires_acceptance() {
         .pending_call::<spot_io::ListPair>((e.eth, e.usd, 6u8, 6u8))
         .await
         .unwrap();
-    assert!(too_early.is_err(), "a proposal alone must not grant authority");
+    assert!(
+        too_early.is_err(),
+        "a proposal alone must not grant authority"
+    );
     // A third party cannot accept on BOB's behalf.
     let stolen: Result<(), _> = as_dex(&e.env, dex, CAROL)
         .spot()
@@ -298,7 +324,13 @@ async fn pause_blocks_orders_but_never_cancel_or_withdraw() {
         .unwrap()
         .unwrap();
 
-    let _: () = e.program.spot().pending_call::<spot_io::SetPaused>((true,)).await.unwrap().unwrap();
+    let _: () = e
+        .program
+        .spot()
+        .pending_call::<spot_io::SetPaused>((true,))
+        .await
+        .unwrap()
+        .unwrap();
 
     let blocked: Result<u64, _> = as_dex(&e.env, dex, BOB)
         .spot()
@@ -354,11 +386,24 @@ async fn spot_limit_cross_and_withdraw() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(claim_of(&e.env, dex, ALICE, e.eth).await, 500_000, "buyer receives the base");
-    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 50, "seller receives the quote");
+    assert_eq!(
+        claim_of(&e.env, dex, ALICE, e.eth).await,
+        500_000,
+        "buyer receives the base"
+    );
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.usd).await,
+        50,
+        "seller receives the quote"
+    );
 
     // Both orders fully filled, so neither rests: the book is empty again (H-02).
-    let resting: u64 = e.program.spot().pending_call::<spot_io::RestingOrderCount>(()).await.unwrap();
+    let resting: u64 = e
+        .program
+        .spot()
+        .pending_call::<spot_io::RestingOrderCount>(())
+        .await
+        .unwrap();
     assert_eq!(resting, 0, "filled orders must not linger in state");
 
     let w1: u128 = e
@@ -404,7 +449,11 @@ async fn spot_partial_withdraw_leaves_the_remainder() {
         .unwrap()
         .unwrap();
     assert_eq!(part, 100_000);
-    assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 200_000, "the rest stays claimable");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.eth).await,
+        200_000,
+        "the rest stays claimable"
+    );
 
     // Over-withdrawing the remainder is rejected without moving anything.
     let too_much: Result<u128, _> = as_dex(&e.env, dex, BOB)
@@ -430,7 +479,11 @@ async fn spot_cancel_refunds_escrow_exactly() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 0, "escrow is not claimable while resting");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.eth).await,
+        0,
+        "escrow is not claimable while resting"
+    );
 
     let _: () = as_dex(&e.env, dex, BOB)
         .spot()
@@ -438,9 +491,18 @@ async fn spot_cancel_refunds_escrow_exactly() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 300_000, "cancel refunds the full escrow");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.eth).await,
+        300_000,
+        "cancel refunds the full escrow"
+    );
 
-    let resting: u64 = e.program.spot().pending_call::<spot_io::RestingOrderCount>(()).await.unwrap();
+    let resting: u64 = e
+        .program
+        .spot()
+        .pending_call::<spot_io::RestingOrderCount>(())
+        .await
+        .unwrap();
     assert_eq!(resting, 0, "a cancelled order must be removed, not marked");
     assert_solvent(&e, e.eth).await;
 }
@@ -468,8 +530,16 @@ async fn spot_state_does_not_grow_with_completed_orders() {
             .unwrap()
             .unwrap();
     }
-    let resting: u64 = e.program.spot().pending_call::<spot_io::RestingOrderCount>(()).await.unwrap();
-    assert_eq!(resting, 0, "25 placed-and-cancelled orders must leave no residue");
+    let resting: u64 = e
+        .program
+        .spot()
+        .pending_call::<spot_io::RestingOrderCount>(())
+        .await
+        .unwrap();
+    assert_eq!(
+        resting, 0,
+        "25 placed-and-cancelled orders must leave no residue"
+    );
 
     // The book read is also clean — no zero-quantity ghost levels.
     let (bids, asks): Book = e
@@ -478,7 +548,10 @@ async fn spot_state_does_not_grow_with_completed_orders() {
         .pending_call::<spot_io::GetOrderbook>((pair, 50u32))
         .await
         .unwrap();
-    assert!(bids.is_empty() && asks.is_empty(), "cleared book must read empty");
+    assert!(
+        bids.is_empty() && asks.is_empty(),
+        "cleared book must read empty"
+    );
     assert_solvent(&e, e.eth).await;
 }
 
@@ -505,7 +578,12 @@ async fn spot_self_trading_is_rejected() {
         .unwrap()
         .unwrap();
     // Nothing crossed: both orders rest, no wash volume was printed.
-    let resting: u64 = e.program.spot().pending_call::<spot_io::RestingOrderCount>(()).await.unwrap();
+    let resting: u64 = e
+        .program
+        .spot()
+        .pending_call::<spot_io::RestingOrderCount>(())
+        .await
+        .unwrap();
     assert_eq!(resting, 2, "a self-cross must leave both orders resting");
     assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 0);
     assert_solvent(&e, e.eth).await;
@@ -547,7 +625,11 @@ async fn spot_market_sell_honours_its_slippage_bound() {
         100_000,
         "a rejected market sell must return the full escrow",
     );
-    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 0, "and must not have sold anything");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.usd).await,
+        0,
+        "and must not have sold anything"
+    );
     let _: u128 = as_dex(&e.env, dex, BOB)
         .spot()
         .pending_call::<spot_io::Withdraw>((e.eth, None::<u128>))
@@ -620,7 +702,11 @@ async fn spot_market_buy_refunds_unspent_budget() {
         .unwrap()
         .unwrap();
     assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 10_000);
-    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 99, "unspent budget refunded");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.usd).await,
+        99,
+        "unspent budget refunded"
+    );
     assert_solvent(&e, e.usd).await;
     assert_solvent(&e, e.eth).await;
 }
@@ -638,7 +724,11 @@ async fn spot_market_buy_empty_book_refunds_all() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 100, "empty book returns the whole budget");
+    assert_eq!(
+        claim_of(&e.env, dex, BOB, e.usd).await,
+        100,
+        "empty book returns the whole budget"
+    );
     assert_solvent(&e, e.usd).await;
 }
 
@@ -661,7 +751,11 @@ async fn spot_place_without_approval_reverts_cleanly() {
         .await
         .unwrap();
     assert!(res.is_err(), "no allowance means no order");
-    assert_eq!(balance_of(&e.env, e.eth, BOB).await, FAUCET_ETH as u128, "nothing left the wallet");
+    assert_eq!(
+        balance_of(&e.env, e.eth, BOB).await,
+        FAUCET_ETH as u128,
+        "nothing left the wallet"
+    );
     assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 0);
 }
 
@@ -735,7 +829,10 @@ async fn perps_market_requires_an_oi_cap() {
         .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), 0u128))
         .await
         .unwrap();
-    assert!(unbounded.is_err(), "an uncapped market must not be creatable");
+    assert!(
+        unbounded.is_err(),
+        "an uncapped market must not be creatable"
+    );
 }
 
 /// Audit L-04: the zero address is not a keeper.
@@ -748,7 +845,10 @@ async fn perps_keeper_cannot_be_the_zero_address() {
         .pending_call::<perp1_io::SetKeeper>((ActorId::zero(),))
         .await
         .unwrap();
-    assert!(res.is_err(), "zero keeper silently leaves admin as the mark authority");
+    assert!(
+        res.is_err(),
+        "zero keeper silently leaves admin as the mark authority"
+    );
 }
 
 /// Audit H-04: one key cannot reprice the book in a single step, and admin is not
@@ -773,7 +873,10 @@ async fn perps_mark_updates_are_bounded_and_keeper_only() {
         .pending_call::<perp1_io::SetMark>((market, 3000u128))
         .await
         .unwrap();
-    assert!(wild.is_err(), "a mark deviation beyond the bound must be rejected");
+    assert!(
+        wild.is_err(),
+        "a mark deviation beyond the bound must be rejected"
+    );
 
     // A move within the bound is accepted.
     set_mark(&e, market, 2100).await;
@@ -828,7 +931,12 @@ async fn perps_rejected_open_returns_the_margin() {
         .await
         .unwrap()
         .unwrap();
-    let reserve: u128 = e.program.perps_v_1().pending_call::<perp1_io::GetReserve>(()).await.unwrap();
+    let reserve: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetReserve>(())
+        .await
+        .unwrap();
     assert_eq!(reserve, 50_020, "reserve grew by the open fee");
     assert_eq!(balance_of(&e.env, e.usd, BOB).await, wallet_before - 10_000);
 
@@ -839,7 +947,10 @@ async fn perps_rejected_open_returns_the_margin() {
         .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
         .await
         .unwrap();
-    assert!(res.is_err(), "the open-interest cap must reject the second position");
+    assert!(
+        res.is_err(),
+        "the open-interest cap must reject the second position"
+    );
 
     // These two assertions are the regression test. Before the fix the rejection
     // returned `Err(OiCapExceeded)` *and* kept 10_000 — the wallet was down 20_000
@@ -880,8 +991,16 @@ async fn perps_invalid_open_rejects_before_escrow() {
             .await
             .unwrap();
         assert!(res.is_err(), "{why} must be rejected");
-        assert_eq!(balance_of(&e.env, e.usd, BOB).await, before, "{why}: escrow never happened");
-        assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 0, "{why}: nothing credited");
+        assert_eq!(
+            balance_of(&e.env, e.usd, BOB).await,
+            before,
+            "{why}: escrow never happened"
+        );
+        assert_eq!(
+            claim_of(&e.env, dex, BOB, e.usd).await,
+            0,
+            "{why}: nothing credited"
+        );
     }
 
     // An unknown market is also refused before any transfer.
@@ -926,7 +1045,10 @@ async fn perps_reserve_withdrawal_is_capped_by_open_liability() {
         .pending_call::<perp1_io::WithdrawReserve>((reserve,))
         .await
         .unwrap();
-    assert!(drain.is_err(), "H-05: the reserve owed to traders is not the operator's to take");
+    assert!(
+        drain.is_err(),
+        "H-05: the reserve owed to traders is not the operator's to take"
+    );
 
     // Withdrawing genuine surplus still works.
     let surplus = reserve - liability;
@@ -968,7 +1090,10 @@ async fn perps_liquidation_pays_the_liquidator() {
         .unwrap()
         .unwrap();
     let fee = claim_of(&e.env, dex, ALICE, e.usd).await;
-    assert!(fee > 0, "L-07: a liquidator must be paid even when equity has gapped away");
+    assert!(
+        fee > 0,
+        "L-07: a liquidator must be paid even when equity has gapped away"
+    );
 
     let again: Result<(), _> = e
         .program

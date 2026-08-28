@@ -7,7 +7,9 @@ node_modules/
 
 # Local agent skill packs (vara-skills router/bodies) — tooling, not project source
 .agents/
-.github/workflows/
+# NOTE: .github/workflows/ used to be ignored here. That meant CI existed on disk
+# and never ran on the repository, so nothing gated a codebase handling real funds
+# (audit M-10). Pushing workflow changes needs a token with the `workflow` scope.
 
 # Build artifacts the deploy script copies next to itself
 scripts/thebook.opt.wasm

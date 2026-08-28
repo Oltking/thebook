@@ -21,7 +21,7 @@
 //! cap), and both credit the margin back to the trader's claim before returning, so
 //! a rejection can never keep their money (audit C-03, M-08).
 
-use crate::spot::{vft_transfer_from, SpotError, SpotState};
+use crate::spot::{SpotError, SpotState, vft_transfer_from};
 use sails_rs::cell::RefCell;
 use sails_rs::gstd::{exec, msg};
 use sails_rs::prelude::*;
@@ -112,16 +112,59 @@ impl From<SpotError> for PerpsError {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum PerpsEvent {
-    MarketAdded { market_id: u64, symbol: String, max_oi: u128 },
-    MarketCapSet { market_id: u64, max_oi: u128 },
-    MarkSet { market_id: u64, price: u128, block: u32 },
-    PositionOpened { position_id: u64, market_id: u64, owner: ActorId, is_long: bool, notional: u128, entry: u128, margin: u128, leverage: u32 },
-    PositionClosed { position_id: u64, owner: ActorId, payout: u128, pnl: i128, funding: i128, at_entry: bool },
-    PositionLiquidated { position_id: u64, owner: ActorId, liquidator: ActorId, to_owner: u128, fee: u128 },
-    ReserveFunded { amount: u128, reserve: u128 },
-    ReserveWithdrawn { amount: u128, reserve: u128 },
-    KeeperSet { keeper: ActorId },
-    CollateralSet { token: ActorId },
+    MarketAdded {
+        market_id: u64,
+        symbol: String,
+        max_oi: u128,
+    },
+    MarketCapSet {
+        market_id: u64,
+        max_oi: u128,
+    },
+    MarkSet {
+        market_id: u64,
+        price: u128,
+        block: u32,
+    },
+    PositionOpened {
+        position_id: u64,
+        market_id: u64,
+        owner: ActorId,
+        is_long: bool,
+        notional: u128,
+        entry: u128,
+        margin: u128,
+        leverage: u32,
+    },
+    PositionClosed {
+        position_id: u64,
+        owner: ActorId,
+        payout: u128,
+        pnl: i128,
+        funding: i128,
+        at_entry: bool,
+    },
+    PositionLiquidated {
+        position_id: u64,
+        owner: ActorId,
+        liquidator: ActorId,
+        to_owner: u128,
+        fee: u128,
+    },
+    ReserveFunded {
+        amount: u128,
+        reserve: u128,
+    },
+    ReserveWithdrawn {
+        amount: u128,
+        reserve: u128,
+    },
+    KeeperSet {
+        keeper: ActorId,
+    },
+    CollateralSet {
+        token: ActorId,
+    },
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
@@ -225,11 +268,7 @@ pub fn liq_price(pos: &PerpPosition) -> u128 {
     let nm = n * mm / 10_000;
     let num = if pos.is_long { nm - m + n } else { m - nm + n };
     let x = e * num / n;
-    if x < 0 {
-        0
-    } else {
-        x as u128
-    }
+    if x < 0 { 0 } else { x as u128 }
 }
 
 /// What the reserve currently owes: every position's unrealised profit, plus a
@@ -391,7 +430,11 @@ impl<'a> PerpsService<'a> {
             });
             (id, symbol)
         };
-        let _ = self.emit_event(PerpsEvent::MarketAdded { market_id: id, symbol: sym, max_oi });
+        let _ = self.emit_event(PerpsEvent::MarketAdded {
+            market_id: id,
+            symbol: sym,
+            max_oi,
+        });
         Ok(id)
     }
 
@@ -450,7 +493,11 @@ impl<'a> PerpsService<'a> {
             m.mark = price;
             m.mark_block = block;
         }
-        let _ = self.emit_event(PerpsEvent::MarkSet { market_id, price, block });
+        let _ = self.emit_event(PerpsEvent::MarkSet {
+            market_id,
+            price,
+            block,
+        });
         Ok(())
     }
 
@@ -689,9 +736,10 @@ impl<'a> PerpsService<'a> {
             let to_owner = eq_pos - from_equity;
             // Whatever the margin didn't cover flows into the reserve; the top-up
             // flows out of it.
-            st.perp_reserve =
-                (st.perp_reserve as i128 + pos.margin as i128 - eq_pos as i128 - from_reserve as i128)
-                    .max(0) as u128;
+            st.perp_reserve = (st.perp_reserve as i128 + pos.margin as i128
+                - eq_pos as i128
+                - from_reserve as i128)
+                .max(0) as u128;
             release_oi(&mut st, &pos);
             let collateral = st.perp_collateral;
             st.credit(pos.owner, collateral, to_owner);
@@ -786,7 +834,16 @@ impl<'a> PerpsService<'a> {
                     .find(|m| m.id == p.market_id)
                     .map(|m| m.mark)
                     .unwrap_or(p.entry);
-                (p.id, p.market_id, p.is_long, p.notional, p.entry, p.margin, p.leverage, pnl_of(p, mark))
+                (
+                    p.id,
+                    p.market_id,
+                    p.is_long,
+                    p.notional,
+                    p.entry,
+                    p.margin,
+                    p.leverage,
+                    pnl_of(p, mark),
+                )
             })
             .collect()
     }
@@ -865,11 +922,17 @@ mod tests {
         const N: u128 = 10_000_000_000;
         let mut m = market(N, 0); // entirely long
         accrue_funding(&mut m, 1_200); // one hour at ~3s blocks
-        assert!(m.cum_funding > 0, "longs alone must accrue positive funding");
+        assert!(
+            m.cum_funding > 0,
+            "longs alone must accrue positive funding"
+        );
         let long = pos(true, N, 100, N / 10);
         let short = pos(false, N, 100, N / 10);
         // The long pays; the short is paid the same amount.
-        assert_eq!(funding_of(&long, m.cum_funding), -funding_of(&short, m.cum_funding));
+        assert_eq!(
+            funding_of(&long, m.cum_funding),
+            -funding_of(&short, m.cum_funding)
+        );
         assert!(funding_of(&long, m.cum_funding) > 0);
         // Roughly 0.12%/hour at full imbalance — a real but not punitive rate.
         assert_eq!(funding_of(&long, m.cum_funding), 12_000_000);

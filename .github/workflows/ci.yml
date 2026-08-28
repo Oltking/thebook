@@ -1,0 +1,136 @@
+name: CI
+
+# This workflow was untracked for a while, which meant none of it ever ran against
+# the repository (audit M-10). It is tracked again and extended to cover the
+# frontend and dependency health, not just the Rust program.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dsherret/rust-toolchain-file@v1
+
+      - name: Install Binaryen
+        run: |
+          sudo wget -c https://github.com/WebAssembly/binaryen/releases/download/$BINARYEN_VERSION/binaryen-$BINARYEN_VERSION-x86_64-linux.tar.gz -O - | sudo tar -xz -C .
+          sudo cp binaryen-$BINARYEN_VERSION/bin/wasm-opt /usr/bin/
+        env:
+          BINARYEN_VERSION: version_125
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo fmt
+        run: cargo fmt -- --check
+
+      - name: Cargo clippy
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Cargo build
+        run: cargo build --release
+
+      - name: Cargo test
+        run: cargo test --release
+
+  audit-regressions:
+    name: Audit regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dsherret/rust-toolchain-file@v1
+      - uses: Swatinem/rust-cache@v2
+
+      # A grep-level backstop for the deleted attack surface, in addition to the
+      # `legacy_attack_surface_is_gone` test. Re-adding any of these should fail
+      # loudly and early rather than at review time.
+      - name: Deleted attack surface stays deleted
+        run: |
+          set -e
+          for banned in call_agent_service SeedHouse INITIAL_USD DexState; do
+            if grep -rn --include='*.rs' "$banned" app/ ; then
+              echo "::error::'$banned' is back — see audit C-01/C-02"
+              exit 1
+            fi
+          done
+          echo "Legacy attack surface absent."
+
+      - name: Balance-invariant tests
+        run: cargo test --test gtest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Test
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Production dependencies only: dev-tool advisories do not reach a user's
+      # browser, and failing on them trains everyone to ignore this job.
+      - name: npm audit (production)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - uses: dsherret/rust-toolchain-file@v1
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
