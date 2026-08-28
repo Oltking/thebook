@@ -1,6 +1,6 @@
 {
   "name": "@thebookdex/mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP skill pack for thebookdex: give any MCP agent a non-custodial spot CLOB on Vara mainnet, with per-trade and daily spend limits, slippage bounds, and confirmation prompts on large orders.",
   "type": "module",
   "bin": {
@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "thebook-sdk": "^0.4.0",
+    "thebook-sdk": "^0.5.0",
     "zod": "^3.23.0"
   }
 }

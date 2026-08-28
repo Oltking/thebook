@@ -262,6 +262,71 @@ server.tool('thebook_my_orders', "This wallet's resting orders. Filled and cance
   {}, tool((b) => b.spot.myOrders()),
 );
 
+// ── Liquidity pools ──
+server.tool('thebook_pools', 'List the AMM liquidity pools with their reserves and total shares.',
+  {}, tool((b) => b.amm.pools()),
+);
+server.tool('thebook_quote_swap', 'Price a pool swap without sending it. Returns the output amount and the 0.3% fee.',
+  {
+    poolId: z.number().int(),
+    tokenIn: z.string().describe('Token VFT program id (0x…) being paid in'),
+    amountIn: bnStr.describe('Smallest-units to pay in'),
+  },
+  tool(async (b, { poolId, tokenIn, amountIn }) => {
+    const q = await b.amm.quote(BigInt(poolId), tokenIn, BigInt(amountIn));
+    return { amountOut: q.amountOut.toString(), fee: q.fee.toString() };
+  }),
+);
+server.tool('thebook_pool_position', "This wallet's LP shares in a pool and what they currently redeem for. Fees are not paid out separately; they raise this redemption value.",
+  { poolId: z.number().int() },
+  tool(async (b, { poolId }) => {
+    const p = await b.amm.position(BigInt(poolId));
+    return { shares: p.shares.toString(), redeemsA: p.amountA.toString(), redeemsB: p.amountB.toString() };
+  }),
+);
+server.tool('thebook_pool_swap', 'Swap through a liquidity pool, receiving at least minOut. Approve the input token first.',
+  {
+    poolId: z.number().int(),
+    tokenIn: z.string(),
+    amountIn: bnStr,
+    minOut: bnStr.describe('Minimum output — your slippage bound. Reverts and returns your input if unmet.'),
+    confirm: confirmField,
+  },
+  tool(async (b, { poolId, tokenIn, amountIn, minOut, confirm }) => {
+    const human = checkSpend({ tokenId: tokenIn, raw: amountIn, confirm, what: 'Pool swap' });
+    const out = await b.amm.swap(BigInt(poolId), tokenIn, BigInt(amountIn), BigInt(minOut));
+    return { received: out?.toString?.() ?? out, paid: human };
+  }),
+);
+server.tool('thebook_add_liquidity', 'Supply both sides of a pool and receive LP shares. Earns 0.3% of every swap, in proportion to your share. Carries impermanent loss: if the price moves you can end up with less than holding. Approve both tokens first.',
+  {
+    poolId: z.number().int(),
+    amountA: bnStr, amountB: bnStr,
+    minShares: bnStr.describe('Minimum shares to mint — the ratio can move before this lands'),
+    confirm: confirmField,
+  },
+  tool(async (b, { poolId, amountA, amountB, minShares, confirm }) => {
+    const pool = (await b.amm.pools()).find((p) => Number(p.id) === poolId);
+    if (!pool) throw new Error(`No pool ${poolId}. Call thebook_pools first.`);
+    const a = checkSpend({ tokenId: pool.token_a, raw: amountA, confirm, what: 'Liquidity deposit (side A)' });
+    const bb = checkSpend({ tokenId: pool.token_b, raw: amountB, confirm, what: 'Liquidity deposit (side B)' });
+    const shares = await b.amm.addLiquidity(BigInt(poolId), BigInt(amountA), BigInt(amountB), BigInt(minShares));
+    return { shares: shares?.toString?.() ?? shares, deposited: `${a} + ${bb}` };
+  }),
+);
+server.tool('thebook_remove_liquidity', 'Burn LP shares and take back your share of both reserves, including accrued fees. Never blocked, even while the venue is paused.',
+  {
+    poolId: z.number().int(),
+    shares: bnStr,
+    minA: bnStr.describe('Minimum of token A to accept'),
+    minB: bnStr.describe('Minimum of token B to accept'),
+  },
+  tool(async (b, { poolId, shares, minA, minB }) => {
+    const out = await b.amm.removeLiquidity(BigInt(poolId), BigInt(shares), BigInt(minA), BigInt(minB));
+    return { returned: Array.isArray(out) ? out.map(String) : out };
+  }),
+);
+
 // ── Settlement ──
 server.tool('thebook_claim', 'Your withdrawable balance (fills + cancelled escrow) for a token, in smallest-units.',
   { token: z.string().describe('Token VFT program id (0x…)') },

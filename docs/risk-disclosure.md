@@ -40,6 +40,26 @@ other means, that amount is what is at risk.
 - **Order history is not stored on chain.** Filled and cancelled orders are removed
   from contract state and exist only as events. If you need records, keep your own.
 
+## Liquidity pools
+
+Supplying liquidity is not a savings account. It is taking one side of every trade
+that passes through the pool.
+
+- **You earn 0.3% of every swap**, in proportion to your share of the pool. Fees are
+  not paid to you separately; they stay in the pool, so what your shares redeem for
+  grows. You realise them by withdrawing.
+- **Impermanent loss is real and is the main risk.** When the price of the two tokens
+  moves apart, arbitrage traders rebalance the pool by buying the one that rose. You
+  end up holding more of the asset that fell and less of the one that rose, and can
+  be worse off than if you had simply held both. Fees offset this. They do not always
+  beat it, and on a volatile pair they often will not.
+- **You cannot choose your price.** Deposits are minted at the pool's ratio at the
+  moment they land, and the interface bounds that, but the pool decides the ratio.
+- **Withdrawing is always available.** Removing liquidity is never blocked by a pause
+  or by a pool being closed to new deposits. That is deliberate.
+- **A pool with little liquidity moves a lot on small trades.** Early providers face
+  the largest price impact and the largest impermanent loss.
+
 ## Perpetual futures — read this part twice
 
 Perps are the highest-risk thing on this venue, by a wide margin.
@@ -100,6 +120,6 @@ Nothing here is an offer, solicitation, or recommendation to trade anything.
 
 ## In one sentence
 
-Unaudited software, thin books, a single admin key, and a house-backed leverage
-product where the reserve can run short — **do not commit funds you are not prepared
-to lose entirely.**
+Unaudited software, thin books, a single admin key, a house-backed leverage product
+where the reserve can run short, and liquidity pools that can lose money even when
+they earn fees — **do not commit funds you are not prepared to lose entirely.**

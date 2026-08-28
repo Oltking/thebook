@@ -1,6 +1,6 @@
 {
   "name": "thebook-sdk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Trade thebookdex from inside your own agent: non-custodial spot CLOB over real bridged tokens on Vara mainnet (approve, place with a slippage bound, withdraw), plus cash-settled perps. No website.",
   "type": "module",
   "main": "thebook.mjs",

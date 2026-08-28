@@ -303,6 +303,43 @@ export async function connectTheBook(opts = {}) {
       },
     },
 
+    // ── v1 AMM: constant-product pools over the same real VFT tokens ──
+    // Fees (0.3% of each swap's input) stay in the pool, so LP shares appreciate
+    // rather than accruing a separate claimable balance. Amounts are token
+    // smallest-units. Payouts land in `claims`, withdrawn via `spot.withdraw`.
+    amm: {
+      // Admin/multisig. Decimals are verified against each token and rejected on
+      // mismatch, as with spot listing.
+      createPool: (tokenA, tokenB, decA, decB) =>
+        send('Amm', 'CreatePool', [tokenA, tokenB, decA, decB]),
+      setPoolActive: (poolId, active) => send('Amm', 'SetPoolActive', [poolId, active]),
+
+      /** Deposit both sides. `minShares` is required: the mint ratio can move. */
+      addLiquidity: (poolId, amountA, amountB, minShares) =>
+        send('Amm', 'AddLiquidity', [poolId, amountA, amountB, minShares]),
+      /** Burn shares for a fraction of both reserves, fees included. Never blocked
+       *  by a pause: a provider must always be able to exit. */
+      removeLiquidity: (poolId, shares, minA, minB) =>
+        send('Amm', 'RemoveLiquidity', [poolId, shares, minA, minB]),
+      /** Swap through a pool. `minOut` is required; passing 0 accepts any price. */
+      swap: (poolId, tokenIn, amountIn, minOut) =>
+        send('Amm', 'Swap', [poolId, tokenIn, amountIn, minOut]),
+
+      // Reads.
+      pools: (offset = 0, limit = 200) => query('Amm', 'GetPools', [offset, limit]),
+      pool: (poolId) => query('Amm', 'GetPool', [poolId]),
+      /** `{ shares, amountA, amountB }` — what your shares redeem for right now. */
+      async position(poolId) {
+        const [shares, amountA, amountB] = await query('Amm', 'GetPosition', [poolId]);
+        return { shares: BigInt(shares), amountA: BigInt(amountA), amountB: BigInt(amountB) };
+      },
+      /** Price a swap without sending one: `{ amountOut, fee }`. */
+      async quote(poolId, tokenIn, amountIn) {
+        const [amountOut, fee] = await query('Amm', 'QuoteSwap', [poolId, tokenIn, amountIn]);
+        return { amountOut: BigInt(amountOut), fee: BigInt(fee) };
+      },
+    },
+
     // ── v1 perps: cash-settled, real wUSDT collateral, settles to spot claims ──
     // Margin/amounts are collateral smallest-units (u128). `price` (mark) is any
     // consistent unit (PnL uses price ratios). Margin escrow needs a prior
