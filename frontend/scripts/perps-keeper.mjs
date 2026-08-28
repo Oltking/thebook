@@ -40,7 +40,7 @@ const SEED = process.env.KEEPER_SEED ?? process.env.VARA_SEED;
 if (!process.env.KEEPER_SEED && process.env.VARA_SEED) {
   console.warn('  ! Using VARA_SEED. Set KEEPER_SEED to a dedicated keeper key with no admin rights (audit H-09).');
 }
-const PROGRAM_ID = process.env.THEBOOK_PROGRAM_ID ?? '0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774';
+const PROGRAM_ID = process.env.THEBOOK_PROGRAM_ID ?? '0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3';
 // Required, no default: this script signs (audit H-09).
 const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000);

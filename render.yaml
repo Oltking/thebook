@@ -66,7 +66,7 @@ services:
       - key: KEEPER_SEED          # keeper-only key, must NOT be the admin seed (H-09)
         sync: false
       - key: THEBOOK_PROGRAM_ID   # the deployed DEX program id
-        value: 0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774
+        value: 0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3
 
   # ── Solvency monitor ────────────────────────────────────────────────────────
   #
@@ -93,7 +93,7 @@ services:
       - key: NODE_ADDRESS
         value: wss://rpc.vara.network
       - key: PROGRAM_ID
-        value: 0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774
+        value: 0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3
       - key: INTERVAL_MS
         value: "30000"
       - key: THRESHOLD_PCT

@@ -3,7 +3,7 @@
 Everything is deployed and verified. What remains is transferring funds and starting
 two processes.
 
-**Program:** `0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774`
+**Program:** `0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3`
 (Vara mainnet, deployed 28 August 2026 after the end-to-end rehearsal passed)
 
 ---
@@ -12,8 +12,9 @@ two processes.
 
 | | |
 |---|---|
-| Spot | **Live and tradeable.** 4 markets, unpaused, verified with a real order |
-| Perps | **Closed.** Markets exist but no marks are published, so no position can open |
+| Spot | **Live.** 4 markets, unpaused. Books empty until liquidity arrives |
+| Pools | **Live.** 4 AMM pools created, all empty. 0.3% fee to providers |
+| Perps | **Closed** until the keeper publishes marks and the reserve is funded |
 | Custodied funds | Zero |
 | Admin | Single key, not yet a multisig |
 
@@ -29,7 +30,7 @@ started. Perps were proven the same way on a throwaway instance of the same buil
 In Vercel, set:
 
 ```
-VITE_PROGRAM_ID = 0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774
+VITE_PROGRAM_ID = 0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3
 ```
 
 and redeploy. Until this is done the live site talks to a retired program.
@@ -37,7 +38,29 @@ and redeploy. Until this is done the live site talks to a retired program.
 While there, delete `GROQ_API_KEY`: the endpoint that used it was removed, so there is
 no LLM key left in the system.
 
-## 2 · Fund the perps reserve `[you]`
+## 2 · Seed a pool `[you]`
+
+This is what makes spot actually tradeable. The books are empty and there is no market
+maker, so an AMM pool is the counterparty: once seeded, every order has something to
+trade against, and you earn 0.3% of the flow.
+
+Pools mirror the spot markets:
+
+| Pool | Pair |
+|---|---|
+| 0 | wETH / wUSDT |
+| 1 | wETH / wUSDC |
+| 2 | wVARA / wUSDT |
+| 3 | wVARA / wUSDC |
+
+Seed one from the app's **Pools** tab (add liquidity, both sides), or through the SDK.
+The ratio you deposit at *sets the opening price*, so use something close to the market
+rate or arbitrage will take the difference immediately.
+
+**Start small.** A pool with little liquidity moves a lot on small trades, and you carry
+impermanent loss as the price moves. Size it as a market-making budget, not a deposit.
+
+## 3 · Fund the perps reserve `[you]`
 
 The reserve is the counterparty to every perp position, so perps stay closed until it
 holds something.
@@ -92,7 +115,7 @@ The contract refuses new positions below **120% coverage** of what the reserve a
 owes, so the reserve bounds real capacity. Start well under the caps and raise both
 together as volume justifies it.
 
-## 3 · Start the keeper `[you]`
+## 4 · Start the keeper `[you]`
 
 This is what opens perps. Do it **after** the reserve is funded.
 
@@ -119,7 +142,7 @@ set **Root Directory** `frontend`, **Build Command**
 The keeper key is already set on the contract and holds 50 VARA for gas. It has no
 admin rights, and a single mark update is bounded to a 10% move.
 
-## 4 · Start the solvency monitor `[you]`
+## 5 · Start the solvency monitor `[you]`
 
 Created by the same blueprint as `thebook-solvency-monitor`. It **signs nothing and
 needs no seed**, so start it before funding the reserve rather than after: its job is
@@ -149,7 +172,7 @@ To run it locally instead:
 ```sh
 cd frontend
 NODE_ADDRESS=wss://rpc.vara.network \
-PROGRAM_ID=0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774 \
+PROGRAM_ID=0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3 \
 ALERT_WEBHOOK=<somewhere a human is paged> \
 node scripts/solvency-monitor.mjs
 ```

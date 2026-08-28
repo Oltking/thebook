@@ -8,7 +8,7 @@ export const NODE_ADDRESS =
 
 // thebook v1 on Vara mainnet.
 export const PROGRAM_ID = (import.meta.env.VITE_PROGRAM_ID ??
-  '0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774') as `0x${string}`;
+  '0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3') as `0x${string}`;
 
 // True until a real program ID is wired in - used to surface a setup banner instead
 // of silently talking to the zero address.

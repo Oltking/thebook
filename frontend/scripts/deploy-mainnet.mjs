@@ -210,6 +210,26 @@ if (keeperHex === sourceId) {
 await call('PerpsV1', 'SetKeeper', keeperHex);
 console.log(`    keeper = ${keeperHex}`);
 
+// 3b · Create the AMM pools.
+//
+// Creating a pool is cheap and holds nothing: it only records the pair and verifies
+// each token's decimals on chain. Liquidity is supplied later, by whoever provides
+// it. Mirroring the spot markets means every pair is tradeable both ways from the
+// start, on the book and through a pool.
+console.log('\n  creating liquidity pools:');
+for (const m of MARKETS) {
+  try {
+    const id = await call('Amm', 'CreatePool', m.base.addr, m.quote.addr, m.base.dec, m.quote.dec);
+    console.log(`    ${m.name.padEnd(10)} pool_id=${id}`);
+  } catch (e) {
+    if (/PoolExists/.test(String(e?.message ?? e))) {
+      console.log(`    ${m.name.padEnd(10)} already exists, skipping`);
+    } else {
+      throw e;
+    }
+  }
+}
+
 // 4 · Land PAUSED by default.
 //
 // A fresh program has empty books, no funded reserve, no running keeper and no
@@ -229,6 +249,7 @@ console.log(`  Next — none of this is optional before real funds:`);
 if (LAND_PAUSED) {
   console.log(`    • the venue is PAUSED. Open it last, with Spot/SetPaused(false)`);
 }
+console.log(`    • seed a pool so spot has a counterparty: Amm/AddLiquidity`);
 console.log(`    • fund the perps reserve: approve wUSDT to the DEX, then PerpsV1/FundReserve`);
 console.log(`    • start the mark keeper on its own key (scripts/perps-keeper.mjs)`);
 console.log(`    • start the solvency monitor (scripts/solvency-monitor.mjs)`);

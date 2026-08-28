@@ -74,10 +74,17 @@ if (!existsSync(IDL_PATH)) bad(`IDL missing at ${IDL_PATH}`); else ok('IDL prese
 // The IDL must describe the remediated program, not an older build.
 if (existsSync(IDL_PATH)) {
   const idl = readFileSync(IDL_PATH, 'utf-8');
-  for (const banned of ['service Orderbook', 'service Amm', 'CallAgentService']) {
+  // `service Amm` is NOT banned: the legacy virtual-balance AMM was deleted with
+  // C-02 and a real one built in its place. What must stay gone are the
+  // virtual-balance entry points themselves.
+  for (const banned of ['service Orderbook', 'CallAgentService', 'SeedHouse']) {
     if (idl.includes(banned)) bad(`IDL still contains '${banned}' — wrong build`);
   }
-  for (const needed of ['AcceptAdmin', 'SetPaused', 'GetSolvency', 'MarketSell']) {
+  for (const needed of [
+    'AcceptAdmin', 'SetPaused', 'GetSolvency', 'MarketSell',
+    'service Amm', 'AddLiquidity', 'min_shares',   // the real AMM
+    'GetConfig',                                    // perps collateral read
+  ]) {
     if (!idl.includes(needed)) bad(`IDL missing '${needed}' — stale build`);
   }
   if (idl.includes('service Spot') && !idl.includes('service Orderbook')) {

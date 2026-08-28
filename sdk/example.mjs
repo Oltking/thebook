@@ -3,7 +3,7 @@
 //
 //   cd sdk && npm install
 //   VARA_SEED="your twelve word mnemonic" \
-//   THEBOOK_PROGRAM_ID=0xf6080c9cdf99b3e0fdac2ded2b0333c2e077e2c41db7a734abab6b082b1a2774 \
+//   THEBOOK_PROGRAM_ID=0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3 \
 //   node example.mjs
 //
 // The seed is a funded Vara MAINNET account holding the bridged tokens you want to
