@@ -36,14 +36,15 @@ const book = await connectTheBook({
 const [pair] = (await book.spot.pairs()).filter((p) => p.active);
 const baseDec = Number(pair.base_dec), quoteDec = Number(pair.quote_dec);
 
-// A BUY escrows QUOTE — approve the quote token once (a large allowance avoids
-// re-approving every trade), then place the order.
-await book.spot.approve(pair.quote, book.units(1_000_000, quoteDec));
-const oid = await book.spot.placeLimit(
-  pair.id, Side.Buy,
-  book.units(2500, quoteDec),   // price: quote-units per one whole base
-  book.units(0.01, baseDec),    // qty: 0.01 base
-);
+// A BUY escrows QUOTE. Approve exactly what this order needs, not a standing
+// allowance: an allowance is only as safe as the contract holding it, and for an
+// agent it means a confused or compromised key can spend the whole balance rather
+// than one order's worth.
+const price = book.units(2500, quoteDec);
+const qty = book.units(0.01, baseDec);
+const escrow = (price * qty) / 10n ** BigInt(baseDec);   // quote this order escrows
+await book.spot.approve(pair.quote, escrow);
+const oid = await book.spot.placeLimit(pair.id, Side.Buy, price, qty);
 
 console.log(await book.spot.myOrders());
 await book.spot.withdraw(pair.base);   // pull filled proceeds back to your wallet
@@ -66,26 +67,36 @@ wallet**. There is no faucet and no starting balance.
    `book.address`). It needs a little VARA for gas — or point `voucherEndpoint` at the
    app's `/api/voucher` so gas is sponsor-paid and the agent needs no VARA of its own.
 2. Hold the tokens you want to trade: **wUSDT / wUSDC** to buy, **wETH / wVARA** to sell.
-3. `spot.approve(token, amount)` once per token, then place orders and `spot.withdraw`.
+3. `spot.approve(token, amount)` for what the next order escrows, place it, then
+   `spot.withdraw` your proceeds.
 
 ## API
 
 `connectTheBook({ seed, programId, node?, idlPath?, voucherEndpoint? })` → `book`
 
 **Spot** (`book.spot`)
-- `approve(token, amount)` — approve the DEX to escrow a token (its VFT program id). Required before that token can back an order: quote for a buy, base for a sell.
+- `approve(token, amount)` — approve the DEX to escrow a token (its VFT program id). Required before that token can back an order: quote for a buy, base for a sell. **Approve per order**, not a large standing amount.
 - `placeLimit(pairId, side, price, qty)` → order id
-- `marketBuy(pairId, qty, maxQuote)` / `marketSell(pairId, qty)`
+- `marketBuy(pairId, qty, maxQuote, minBaseOut)` / `marketSell(pairId, qty, minQuoteOut)` — the last argument is a **required slippage bound**: the worst fill you accept. If the book cannot meet it the order reverts and your escrow is returned. Passing `0` means "any price" and is almost never what you want on a thin book.
 - `cancelOrder(oid)`
-- `withdraw(token)` — pull filled proceeds / cancelled escrow of a token back to your wallet
+- `withdraw(token, amount?)` — pull proceeds / cancelled escrow back to your wallet; omit `amount` for the full balance
 - `balanceOf(token)` / `allowance(token)` — your real VFT balance / current DEX allowance
-- Reads: `pairs()`, `pair(pairId)`, `orderbook(pairId)` → `{ bids, asks }` of `{ price, qty }` (BigInt), `myOrders()`, `claim(token)`
-- Admin/multisig: `listPair(base, quote, baseDec, quoteDec)`, `delistPair(pairId)`, `transferAdmin(newAdmin)`
+- Reads: `pairs(offset?, limit?)`, `pair(pairId)`, `pairCount()`, `orderbook(pairId, depth?)` → `{ bids, asks }` of `{ price, qty }` (BigInt), `myOrders(offset?, limit?)`, `claim(token)`, `isPaused()`, `solvency(token)` → `{ escrow, dust, reserve }`
+- Admin/multisig: `listPair(base, quote, baseDec, quoteDec)` (decimals are verified against each token and rejected on mismatch), `delistPair(pairId)`, `relistPair(pairId)`, `setPaused(paused)`, `sweepDust(token)`, `proposeAdmin(newAdmin)` + `acceptAdmin()` (two-step)
 
-**Perps** (`book.perps`) — cash-settled, wUSDT collateral. Built but **not yet enabled on mainnet** (no live mark keeper).
+> **Resting orders only.** `myOrders()` returns orders currently on the book. Filled
+> and cancelled orders are removed from contract state — their history is in the
+> event log, so keep your own records if you need them.
+
+**Perps** (`book.perps`) — cash-settled, wUSDT collateral, up to 20x. Built but **not yet enabled on mainnet** (no live mark keeper).
 - `open(marketId, isLong, margin, leverage)` / `close(positionId)` / `liquidate(positionId)`
-- Reads: `markets()`, `reserve()`, `positions(owner?)`, `liqPrice(positionId)`
-- Keeper/admin: `setMark(marketId, price)`, `addMarket(symbol)`, `setCollateral(token)`, `setKeeper(who)`, `setMarketCap(marketId, maxOi)`, `fundReserve(amount)`, `withdrawReserve(amount)`
+- Reads: `markets()`, `reserve()`, `reserveHealth()` → `{ reserve, liability, coverageBps }`, `positions(owner?, offset?, limit?)`, `liqPrice(positionId)`
+- Keeper/admin: `setMark(marketId, price)` (bounded to a 10% move per update, keeper key only), `addMarket(symbol, maxOi)` (**`maxOi` is required**), `setCollateral(token)`, `setKeeper(who)`, `setMarketCap(marketId, maxOi)`, `fundReserve(amount)`, `withdrawReserve(amount)` (capped by open liability)
+
+> **The house is your counterparty.** Check `reserveHealth()` before opening: if the
+> reserve is short, winning positions are paid only what it can cover. Opening is
+> refused below a 120% coverage floor. Funding is charged continuously to the crowded
+> side. See the [risk disclosure](https://github.com/Oltking/thebook/blob/master/docs/risk-disclosure.md).
 
 **Units** — amounts and prices are token **smallest-units** (u128), sized by each
 token's decimals (wVARA 12, wETH 18, wUSDT/wUSDC 6):

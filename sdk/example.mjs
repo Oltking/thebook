@@ -35,11 +35,12 @@ const { bids, asks } = await book.spot.orderbook(pair.id);
 console.log('best bid / ask:', bids[0], asks[0]);
 
 // 3) Place a resting bid: buy 0.01 base @ $2500 (quote units per whole base).
-//    A BUY escrows QUOTE, so approve the quote token first (once; large allowance
-//    avoids re-approving every trade).
+//    A BUY escrows QUOTE, so approve the quote token first — for exactly what this
+//    order escrows, not a standing allowance.
 const price = book.units(2500, quoteDec);   // 2500 quote-units per whole base
 const qty   = book.units(0.01, baseDec);    // 0.01 base
-await book.spot.approve(pair.quote, book.units(1_000_000, quoteDec));
+const escrow = (price * qty) / 10n ** BigInt(baseDec);   // quote this order escrows
+await book.spot.approve(pair.quote, escrow);
 const oid = await book.spot.placeLimit(pair.id, Side.Buy, price, qty);
 console.log('resting order id:', oid);
 
