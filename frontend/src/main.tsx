@@ -38,6 +38,18 @@ window.addEventListener('unhandledrejection', (e) => {
   }
 });
 
+// A chunk that is missing but served as the SPA fallback comes back as HTML with
+// HTTP 200, so it never looks like a load failure. The browser instead refuses to
+// execute it, citing the MIME type, or chokes on the leading `<`. Neither produces
+// a rejection the handler above would see, which is how a returning user ends up on
+// a broken page with nothing recovering it.
+window.addEventListener('error', (e) => {
+  const msg = String(e?.message ?? '');
+  if (/Unexpected token '<'|MIME type|not a valid JavaScript MIME/i.test(msg)) {
+    reloadForStaleChunk();
+  }
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Providers>
