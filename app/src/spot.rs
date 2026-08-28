@@ -1206,6 +1206,25 @@ impl<'a> SpotService<'a> {
     }
 }
 
+// ── Cross-program VFT calls ─────────────────────────────────────────────────────────
+//
+// All three helpers below use `send_with_gas_for_reply_as`, whose parameters are
+// `(program, payload, gas_limit, value, reply_deposit)`.
+//
+// They previously called `send_for_reply_as`, which is
+// `(program, payload, value, reply_deposit)` — **no gas parameter at all**. The
+// computed gas limit was therefore passed in the `value` slot, so every escrow,
+// withdrawal and metadata read tried to attach `gas_available() / 2` *units of native
+// VARA* to the message.
+//
+// In `gtest` the program is funded generously and the available gas is small, so the
+// value fit and the tests passed. On a real node `gas_available()` is orders of
+// magnitude larger than anything the program holds, so the send failed and the whole
+// call trapped — every `place_limit` and `withdraw` on mainnet would have reverted.
+//
+// Gas is now in the gas slot and `value` is 0, which is correct: these are pure
+// message calls and should never transfer native tokens.
+
 /// Build the SCALE route payload for a service method call on a VFT program.
 pub fn vft_route(service: &str, method: &str, args: Vec<u8>) -> Vec<u8> {
     let mut payload = service.encode();
@@ -1224,10 +1243,11 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
         (from, dex, U256::from(value)).encode(),
     );
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+    match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
-        gas as u128,
+        gas,
+        0,
         0,
     ) {
         Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
@@ -1239,10 +1259,11 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
 pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
     let payload = vft_route("Vft", "Transfer", (to, U256::from(value)).encode());
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<bool>>(
+    match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
-        gas as u128,
+        gas,
+        0,
         0,
     ) {
         Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
@@ -1255,10 +1276,11 @@ pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
 pub async fn vft_decimals(token: ActorId) -> Option<u8> {
     let payload = vft_route("VftMetadata", "Decimals", Vec::new());
     let gas = exec::gas_available() / 2;
-    match msg::send_for_reply_as::<RawPayload, SailsReply<u8>>(
+    match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<u8>>(
         token,
         RawPayload(payload),
-        gas as u128,
+        gas,
+        0,
         0,
     ) {
         Ok(fut) => fut.await.map(|r| r.0).ok(),

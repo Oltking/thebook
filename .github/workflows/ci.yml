@@ -69,6 +69,19 @@ jobs:
           done
           echo "Legacy attack surface absent."
 
+      # `send_for_reply_as` is (program, payload, VALUE, reply_deposit) — it has no
+      # gas parameter. Passing a gas limit positionally lands it in `value` and makes
+      # the program try to transfer native VARA it does not have, which traps on a
+      # real node while passing in gtest. Always use the explicit-gas variant.
+      - name: Cross-program sends specify gas, not value
+        run: |
+          set -e
+          if grep -rn --include='*.rs' 'send_for_reply_as' app/ | grep -v 'send_with_gas_for_reply_as'; then
+            echo "::error::use send_with_gas_for_reply_as — the gas limit must not land in the value slot"
+            exit 1
+          fi
+          echo "Cross-program sends use the explicit-gas variant."
+
       - name: Balance-invariant tests
         run: cargo test --test gtest
 
