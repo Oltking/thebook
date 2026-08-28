@@ -60,6 +60,12 @@ rate or arbitrage will take the difference immediately.
 **Start small.** A pool with little liquidity moves a lot on small trades, and you carry
 impermanent loss as the price moves. Size it as a market-making budget, not a deposit.
 
+**Seed each pool before announcing it.** Whoever deposits first sets the opening price,
+and there is no way for the contract to know what "correct" is — it only knows the ratio
+it was given. A stranger seeding a pool at a wrong ratio costs the next depositor real
+money to arbitrage back. The minimum-liquidity lock protects against share inflation, not
+against a bad opening price.
+
 ## 3 · Fund the perps reserve `[you]`
 
 The reserve is the counterparty to every perp position, so perps stay closed until it
