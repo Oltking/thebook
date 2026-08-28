@@ -1,7 +1,7 @@
 {
   "name": "thebook-sdk",
-  "version": "0.3.0",
-  "description": "Trade thebookdex from inside your own agent: non-custodial spot CLOB over real bridged tokens on Vara mainnet (approve, place, withdraw), plus perps. No website.",
+  "version": "0.4.0",
+  "description": "Trade thebookdex from inside your own agent: non-custodial spot CLOB over real bridged tokens on Vara mainnet (approve, place with a slippage bound, withdraw), plus cash-settled perps. No website.",
   "type": "module",
   "main": "thebook.mjs",
   "exports": {
@@ -45,6 +45,7 @@
   "dependencies": {
     "@gear-js/api": "0.45.0",
     "@polkadot/api": "12.4.2",
+    "@polkadot/util": "^12.6.2",
     "@polkadot/wasm-crypto": "^7.5.4",
     "sails-js": "0.5.1",
     "sails-js-parser": "0.5.1"

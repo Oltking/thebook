@@ -1,7 +1,7 @@
 {
   "name": "@thebookdex/mcp",
-  "version": "0.2.0",
-  "description": "MCP server (skill pack) that lets any AI agent trade thebookdex: the non-custodial spot CLOB over real bridged tokens on Vara mainnet, exposed as tools.",
+  "version": "0.3.0",
+  "description": "MCP skill pack for thebookdex: give any MCP agent a non-custodial spot CLOB on Vara mainnet, with per-trade and daily spend limits, slippage bounds, and confirmation prompts on large orders.",
   "type": "module",
   "bin": {
     "thebook-mcp": "server.mjs"
@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "thebook-sdk": "^0.3.0",
+    "thebook-sdk": "^0.4.0",
     "zod": "^3.23.0"
   }
 }
