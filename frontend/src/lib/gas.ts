@@ -42,7 +42,7 @@ const ESTIMATOR_CANNOT_WAIT = /forbidden function/i;
  * generous headroom, and costs about 2 VARA to reserve. Raise it only against a
  * measurement, never on a hunch.
  */
-export const FALLBACK_GAS = 20_000_000_000n;
+export const FALLBACK_GAS = 30_000_000_000n;
 
 interface GasPreparable {
   calculateGas: (allowOtherPanics?: boolean, increaseGas?: number) => Promise<unknown>;

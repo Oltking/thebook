@@ -32,7 +32,7 @@ import { SailsIdlParser } from 'sails-js-parser';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Gas limit used when estimation cannot run; see prepareGas. ~2 VARA reserved. */
-const FALLBACK_GAS = 20_000_000_000n;
+const FALLBACK_GAS = 30_000_000_000n;
 
 // ── On-chain enums (order must match the program) ──
 export const Side = { Buy: 'Buy', Sell: 'Sell' };

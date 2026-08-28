@@ -1225,6 +1225,24 @@ impl<'a> SpotService<'a> {
 // Gas is now in the gas slot and `value` is 0, which is correct: these are pure
 // message calls and should never transfer native tokens.
 
+/// Gas handed to a single VFT call.
+///
+/// Previously this was `gas_available() / 2`, which starves any method making more
+/// than one cross-program call: the first hands away half the budget, the second
+/// gets half of what little remains. A starved call does not fail cleanly — the
+/// reply cannot be paid for, so the message sits in the waitlist waiting for a
+/// reply that can never arrive, and the caller sees their transaction silently do
+/// nothing. `list_pair` (two metadata reads) reproduced exactly that on mainnet.
+///
+/// A VFT transfer or metadata read costs well under this cap; measured, a full
+/// `market_buy` round trip burns about 7.7 billion gas in total. Capping each inner
+/// call leaves the outer method enough to finish and to receive its replies.
+const VFT_CALL_GAS: u64 = 5_000_000_000;
+
+fn vft_call_gas() -> u64 {
+    VFT_CALL_GAS.min(exec::gas_available() / 2)
+}
+
 /// Build the SCALE route payload for a service method call on a VFT program.
 pub fn vft_route(service: &str, method: &str, args: Vec<u8>) -> Vec<u8> {
     let mut payload = service.encode();
@@ -1242,7 +1260,7 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
         "TransferFrom",
         (from, dex, U256::from(value)).encode(),
     );
-    let gas = exec::gas_available() / 2;
+    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
@@ -1258,7 +1276,7 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
 /// Transfer `value` of `token` from the DEX vault to `to` via VFT `Transfer`.
 pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
     let payload = vft_route("Vft", "Transfer", (to, U256::from(value)).encode());
-    let gas = exec::gas_available() / 2;
+    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
@@ -1275,7 +1293,7 @@ pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
 /// verify what the admin typed instead of trusting it (audit M-14).
 pub async fn vft_decimals(token: ActorId) -> Option<u8> {
     let payload = vft_route("VftMetadata", "Decimals", Vec::new());
-    let gas = exec::gas_available() / 2;
+    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<u8>>(
         token,
         RawPayload(payload),

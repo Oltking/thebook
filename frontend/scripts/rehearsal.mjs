@@ -99,7 +99,7 @@ const blockMax = api.blockGasLimit.toBigInt();
 
 // Must match the production fallback in src/lib/gas.ts and sdk/thebook.mjs. The
 // rehearsal measures real consumption against it, which is how that number is sized.
-const FALLBACK_GAS = 20_000_000_000n;
+const FALLBACK_GAS = 30_000_000_000n;
 const VALUE_PER_GAS = 100n;
 
 /** Gas: estimate, then fall back on the estimator's known cross-program-wait trap. */
