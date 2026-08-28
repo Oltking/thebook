@@ -97,6 +97,25 @@ console.log(`  keeper: ${keeper.address}`);
 
 const blockMax = api.blockGasLimit.toBigInt();
 
+// Measured: an escrowing call burns ~0.8 VARA and must be able to RESERVE
+// FALLBACK_GAS * valuePerGas (3 VARA) before it will even submit. A full run makes
+// roughly 35 of them across three accounts. Dying half way through leaves throwaway
+// state on chain and wastes everything spent so far, so check up front.
+const RUN_COST_ESTIMATE = 55n * VARA;
+{
+  const { data } = await api.query.system.account(admin.address);
+  const free = data.free.toBigInt();
+  if (free < RUN_COST_ESTIMATE) {
+    fail(
+      `admin holds ${Number(free) / 1e12} VARA; a full run needs about ` +
+      `${Number(RUN_COST_ESTIMATE) / 1e12}.\n` +
+      '    Each cross-program call burns ~0.8 VARA and reserves 3 while it runs.\n' +
+      '    Recover leftovers first: node scripts/sweep-derived.mjs',
+    );
+  }
+  console.log(`  admin:  ${Number(free) / 1e12} VARA available`);
+}
+
 // Must match the production fallback in src/lib/gas.ts and sdk/thebook.mjs. The
 // rehearsal measures real consumption against it, which is how that number is sized.
 const FALLBACK_GAS = 30_000_000_000n;
@@ -327,7 +346,7 @@ const quote = sailsFor(VFT_IDL, QUOTE);
 // them for no reason. Nothing is lost either way (same seed), but admin is the one
 // that has to afford the deploy.
 step('    topping up the derived trader and keeper for gas');
-await topUpTo(trader, 20n * VARA);
+await topUpTo(trader, 25n * VARA);
 await topUpTo(keeper, 4n * VARA);
 pass('native gas available');
 
@@ -502,6 +521,10 @@ for (const [label, tok, id] of [['base', base, BASE], ['quote', quote, QUOTE]]) 
 console.log(`\n${failures === 0
   ? '  ✓ REHEARSAL PASSED — the full money path works on a real node\n'
   : `  ✗ REHEARSAL FAILED — ${failures} check(s) did not pass\n`}`);
+for (const [label, who] of [['admin', admin], ['trader', trader], ['keeper', keeper]]) {
+  const { data } = await api.query.system.account(who.address);
+  console.log(`  ${label.padEnd(7)} ends with ${(Number(data.free.toBigInt()) / 1e12).toFixed(3)} VARA`);
+}
 console.log('  gas consumed (approx, from balance delta):');
 for (const g of [...gasLog].sort((a, b) => Number(b.gas - a.gas)).slice(0, 8)) {
   console.log(`    ${String(g.gas).padStart(14)}  ${g.mode.padEnd(9)} ${g.call}`);

@@ -163,3 +163,26 @@ cd frontend && npx vitest run        26 passed   (was 10)
 cd frontend && npm audit --omit=dev  0 vulnerabilities
 cd frontend && npm run build         ok
 ```
+
+---
+
+## Found by the mainnet rehearsal, after the audit
+
+These are defects the audit did not find and `gtest` could not catch, because they
+only appear against a real node. They are the reason `frontend/scripts/rehearsal.mjs`
+now exists and gates every deploy.
+
+| | Defect | Effect |
+|---|---|---|
+| R-01 | Gas limit passed into `send_for_reply_as`'s **value** slot (it has no gas parameter) | Every escrow, withdrawal and metadata read tried to attach `gas_available()/2` in native VARA. Fine in gtest, trapped on chain. |
+| R-02 | Gas estimation traps on any method awaiting a cross-program reply | `calculateGasForHandle` aborts with "Unable to call a forbidden function", so the UI failed before signing. Every escrowing call was unreachable. |
+| R-03 | `gas_available() / 2` handed to each inner call | A method making two calls starved the second. A starved call does not fail: it waits forever for a reply it cannot pay to receive, and the user's transaction silently does nothing. |
+| R-04 | `withGas('max')` as the estimation fallback | Reserves `blockGasLimit * valuePerGas`, about **75 VARA per transaction**. Every trader would have needed that idle to place one order. |
+| R-05 | Coverage floor measured existing positions only | Inert on an empty book, so the first position could open against an empty reserve and have its profit truncated at settlement. |
+
+### Measured costs
+
+- An escrowing call burns **~0.77 VARA** (7.7 billion gas).
+- A trader must hold **~3 VARA free** to place an order at all, because the gas limit
+  has to be reservable. Below that the failure is `gearBank.InsufficientBalance`,
+  which says nothing about gas.
