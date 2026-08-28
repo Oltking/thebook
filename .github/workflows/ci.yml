@@ -76,7 +76,8 @@ jobs:
       - name: Cross-program sends specify gas, not value
         run: |
           set -e
-          if grep -rn --include='*.rs' 'send_for_reply_as' app/ | grep -v 'send_with_gas_for_reply_as'; then
+          # Match call sites (`msg::send_for_reply_as`), not prose mentioning the name.
+          if grep -rn --include='*.rs' 'msg::send_for_reply_as' app/; then
             echo "::error::use send_with_gas_for_reply_as — the gas limit must not land in the value slot"
             exit 1
           fi
