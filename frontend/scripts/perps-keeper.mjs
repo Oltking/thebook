@@ -48,7 +48,17 @@ const fail = (m) => { console.error(`\n  ✗ ${m}\n`); process.exit(1); };
 if (!SEED) fail('KEEPER_SEED is required (a dedicated perps keeper seed, not the admin).');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const MICRO = 1_000_000; // on-chain price unit: $1 = 1e6
+// On-chain mark unit: $1 = 1e12 (pico-USD).
+//
+// The contract treats the unit as arbitrary because PnL is a ratio, so this only has
+// to be consistent. It must also be FINE ENOUGH. At micro-USD ($1 = 1e6), VARA at
+// $0.00042 becomes the integer 421: three significant figures, where a 0.1% real
+// move rounds away to nothing and the mark moves in 0.24% steps. Pico-USD gives
+// VARA nine significant figures and still leaves ETH (~2.4e15) far inside u128.
+//
+// Changing this unit on a market that already holds positions would corrupt their
+// PnL, since `entry` was recorded in the old unit. Only safe while marks are 0.
+const PRICE_UNIT = 1_000_000_000_000n;
 
 // ── price sources (keyless) ──
 // Binance blocks many cloud IPs with HTTP 451, so each asset tries a chain of
@@ -75,7 +85,12 @@ const coingecko = (id) => async () => {
 
 const ethUsd = () => firstPrice([binance('ETHUSDT'), paprika('eth-ethereum'), coingecko('ethereum')]);
 const varaUsd = () => firstPrice([paprika('vara-vara-network'), coingecko('vara-network')]);
-const micros = (usd) => BigInt(Math.round(usd * MICRO));
+/** USD float to the on-chain integer unit, without losing small prices to rounding. */
+const toMark = (usd) => {
+  // Via string to avoid float error at 12 decimal places.
+  const [whole, frac = ''] = usd.toFixed(12).split('.');
+  return BigInt(whole) * PRICE_UNIT + BigInt(frac.padEnd(12, '0').slice(0, 12));
+};
 
 const book = await connectTheBook({ seed: SEED, programId: PROGRAM_ID, node: NODE_ADDRESS });
 console.log(`\n  thebookdex perps keeper (mark prices)`);
@@ -83,23 +98,58 @@ console.log(`  node:    ${NODE_ADDRESS}`);
 console.log(`  keeper:  ${book.address}`);
 console.log(`  markets: 0=ETH 1=VARA  ·  loop ${INTERVAL_MS}ms\n`);
 
+/** Largest single move the contract accepts, in basis points (MAX_MARK_DEVIATION_BPS). */
+const MAX_STEP_BPS = 1000n;
+/** Stay just inside the bound so rounding cannot push a step over it. */
+const SAFE_STEP_BPS = 900n;
+
+/**
+ * The next mark to publish, stepping toward `target` if it is too far from `current`.
+ *
+ * The contract rejects any single update deviating more than 10% from the previous
+ * mark. That protects against a compromised keeper, but it also means a keeper that
+ * was down while the price moved 15% would have every push rejected — and since the
+ * mark never updates, it would stay rejected. Stepping converges over a few ticks
+ * instead of stalling.
+ *
+ * A mark of 0, or one stale past the contract's exit window, bootstraps: any price
+ * is accepted, so jump straight to the target.
+ */
+function nextMark(current, target) {
+  if (current === 0n) return target;
+  const diff = target > current ? target - current : current - target;
+  const limit = (current * SAFE_STEP_BPS) / 10_000n;
+  if (diff <= limit) return target;
+  return target > current ? current + limit : current - limit;
+}
+
+async function pushMark(marketId, label, usd, markets) {
+  if (usd <= 0) {
+    console.warn(`  ⚠ ${label} price fetch failed, skipping this tick`);
+    return null;
+  }
+  const target = toMark(usd);
+  const current = BigInt(markets.find((m) => String(m.id) === String(marketId))?.mark ?? 0);
+  const next = nextMark(current, target);
+  try {
+    await book.perps.setMark(marketId, next);
+    const stepping = next !== target ? ' (stepping)' : '';
+    return `${label} $${usd}${stepping}`;
+  } catch (e) {
+    console.error(`  ✗ ${label} mark push failed: ${e?.message || e}`);
+    return null;
+  }
+}
+
 async function tick() {
+  // Read current marks so a step can be computed against what is actually on chain.
+  const markets = await book.perps.markets();
   const [eth, vara] = await Promise.all([ethUsd(), varaUsd()]);
-  const pushed = [];
-  if (eth > 0) {
-    try { await book.perps.setMark(0, micros(eth)); pushed.push(`ETH $${eth}`); }
-    catch (e) { console.error(`  ✗ ETH mark push failed: ${e?.message || e}`); }
-  } else {
-    console.warn('  ⚠ ETH price fetch failed, skipping this tick');
-  }
-  if (vara > 0) {
-    try { await book.perps.setMark(1, micros(vara)); pushed.push(`VARA $${vara}`); }
-    catch (e) { console.error(`  ✗ VARA mark push failed: ${e?.message || e}`); }
-  } else {
-    console.warn('  ⚠ VARA price fetch failed, skipping this tick');
-  }
-  const marks = pushed.length ? pushed.join('  ') : 'nothing pushed';
-  console.log(`  ✓ ${new Date().toISOString()}  marks ${marks}`);
+  const pushed = (await Promise.all([
+    pushMark(0, 'ETH', eth, markets),
+    pushMark(1, 'VARA', vara, markets),
+  ])).filter(Boolean);
+  console.log(`  ✓ ${new Date().toISOString()}  marks ${pushed.length ? pushed.join('  ') : 'nothing pushed'}`);
 }
 
 let running = true;
