@@ -124,7 +124,10 @@ const VALUE_PER_GAS = 100n;
 /** Gas: estimate, then fall back on the estimator's known cross-program-wait trap. */
 async function prepareGas(tx) {
   try {
-    await tx.calculateGas(true);
+    // The node returns the MINIMUM viable limit. Any variance between
+    // estimating and executing busts it, so pad by 100%. Unused gas
+    // is refunded, so the padding costs nothing.
+    await tx.calculateGas(true, 100);
     return 'estimated';
   } catch (e) {
     if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;

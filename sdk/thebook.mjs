@@ -157,7 +157,10 @@ export async function connectTheBook(opts = {}) {
    */
   async function prepareGas(tx) {
     try {
-      await tx.calculateGas(true);
+      // The node returns the MINIMUM viable limit. Any variance between
+      // estimating and executing busts it, so pad by 100%. Unused gas
+      // is refunded, so the padding costs nothing.
+      await tx.calculateGas(true, 100);
     } catch (e) {
       if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;
       // Not 'max': Gear reserves gasLimit * valuePerGas from the signer, and the
