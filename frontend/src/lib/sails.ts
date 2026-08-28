@@ -8,6 +8,7 @@ import { TransactionBuilder, ActorId, QueryBuilder, getServiceNamePrefix, getFnN
 export class SailsProgram {
   public readonly registry: TypeRegistry;
   public readonly spot: Spot;
+  public readonly amm: Amm;
   public readonly perpsV1: PerpsV1;
   private _program?: BaseGearProgram;
 
@@ -18,6 +19,8 @@ export class SailsProgram {
       SpotOrder: {"id":"u64","pair_id":"u64","trader":"[u8;32]","side":"Side","price":"u128","qty":"u128","filled":"u128","status":"SpotStatus","escrowed":"u128","released":"u128"},
       SpotStatus: {"_enum":["Open","PartiallyFilled"]},
       SpotPair: {"id":"u64","base":"[u8;32]","quote":"[u8;32]","base_dec":"u8","quote_dec":"u8","active":"bool"},
+      AmmError: {"_enum":["NotAdmin","BadParams","PoolExists","NoPool","PoolInactive","TooManyPools","TransferFailed","Paused","SlippageExceeded","InsufficientShares","AmountTooSmall","Overflow","DecimalsMismatch"]},
+      AmmPool: {"id":"u64","token_a":"[u8;32]","token_b":"[u8;32]","dec_a":"u8","dec_b":"u8","reserve_a":"u128","reserve_b":"u128","total_shares":"u128","active":"bool"},
       PerpsError: {"_enum":["NotAdmin","NotKeeper","BadParams","NoMarket","MarketInactive","StaleMark","LeverageTooHigh","InsufficientMargin","PositionNotFound","NotLiquidatable","BookFull","TransferFailed","NoCollateral","OiCapExceeded","Paused","MarkDeviationTooLarge","InsufficientCoverage","Overflow"]},
       PerpMarket: {"id":"u64","symbol":"String","mark":"u128","mark_block":"u32","active":"bool","long_oi":"u128","short_oi":"u128","max_oi":"u128","cum_funding":"i128","funding_block":"u32"},
     }
@@ -30,6 +33,7 @@ export class SailsProgram {
     }
 
     this.spot = new Spot(this);
+    this.amm = new Amm(this);
     this.perpsV1 = new PerpsV1(this);
   }
 
@@ -621,6 +625,241 @@ export class Spot {
       const payload = message.payload.toHex();
       if (getServiceNamePrefix(payload) === 'Spot' && getFnNamePrefix(payload) === 'AdminChanged') {
         callback(this._program.registry.createType('(String, String, {"admin":"[u8;32]"})', message.payload)[2].toJSON() as unknown as { admin: ActorId });
+      }
+    });
+  }
+}
+
+export class Amm {
+  constructor(private _program: SailsProgram) {}
+
+  /**
+   * Deposit both tokens and receive LP shares.
+   * 
+   * `min_shares` is the caller's bound: deposits are minted at the pool's ratio at
+   * execution time, which another trade can move between signing and landing.
+   * Requires a prior `approve` of each token.
+  */
+  public addLiquidity(pool_id: number | string | bigint, amount_a: number | string | bigint, amount_b: number | string | bigint, min_shares: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Amm',
+      'AddLiquidity',
+      [pool_id, amount_a, amount_b, min_shares],
+      '(u64, u128, u128, u128)',
+      'Result<u128, AmmError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Create a pool for a token pair. Admin-only, like spot listing: a pool is a
+   * curated market, not something anyone can conjure.
+   * 
+   * Decimals are verified against each token's own `VftMetadata` and rejected on
+   * mismatch, for the same reason listing does it (audit M-14).
+  */
+  public createPool(token_a: ActorId, token_b: ActorId, dec_a: number, dec_b: number): TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Amm',
+      'CreatePool',
+      [token_a, token_b, dec_a, dec_b],
+      '([u8;32], [u8;32], u8, u8)',
+      'Result<u64, AmmError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Burn shares and take back the corresponding fraction of both reserves,
+   * including the fees accrued into them.
+   * 
+   * Credited to claimable balances (withdraw with `Spot/Withdraw`), and never
+   * gated on the pause or on the pool being active: a provider must always be
+   * able to leave.
+  */
+  public removeLiquidity(pool_id: number | string | bigint, shares: number | string | bigint, min_a: number | string | bigint, min_b: number | string | bigint): TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: AmmError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: [number | string | bigint, number | string | bigint] } | { err: AmmError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Amm',
+      'RemoveLiquidity',
+      [pool_id, shares, min_a, min_b],
+      '(u64, u128, u128, u128)',
+      'Result<(u128, u128), AmmError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Stop or resume deposits and swaps on a pool. Removing liquidity is never
+   * blocked, so delisting cannot strand a provider's funds.
+  */
+  public setPoolActive(pool_id: number | string | bigint, active: boolean): TransactionBuilder<{ ok: null } | { err: AmmError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: AmmError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Amm',
+      'SetPoolActive',
+      [pool_id, active],
+      '(u64, bool)',
+      'Result<Null, AmmError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Swap `amount_in` of `token_in` for the other token, receiving at least
+   * `min_amount_out`. Requires a prior `approve` of `token_in`.
+   * 
+   * The output is credited to the caller's claimable balance, on the same
+   * settlement path as spot, so no swap depends on a transfer succeeding mid-way.
+  */
+  public swap(pool_id: number | string | bigint, token_in: ActorId, amount_in: number | string | bigint, min_amount_out: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: AmmError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Amm',
+      'Swap',
+      [pool_id, token_in, amount_in, min_amount_out],
+      '(u64, [u8;32], u128, u128)',
+      'Result<u128, AmmError>',
+      this._program.programId,
+    );
+  }
+
+  public getPool(pool_id: number | string | bigint): QueryBuilder<AmmPool | null> {
+    return new QueryBuilder<AmmPool | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Amm',
+      'GetPool',
+      pool_id,
+      'u64',
+      'Option<AmmPool>',
+    );
+  }
+
+  public getPools(offset: number, limit: number): QueryBuilder<Array<AmmPool>> {
+    return new QueryBuilder<Array<AmmPool>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Amm',
+      'GetPools',
+      [offset, limit],
+      '(u32, u32)',
+      'Vec<AmmPool>',
+    );
+  }
+
+  /**
+   * The caller's LP shares in a pool, and what they are currently worth.
+  */
+  public getPosition(pool_id: number | string | bigint): QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]> {
+    return new QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Amm',
+      'GetPosition',
+      pool_id,
+      'u64',
+      '(u128, u128, u128)',
+    );
+  }
+
+  /**
+   * Quote a swap without executing it: `(amount_out, fee)`.
+  */
+  public quoteSwap(pool_id: number | string | bigint, token_in: ActorId, amount_in: number | string | bigint): QueryBuilder<[number | string | bigint, number | string | bigint]> {
+    return new QueryBuilder<[number | string | bigint, number | string | bigint]>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'Amm',
+      'QuoteSwap',
+      [pool_id, token_in, amount_in],
+      '(u64, [u8;32], u128)',
+      '(u128, u128)',
+    );
+  }
+
+  public subscribeToPoolCreatedEvent(callback: (data: { pool_id: number | string | bigint; token_a: ActorId; token_b: ActorId }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Amm' && getFnNamePrefix(payload) === 'PoolCreated') {
+        callback(this._program.registry.createType('(String, String, {"pool_id":"u64","token_a":"[u8;32]","token_b":"[u8;32]"})', message.payload)[2].toJSON() as unknown as { pool_id: number | string | bigint; token_a: ActorId; token_b: ActorId });
+      }
+    });
+  }
+
+  public subscribeToPoolActiveSetEvent(callback: (data: { pool_id: number | string | bigint; active: boolean }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Amm' && getFnNamePrefix(payload) === 'PoolActiveSet') {
+        callback(this._program.registry.createType('(String, String, {"pool_id":"u64","active":"bool"})', message.payload)[2].toJSON() as unknown as { pool_id: number | string | bigint; active: boolean });
+      }
+    });
+  }
+
+  public subscribeToLiquidityAddedEvent(callback: (data: { pool_id: number | string | bigint; provider: ActorId; amount_a: number | string | bigint; amount_b: number | string | bigint; shares: number | string | bigint }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Amm' && getFnNamePrefix(payload) === 'LiquidityAdded') {
+        callback(this._program.registry.createType('(String, String, {"pool_id":"u64","provider":"[u8;32]","amount_a":"u128","amount_b":"u128","shares":"u128"})', message.payload)[2].toJSON() as unknown as { pool_id: number | string | bigint; provider: ActorId; amount_a: number | string | bigint; amount_b: number | string | bigint; shares: number | string | bigint });
+      }
+    });
+  }
+
+  public subscribeToLiquidityRemovedEvent(callback: (data: { pool_id: number | string | bigint; provider: ActorId; amount_a: number | string | bigint; amount_b: number | string | bigint; shares: number | string | bigint }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Amm' && getFnNamePrefix(payload) === 'LiquidityRemoved') {
+        callback(this._program.registry.createType('(String, String, {"pool_id":"u64","provider":"[u8;32]","amount_a":"u128","amount_b":"u128","shares":"u128"})', message.payload)[2].toJSON() as unknown as { pool_id: number | string | bigint; provider: ActorId; amount_a: number | string | bigint; amount_b: number | string | bigint; shares: number | string | bigint });
+      }
+    });
+  }
+
+  public subscribeToSwappedEvent(callback: (data: { pool_id: number | string | bigint; trader: ActorId; token_in: ActorId; amount_in: number | string | bigint; token_out: ActorId; amount_out: number | string | bigint; fee: number | string | bigint }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'Amm' && getFnNamePrefix(payload) === 'Swapped') {
+        callback(this._program.registry.createType('(String, String, {"pool_id":"u64","trader":"[u8;32]","token_in":"[u8;32]","amount_in":"u128","token_out":"[u8;32]","amount_out":"u128","fee":"u128"})', message.payload)[2].toJSON() as unknown as { pool_id: number | string | bigint; trader: ActorId; token_in: ActorId; amount_in: number | string | bigint; token_out: ActorId; amount_out: number | string | bigint; fee: number | string | bigint });
       }
     });
   }

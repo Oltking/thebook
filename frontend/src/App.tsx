@@ -8,6 +8,7 @@ import { MaintenanceNotice } from './components/ui/MaintenanceNotice';
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const PerpsTradeView = lazy(() => import('./views/PerpsTradeView').then(m => ({ default: m.PerpsTradeView })));
 const SpotPortfolioView = lazy(() => import('./views/SpotPortfolioView').then(m => ({ default: m.SpotPortfolioView })));
+const PoolsView = lazy(() => import('./views/PoolsView').then(m => ({ default: m.PoolsView })));
 const LandingView = lazy(() => import('./views/LandingView').then(m => ({ default: m.LandingView })));
 
 function PageLoader() {
@@ -18,7 +19,7 @@ function PageLoader() {
   );
 }
 
-const TABS = ['trade', 'perps', 'portfolio'];
+const TABS = ['trade', 'perps', 'pools', 'portfolio'];
 
 // The app has its own address so a refresh keeps you inside it. The public
 // landing is the root ("/"); the app lives under "/app". An "app." subdomain
@@ -88,6 +89,8 @@ function App() {
         return <SpotTradeView />;
       case 'perps':
         return <PerpsTradeView />;
+      case 'pools':
+        return <PoolsView />;
       case 'portfolio':
         return <SpotPortfolioView />;
       default:

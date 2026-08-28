@@ -62,6 +62,32 @@ declare global {
     active: boolean;
   }
 
+  export type AmmError = "NotAdmin" | "BadParams" | "PoolExists" | "NoPool" | "PoolInactive" | "TooManyPools" | "TransferFailed" | "Paused" | "SlippageExceeded" | "InsufficientShares" | "AmountTooSmall" | "Overflow" | "DecimalsMismatch";
+
+  export interface AmmPool {
+    id: number | string | bigint;
+    token_a: ActorId;
+    token_b: ActorId;
+    /**
+     * Decimals of each token, verified against the VFT's own metadata at creation.
+    */
+    dec_a: number;
+    dec_b: number;
+    /**
+     * Real tokens held by this program on behalf of the pool.
+    */
+    reserve_a: number | string | bigint;
+    reserve_b: number | string | bigint;
+    /**
+     * Total LP shares issued, including the permanently locked minimum.
+    */
+    total_shares: number | string | bigint;
+    /**
+     * Delisted pools reject deposits and swaps; removing liquidity stays open.
+    */
+    active: boolean;
+  }
+
   export type PerpsError = "NotAdmin" | "NotKeeper" | "BadParams" | "NoMarket" | "MarketInactive" | "StaleMark" | "LeverageTooHigh" | "InsufficientMargin" | "PositionNotFound" | "NotLiquidatable" | "BookFull" | "TransferFailed" | "NoCollateral" | "OiCapExceeded" | "Paused" | "MarkDeviationTooLarge" | "InsufficientCoverage" | "Overflow";
 
   export interface PerpMarket {
@@ -102,9 +128,8 @@ declare global {
 
   /* ── Hand-written types ───────────────────────────────────────────────────────
    * Not generated from the IDL. `PriceFeed` and `Asset` describe the off-chain
-   * market-data feed, which has no on-chain counterpart — the contract never sees
-   * these prices. Keep them below the generated block so regenerating the client
-   * does not silently drop them.
+   * market-data feed, which has no on-chain counterpart. Keep them below the
+   * generated block so regenerating the client does not silently drop them.
    */
 
   export interface PriceFeed {

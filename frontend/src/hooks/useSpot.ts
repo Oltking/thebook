@@ -248,3 +248,63 @@ export function useClaims(tokens: string[]) {
 
   return { claims, refresh };
 }
+
+/** Curated AMM pools, with their live reserves. Polls like the pair list. */
+export function useAmmPools() {
+  const { program, isReady } = useSails();
+  const [pools, setPools] = useState<AmmPool[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    try {
+      const rows = await program.amm.getPools(0, 200).call();
+      setPools(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error('useAmmPools: failed to read pools', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [program]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [isReady, refresh]);
+
+  return { pools, loading, refresh };
+}
+
+/** The caller's LP position in a pool: shares, and what they currently redeem for. */
+export function useLpPosition(poolId: string | null) {
+  const { program } = useSails();
+  const { account } = useAccount();
+  const [position, setPosition] = useState<{ shares: bigint; amountA: bigint; amountB: bigint }>(
+    { shares: 0n, amountA: 0n, amountB: 0n },
+  );
+
+  const refresh = useCallback(async () => {
+    if (!program || !account || poolId === null) {
+      setPosition({ shares: 0n, amountA: 0n, amountB: 0n });
+      return;
+    }
+    try {
+      const [shares, amountA, amountB] = await program.amm
+        .getPosition(BigInt(poolId))
+        .withAddress(account.decodedAddress)
+        .call();
+      setPosition({ shares: BigInt(shares), amountA: BigInt(amountA), amountB: BigInt(amountB) });
+    } catch { /* keep last */ }
+  }, [program, account, poolId]);
+
+  useEffect(() => {
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [refresh]);
+
+  return { position, refresh };
+}

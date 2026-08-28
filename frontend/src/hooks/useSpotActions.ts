@@ -96,6 +96,17 @@ export function useSpotActions() {
     withdraw: (token: string, amount?: bigint) =>
       call<bigint>(() => program!.spot.withdraw(token as `0x${string}`, amount ?? null)),
 
+    // ── AMM ──
+    // Every one of these carries a bound: deposits mint at the pool's ratio at
+    // execution time, and swaps price against reserves that another trade can move
+    // between signing and landing.
+    addLiquidity: (poolId: bigint, amountA: bigint, amountB: bigint, minShares: bigint) =>
+      call<bigint>(() => program!.amm.addLiquidity(poolId, amountA, amountB, minShares)),
+    removeLiquidity: (poolId: bigint, shares: bigint, minA: bigint, minB: bigint) =>
+      call<[bigint, bigint]>(() => program!.amm.removeLiquidity(poolId, shares, minA, minB)),
+    swap: (poolId: bigint, tokenIn: string, amountIn: bigint, minOut: bigint) =>
+      call<bigint>(() => program!.amm.swap(poolId, tokenIn as `0x${string}`, amountIn, minOut)),
+
     // Perps (margin escrowed in the collateral token; needs a prior approve of it).
     openPosition: (marketId: bigint, isLong: boolean, margin: bigint, leverage: number) =>
       call<bigint>(() => program!.perpsV1.openPosition(marketId, isLong, margin, leverage)),
