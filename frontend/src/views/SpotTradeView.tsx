@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { PairPicker } from '../components/ui/PairPicker';
 import { AllowanceGate } from '../components/ui/AllowanceGate';
+import { RiskBanner } from '../components/ui/RiskBanner';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useSpotPairs, useWalletBalances, useAllowances, useTokenSymbols } from '../hooks/useSpot';
 import { useSpotActions } from '../hooks/useSpotActions';
@@ -246,6 +247,7 @@ export function SpotTradeView() {
 
   return (
     <div className={styles.wrap}>
+      <RiskBanner />
       <div className={styles.head}>
         <PairPicker pairs={pairs} value={pairId} onChange={setPairId} className={styles.picker} />
         {pair && (

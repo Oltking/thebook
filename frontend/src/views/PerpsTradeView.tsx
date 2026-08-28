@@ -5,6 +5,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { usePerpMarkets, usePerpPositions, useWalletBalances, useAllowances } from '../hooks/useSpot';
 import { useSpotActions } from '../hooks/useSpotActions';
 import { parseUnits, formatUnits } from '../lib/units';
+import { RiskBanner } from '../components/ui/RiskBanner';
 import styles from './PerpsTradeView.module.css';
 
 // Perps settle in wUSDT (6 decimals) on Vara mainnet.
@@ -66,6 +67,7 @@ export function PerpsTradeView() {
 
   return (
     <div className={styles.wrap}>
+      <RiskBanner variant="perps" />
       <div className={styles.head}>
         <div className={styles.mkt}>
           {liveMarkets.map((m) => (

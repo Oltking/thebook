@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Layout } from './components/layout/Layout';
 import { SkeletonCard } from './components/ui/Skeleton';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { MaintenanceNotice } from './components/ui/MaintenanceNotice';
 
 const SpotTradeView = lazy(() => import('./views/SpotTradeView').then(m => ({ default: m.SpotTradeView })));
 const PerpsTradeView = lazy(() => import('./views/PerpsTradeView').then(m => ({ default: m.PerpsTradeView })));
@@ -46,6 +47,11 @@ function urlFor(entered: boolean, tab: string): string {
   if (!entered) return '/';
   return `${base}/${tab}`;
 }
+
+/** Operational kill switch: set VITE_MAINTENANCE to take the interface offline
+ *  without tearing down the deployment (see docs/incident-runbook.md). */
+const MAINTENANCE = String(import.meta.env.VITE_MAINTENANCE ?? '').toLowerCase();
+const IN_MAINTENANCE = MAINTENANCE === '1' || MAINTENANCE === 'true';
 
 function App() {
   const initial = readLocation();
@@ -101,6 +107,10 @@ function App() {
     // #root is a flex row; make each world span the full width.
     style: { flex: 1, minWidth: 0, width: '100%' },
   };
+
+  // Checked before anything else renders, and before any provider starts polling
+  // the chain: in an incident the first job is to stop new deposits.
+  if (IN_MAINTENANCE) return <MaintenanceNotice />;
 
   return (
     <>
