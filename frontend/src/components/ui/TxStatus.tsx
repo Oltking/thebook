@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, XCircle, ArrowRight, Wallet, SendHorizonal, Cloc
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useVoucher } from '../../providers/VoucherProvider';
 import styles from './TxStatus.module.css';
+import { asSigner } from '../../lib/signer';
 
 type TxStage = 'idle' | 'signing' | 'broadcasting' | 'confirming' | 'confirmed' | 'failed';
 
@@ -78,7 +79,7 @@ export function useTxStatus(): UseTxStatusReturn {
       // Gas safety: the node returns the *minimum* limit, which under-estimates real
       // cost and causes intermittent "ran out of gas" failures. Add the max buffer.
       // Gasless: apply a sponsor voucher when one is available (else self-paid).
-      const prepared = applyVoucher(transaction.withAccount(account.address, { signer }) as any);
+      const prepared = applyVoucher(transaction.withAccount(account.address, { signer: asSigner(signer) }) as any);
       await prepared.calculateGas(true, 100);
 
       updateStage('broadcasting');

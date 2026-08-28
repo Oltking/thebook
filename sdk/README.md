@@ -88,7 +88,7 @@ wallet**. There is no faucet and no starting balance.
 > and cancelled orders are removed from contract state — their history is in the
 > event log, so keep your own records if you need them.
 
-**Perps** (`book.perps`) — cash-settled, wUSDT collateral, up to 20x. Built but **not yet enabled on mainnet** (no live mark keeper).
+**Perps** (`book.perps`) — cash-settled, wUSDT collateral, up to **5x**. Built but **not yet enabled on mainnet** (no live mark keeper).
 - `open(marketId, isLong, margin, leverage)` / `close(positionId)` / `liquidate(positionId)`
 - Reads: `markets()`, `reserve()`, `reserveHealth()` → `{ reserve, liability, coverageBps }`, `positions(owner?, offset?, limit?)`, `liqPrice(positionId)`
 - Keeper/admin: `setMark(marketId, price)` (bounded to a 10% move per update, keeper key only), `addMarket(symbol, maxOi)` (**`maxOi` is required**), `setCollateral(token)`, `setKeeper(who)`, `setMarketCap(marketId, maxOi)`, `fundReserve(amount)`, `withdrawReserve(amount)` (capped by open liability)

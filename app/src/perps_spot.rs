@@ -31,15 +31,26 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-pub const MAX_LEVERAGE: u32 = 20;
+/// Max leverage on any position.
+///
+/// Launching at 5x deliberately, with room to raise it later. At 20x against a mark
+/// that may be up to `MARK_MAX_AGE` blocks stale, liquidation lands roughly 4% away
+/// from entry — close enough that ordinary volatility between two keeper updates can
+/// take a position out, and every shortfall past the maintenance buffer lands on the
+/// house reserve (audit L-08). At 5x that distance is roughly 19%, which the buffer
+/// and the funding rate can actually absorb.
+///
+/// Raising this is a one-line change plus a redeploy, and should follow a funded
+/// reserve and real traded volume — not precede them.
+pub const MAX_LEVERAGE: u32 = 5;
 /// Trading fee per side (open and close), in basis points of notional. Fees accrue to
 /// the house reserve — that's the perps revenue on top of trader losses.
 pub const FEE_BPS: u128 = 10; // 0.1%
 /// Maintenance-margin requirement, in basis points of notional.
 ///
 /// Raised from 0.5% to 1% in audit remediation (L-08): against a mark that may be up
-/// to `MARK_MAX_AGE` blocks stale, a 0.5% buffer at 20x leverage left the reserve
-/// absorbing most gap moves.
+/// to `MARK_MAX_AGE` blocks stale, a 0.5% buffer left the reserve absorbing most gap
+/// moves. Paired with the reduction of `MAX_LEVERAGE` to 5x.
 pub const MAINTENANCE_BPS: u128 = 100; // 1%
 /// Liquidator's cut, in basis points of margin.
 pub const LIQUIDATION_FEE_BPS: u128 = 100; // 1%

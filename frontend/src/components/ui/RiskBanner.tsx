@@ -17,7 +17,7 @@ function alreadyAcknowledged(): boolean {
 /**
  * Risk notice shown until the user acknowledges it.
  *
- * The audit's M-13 finding was that the interface offered 20x leveraged perpetuals
+ * The audit's M-13 finding was that the interface offered leveraged perpetuals
  * with no risk disclosure, no terms, and no statement of who operates the venue or
  * where it may be used. Documents in the repository do not fix that on their own —
  * a disclosure nobody sees is not a disclosure — so the two things a user most needs

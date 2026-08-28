@@ -2,6 +2,7 @@ import { useAccount } from '@gear-js/react-hooks';
 import { web3Accounts, web3Enable } from '@polkadot/extension-dapp';
 import { decodeAddress } from '@polkadot/util-crypto';
 import { u8aToHex } from '@polkadot/util';
+import { asSigner } from '../../lib/signer';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { Wallet, Menu, TrendingUp, TrendingDown, LogOut } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -41,7 +42,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       login({
         ...acc,
         decodedAddress: u8aToHex(decodeAddress(acc.address)),
-        signer: exts[0].signer,
+        signer: asSigner(exts[0].signer),
       });
       return;
     }
@@ -60,7 +61,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       login({
         ...acc,
         decodedAddress: u8aToHex(decodeAddress(acc.address)),
-        signer: exts[0].signer,
+        signer: asSigner(exts[0].signer),
       });
     });
     setShowAccountSelector(false);

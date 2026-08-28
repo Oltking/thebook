@@ -2,7 +2,7 @@
 
 **This is not legal advice, and it is not investment advice.** It is a plain
 description of how thebook can lose you money, written because the audit found the
-interface offered 20× leveraged perpetual futures with no risk statement of any kind
+interface offered leveraged perpetual futures with no risk statement of any kind
 (finding M-13).
 
 Read this before you trade. If any of it is unacceptable to you, do not use thebook.
@@ -44,8 +44,9 @@ other means, that amount is what is at risk.
 
 Perps are the highest-risk thing on this venue, by a wide margin.
 
-- **Leverage multiplies losses, not just gains.** At 20×, a 5% move against you is
-  most of your margin. Liquidation happens at roughly a 4% adverse move.
+- **Leverage multiplies losses, not just gains.** The venue launches capped at
+  **5×**, where liquidation happens at roughly a 19% adverse move. That cap will be
+  raised over time; the higher it goes, the closer liquidation sits to entry.
 - **You can lose your entire margin.** That is the normal, expected outcome of a
   losing leveraged position, not an edge case.
 - **The house is your counterparty.** Every position is against a house reserve, not

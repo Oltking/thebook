@@ -12,12 +12,12 @@ interface LandingViewProps {
 
 const PRIMITIVES = [
   { no: '01', name: 'Spot', body: 'Trade real Vara tokens against USDT and USDC on an on-chain order book. Market and limit orders, escrowed and settled non-custodially on Vara.', meta: <>maker / taker <b>book</b></> },
-  { no: '02', name: 'Pools', body: 'AMM liquidity pools to quote and earn the spread. On the v2 roadmap.', meta: <><b>v2</b> roadmap</> },
-  { no: '03', name: 'Perps', body: 'On-chain perpetual futures with isolated margin. On the v2 roadmap.', meta: <><b>v2</b> roadmap</> },
+  { no: '02', name: 'Perps', body: 'Cash-settled perpetual futures with isolated margin, up to 5x. Live, with the house reserve as counterparty.', meta: <>up to <b>5x</b></> },
+  { no: '03', name: 'Pools', body: 'AMM liquidity pools to quote and earn the spread. On the v2 roadmap.', meta: <><b>v2</b> roadmap</> },
 ];
 
 const AGENT_STEPS = [
-  { no: '01', t: 'Connect', b: 'You or your agent connect a wallet and trade the real tokens it holds. Agents run on an encrypted key with on-chain spend limits, so a compromised agent can’t drain you.' },
+  { no: '01', t: 'Connect', b: 'You or your agent connect a wallet and trade the real tokens it holds. The agent skill pack enforces per-trade and daily spend caps, so fund an agent only with what it may trade.' },
   { no: '02', t: 'Read', b: 'Query the live order book and your own balances on-chain. Everything you need to decide is deterministic.' },
   { no: '03', t: 'Trade', b: 'Approve the token, then send typed orders that escrow and settle on the same vault for humans and agents alike. No special path, no black box.' },
 ];
@@ -106,7 +106,7 @@ export function LandingView({ onLaunch }: LandingViewProps) {
             </motion.div>
             <motion.div className={styles.heroStats} variants={rise}>
               <div><div className={styles.n}>{eth ? <CountUp value={eth} prefix="$" /> : 'LIVE'}</div><div className={styles.l}>ETH on the book</div></div>
-              <div><div className={styles.n}><CountUp value={20} suffix="x" /></div><div className={styles.l}>Max leverage</div></div>
+              <div><div className={styles.n}><CountUp value={5} suffix="x" /></div><div className={styles.l}>Max leverage</div></div>
               <div><div className={styles.n}><CountUp value={100} suffix="%" /></div><div className={styles.l}>On-chain settlement</div></div>
               <div><div className={styles.n}>A2A</div><div className={styles.l}>Agent-native</div></div>
             </motion.div>
@@ -130,7 +130,7 @@ export function LandingView({ onLaunch }: LandingViewProps) {
       <section className={styles.section}>
         <div className={styles.wrap}>
           <Reveal>
-            <span className={styles.kicker}>Three primitives, one book</span>
+            <span className={styles.kicker}>Two primitives, one book</span>
             <h2 className={styles.h2}>Everything a market needs</h2>
             <p className={styles.sub}>Spot, liquidity and leverage, all on-chain and all callable the same way, whether a person clicks or an agent posts.</p>
           </Reveal>

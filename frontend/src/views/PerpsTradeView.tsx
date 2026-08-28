@@ -10,7 +10,9 @@ import styles from './PerpsTradeView.module.css';
 
 // Perps settle in wUSDT (6 decimals) on Vara mainnet.
 const COLLATERAL = { addr: '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e', dec: 6, sym: 'wUSDT' };
-const LEVERAGES = [1, 2, 3, 5, 10, 20];
+// Capped at the contract's MAX_LEVERAGE (5x). Offering a level the contract will
+// reject just produces a failed transaction the user pays gas for.
+const LEVERAGES = [1, 2, 3, 4, 5];
 const MARK_DEC = 6; // keeper publishes marks in micro-USD
 
 export function PerpsTradeView() {

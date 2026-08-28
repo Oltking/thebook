@@ -981,7 +981,7 @@ async fn perps_invalid_open_rejects_before_escrow() {
     let before = balance_of(&e.env, e.usd, BOB).await;
 
     for (margin, leverage, why) in [
-        (10_000u128, 21u32, "leverage above the maximum"),
+        (10_000u128, 6u32, "leverage above the 5x maximum"),
         (10_000, 0, "zero leverage"),
         (0, 5, "zero margin"),
     ] {
@@ -1072,13 +1072,19 @@ async fn perps_liquidation_pays_the_liquidator() {
     claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
     let pos: u64 = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 10u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 5u32))
         .await
         .unwrap()
         .unwrap();
 
-    // Walk the mark down inside the deviation bound until the position is under water.
-    for price in [1900u128, 1810] {
+    // Walk the mark down inside the 10%-per-update deviation bound until the
+    // position is under water. At 5x, that takes a much larger move than at 20x —
+    // which is the point of the reduction.
+    //
+    // margin 10_000 at 5x -> notional 50_000, open fee 50, margin 9_950.
+    // maintenance = 50_000 * 1% = 500. At mark 1620:
+    //   pnl = 50_000 * (1620 - 2000) / 2000 = -9_500, equity = 450 <= 500.
+    for price in [1800u128, 1620] {
         set_mark(&e, market, price).await;
     }
     // ALICE liquidates and must be paid for it (audit L-07).

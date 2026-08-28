@@ -42,7 +42,8 @@ thebookdex is a fully on-chain exchange written in Rust/Sails. It has two servic
 
 ### Perps — cash-settled, house-backed
 
-- Isolated margin up to 20×, settled in the spot collateral token.
+- Isolated margin up to **5×**, settled in the spot collateral token. Launching
+  conservatively; the cap rises as the reserve and real volume grow.
 - A keeper publishes mark prices, **bounded to a 10% move per update**; if the keeper
   stalls, positions can be closed at entry after roughly an hour, so collateral is
   never trapped.
