@@ -35,6 +35,10 @@ const ALICE: u64 = 1;
 const BOB: u64 = 2;
 const CAROL: u64 = 3;
 
+/// Aggregated depth as `get_orderbook` returns it: (bids, asks), each a list of
+/// `(price, remaining_qty)` levels.
+type Book = (Vec<(u128, u128)>, Vec<(u128, u128)>);
+
 /// Faucet mint per claim, per token.
 const FAUCET_USD: u64 = 100_000;
 const FAUCET_ETH: u64 = 1_000_000;
@@ -468,7 +472,7 @@ async fn spot_state_does_not_grow_with_completed_orders() {
     assert_eq!(resting, 0, "25 placed-and-cancelled orders must leave no residue");
 
     // The book read is also clean — no zero-quantity ghost levels.
-    let (bids, asks): (Vec<(u128, u128)>, Vec<(u128, u128)>) = e
+    let (bids, asks): Book = e
         .program
         .spot()
         .pending_call::<spot_io::GetOrderbook>((pair, 50u32))

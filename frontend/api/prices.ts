@@ -29,6 +29,9 @@ const MAX_HISTORY = 200;
 const LIVE_TTL = 60 * 1000;       // 1-min live cache
 const VARA_TTL = 3 * 60 * 1000;   // 3-min for VARA (CoinGecko slower)
 
+// Module-scope caches are per serverless instance, not shared: they only ever
+// reduce upstream calls within one warm instance, and KV is the cross-instance
+// store. Do not treat them as a source of truth (audit L-10).
 let memCache: CacheEntry = { prices: { BTC: null, ETH: null, VARA: null }, timestamp: 0, history: [] };
 let liveCache: { prices: Prices; ts: number } | null = null;
 let varaCache: { feed: PriceFeed; ts: number } | null = null;
@@ -126,38 +129,61 @@ function hasAnyPrice(prices: Prices): boolean {
 
 /* ── Handler ── */
 
+/** Append a live sample to the rolling history, keeping it bounded. */
+function appendPoint(history: PricePoint[], prices: Prices, ts: number): PricePoint[] {
+  const micro = (f: PriceFeed | null) => (f ? Number(f.price_usd_micro) / 1_000_000 : null);
+  const point: PricePoint = { ts, BTC: micro(prices.BTC), ETH: micro(prices.ETH), VARA: micro(prices.VARA) };
+  // One sample per minute is plenty; drop anything closer than that.
+  const last = history[history.length - 1];
+  if (last && ts - last.ts < 60_000) return history;
+  return [...history, point].slice(-MAX_HISTORY);
+}
+
+/**
+ * Read-only price feed.
+ *
+ * There is deliberately no write path. The POST branch that used to exist wrote
+ * caller-supplied prices and a caller-supplied 200-point history straight into the
+ * shared cache with no authentication, and that cache is served to every visitor
+ * whenever the live feeds are down — so anyone could push arbitrary prices to all
+ * users, including the reference price the order form sizes against (audit H-06).
+ * The GET path fetches live prices and maintains the cache and history itself, so
+ * nothing was lost by removing it.
+ *
+ * CORS is restricted to the app's own origin (audit M-16 applies the same rule to
+ * every function here).
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  const allowed = (process.env.ALLOWED_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const origin = String(req.headers.origin || '');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
+  const originOk = origin ? allowed.includes(origin) : true;
+  if (origin && originOk) res.setHeader('Access-Control-Allow-Origin', origin);
 
-  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  if (req.method === 'OPTIONS') { res.status(originOk ? 200 : 403).end(); return; }
+  if (!originOk) { res.status(403).json({ error: 'origin not allowed' }); return; }
+  if (req.method !== 'GET') { res.status(405).json({ error: 'GET only' }); return; }
 
-  if (req.method === 'POST') {
-    const { prices, timestamp, history } = req.body as { prices?: Prices; timestamp?: number; history?: PricePoint[] };
-    if (prices && timestamp) {
-      const entry: CacheEntry = { prices, timestamp, history: Array.isArray(history) ? history.slice(-MAX_HISTORY) : memCache.history };
-      memCache = entry;
-      await kvSet(entry);
-    }
-    res.status(200).json({ ok: true });
-    return;
-  }
-
-  /* GET: always try live prices first */
+  /* Always try live prices first. */
   const live = await fetchLivePrices();
   if (live && hasAnyPrice(live)) {
+    const now = Date.now();
     const kvEntry = await kvGet();
-    res.status(200).json({
-      prices: live,
-      timestamp: Date.now(),
-      history: kvEntry?.history ?? memCache.history,
-    });
+    const history = appendPoint(kvEntry?.history ?? memCache.history, live, now);
+    const entry: CacheEntry = { prices: live, timestamp: now, history };
+    memCache = entry;
+    await kvSet(entry);
+    res.status(200).json(entry);
     return;
   }
 
-  /* Live feeds unavailable — fall back to KV / memCache */
+  /* Live feeds unavailable — fall back to KV / memCache. */
   let entry: CacheEntry | null = await kvGet();
   if (!entry || !hasAnyPrice(entry.prices)) {
     if (hasAnyPrice(memCache.prices)) entry = memCache;
