@@ -5,7 +5,7 @@ import { useApi, useAccount } from '@gear-js/react-hooks';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSails } from './useSails';
 import { VftProgram } from '../lib/vft';
-import { PROGRAM_ID } from '../consts';
+import { PROGRAM_ID, knownToken } from '../consts';
 
 const POLL_MS = 8_000;
 
@@ -70,12 +70,15 @@ export function useTokenSymbols(tokens: string[]) {
       if (missing.length === 0) return;
       const entries = await Promise.all(
         missing.map(async (t) => {
+          const known = knownToken(t)?.symbol;
           try {
             const v = vftOf(t);
             const s = v ? await v.vftMetadata.symbol().call() : '';
-            return [t, s || short(t)] as const;
+            return [t, s || known || short(t)] as const;
           } catch {
-            return [t, short(t)] as const;
+            // On-chain symbol read failed: use the curated registry before a raw
+            // address, so known markets never show 0x… in the UI.
+            return [t, known || short(t)] as const;
           }
         }),
       );

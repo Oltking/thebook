@@ -27,7 +27,6 @@ export interface PricePoint {
 const STALE_MS = 5 * 60 * 1000;
 const POLL_MS  = 5_000;
 const PRICE_POLL_MS = 4_000;
-const VARA_POLL_MS = 12_000;
 const MAX_HISTORY = 200;
 
 interface MarketContextValue {
@@ -284,18 +283,24 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
      needed. Runs while the tab is visible; catches up on return. */
   useEffect(() => {
     let active = true;
+    // BTC/ETH come from Binance; VARA has no Binance pair, so fetch it from its own
+    // resilient source (CoinPaprika/CoinGecko/CryptoCompare) in the SAME loop, so it
+    // populates as reliably as the others rather than via a separate effect.
     const refresh = async () => {
       if (document.hidden) return;
-      const direct = await fetchBinanceDirect();
-      if (!active || !(direct.BTC || direct.ETH || direct.VARA)) return;
+      const [direct, vara] = await Promise.all([fetchBinanceDirect(), fetchVaraOnly()]);
+      if (!active) return;
+      const merged: Partial<MarketPrices> = { ...direct };
+      if (vara) merged.VARA = vara;
+      if (!(merged.BTC || merged.ETH || merged.VARA)) return;
       const ts = Date.now();
-      setPrices(prev => ({ ...prev, ...direct }));
+      setPrices(prev => ({ ...prev, ...merged }));
       setLastFetched(ts);
       setLastFetchedPerAsset(prev => ({
         ...prev,
-        ...(direct.BTC ? { BTC: ts } : {}),
-        ...(direct.ETH ? { ETH: ts } : {}),
-        ...(direct.VARA ? { VARA: ts } : {}),
+        ...(merged.BTC ? { BTC: ts } : {}),
+        ...(merged.ETH ? { ETH: ts } : {}),
+        ...(merged.VARA ? { VARA: ts } : {}),
       }));
     };
     refresh();
@@ -303,29 +308,6 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     const onVisible = () => { if (!document.hidden) refresh(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { active = false; clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
-  }, []);
-
-  /* VARA has no Binance pair, so poll it independently (CoinPaprika first, then
-     CoinGecko/CryptoCompare) - never blocking the fast BTC/ETH path above. */
-  useEffect(() => {
-    let active = true;
-    let haveVara = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const refreshVara = async () => {
-      if (!document.hidden) {
-        const v = await fetchVaraOnly();
-        if (active && v) {
-          haveVara = true;
-          setPrices(prev => ({ ...prev, VARA: v }));
-          setLastFetchedPerAsset(prev => ({ ...prev, VARA: Date.now() }));
-        }
-      }
-      if (!active) return;
-      // Retry quickly until we have a first value; then settle to the slow poll.
-      timer = setTimeout(refreshVara, haveVara ? VARA_POLL_MS : 4_000);
-    };
-    refreshVara();
-    return () => { active = false; clearTimeout(timer); };
   }, []);
 
   /* Core market data fetch */
@@ -438,7 +420,14 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         if (feed) { merged[asset] = feed; updatedTs[asset] = ts; changed = true; }
       }
       if (changed) {
-        setPrices(merged);
+        // Functional update so we only overwrite the assets we actually fetched
+        // (BTC/ETH from Binance). VARA is populated by its own poller; a plain
+        // setPrices(snapshot) here would clobber it back to null on every cycle.
+        setPrices((prev) => {
+          const next = { ...prev };
+          for (const asset of ASSETS) { const feed = direct[asset]; if (feed) next[asset] = feed; }
+          return next;
+        });
         setLastFetched(ts);
         setLastFetchedPerAsset(prev => ({ ...prev, ...updatedTs }));
         const nextHistory = appendHistory(merged);

@@ -10,6 +10,7 @@ import { useMarketData } from '../providers/MarketDataProvider';
 import { useViewport } from '../hooks/useViewport';
 import { TradeChart } from '../components/chart/TradeChart';
 import { parseUnits, formatUnits, notional } from '../lib/units';
+import { knownToken } from '../consts';
 import styles from './SpotTradeView.module.css';
 
 type Side = 'Buy' | 'Sell';
@@ -100,7 +101,12 @@ export function SpotTradeView() {
   // chart draws the underlying coin's real candles from Binance/CoinGecko, independent
   // of our on-chain liquidity; oraclePrice overlays the live spot price.
   const { prices, priceHistory } = useMarketData();
-  const chartAsset = useMemo(() => baseSym.replace(/^[wW]/, '').toUpperCase(), [baseSym]);
+  // Resolve the price feed by token ADDRESS first (robust even when the on-chain
+  // symbol read is slow/failing), then fall back to stripping the wrapped prefix.
+  const chartAsset = useMemo(
+    () => knownToken(base)?.priceKey ?? baseSym.replace(/^[wW]/, '').toUpperCase(),
+    [base, baseSym],
+  );
   const oraclePrice = useMemo(() => {
     const feed = prices[chartAsset as keyof typeof prices];
     return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
@@ -118,6 +124,14 @@ export function SpotTradeView() {
   const midRaw = bestBid > 0n && bestAsk > 0n ? (bestBid + bestAsk) / 2n : 0n;
   const effPrice =
     otype === 'Limit' && priceRaw > 0n ? priceRaw : midRaw > 0n ? midRaw : oracleRaw;
+
+  // Price display precision: sub-cent assets (VARA ~$0.0004) need more decimals or
+  // they round to 0.00. Capped at the quote token's own decimals.
+  const priceFrac = useMemo(() => {
+    const ref = oraclePrice > 0 ? oraclePrice : effPrice > 0n ? Number(effPrice) / 10 ** quoteDec : 0;
+    const want = ref >= 1 ? 2 : ref >= 0.01 ? 4 : ref > 0 ? 6 : 2;
+    return Math.min(want, quoteDec);
+  }, [oraclePrice, effPrice, quoteDec]);
 
   const baseUnit = 10n ** BigInt(baseDec);
   const baseBal = balances[base] ?? 0n;
@@ -280,29 +294,29 @@ export function SpotTradeView() {
                 <input
                   className={styles.input}
                   inputMode="decimal"
-                  placeholder={oracleRaw > 0n ? formatUnits(oracleRaw, quoteDec, 2) : '0.00'}
+                  placeholder={oracleRaw > 0n ? formatUnits(oracleRaw, quoteDec, priceFrac) : '0.00'}
                   value={priceStr}
                   onChange={(e) => setPriceStr(e.target.value)}
                 />
                 <div className={styles.chips}>
                   {bestBid > 0n && (
-                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestBid, quoteDec, 6))}>
-                      Bid {formatUnits(bestBid, quoteDec, 2)}
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestBid, quoteDec, quoteDec))}>
+                      Bid {formatUnits(bestBid, quoteDec, priceFrac)}
                     </button>
                   )}
                   {midRaw > 0n && (
-                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(midRaw, quoteDec, 6))}>
-                      Mid {formatUnits(midRaw, quoteDec, 2)}
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(midRaw, quoteDec, quoteDec))}>
+                      Mid {formatUnits(midRaw, quoteDec, priceFrac)}
                     </button>
                   )}
                   {bestAsk > 0n && (
-                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestAsk, quoteDec, 6))}>
-                      Ask {formatUnits(bestAsk, quoteDec, 2)}
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(bestAsk, quoteDec, quoteDec))}>
+                      Ask {formatUnits(bestAsk, quoteDec, priceFrac)}
                     </button>
                   )}
                   {midRaw === 0n && oracleRaw > 0n && (
-                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(oracleRaw, quoteDec, 2))}>
-                      Market ≈ {formatUnits(oracleRaw, quoteDec, 2)} {quoteSym}
+                    <button type="button" className={styles.chip} onClick={() => setPriceStr(formatUnits(oracleRaw, quoteDec, priceFrac))}>
+                      Market ≈ {formatUnits(oracleRaw, quoteDec, priceFrac)} {quoteSym}
                     </button>
                   )}
                 </div>
