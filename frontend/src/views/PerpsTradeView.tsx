@@ -66,8 +66,12 @@ export function PerpsTradeView() {
   // Sizing by percentage of the wallet balance is the fast path most of the time,
   // so the slider drives the same `marginStr` the input does rather than holding a
   // second source of truth that could drift out of step with a typed amount.
+  // Derived in basis points and rounded, NOT floored into whole percent. The margin
+  // is itself a floored share of the balance, so flooring again here lands on p-1
+  // for every percentage whose division leaves a remainder: the controlled input
+  // would then render a step behind the thumb and fight the drag.
   const marginPct = balance > 0n
-    ? Math.min(100, Number((marginRaw * 100n) / balance))
+    ? Math.min(100, Math.round(Number((marginRaw * 10_000n) / balance) / 100))
     : 0;
   const setMarginPct = (pct: number) => {
     if (balance <= 0n) return;
@@ -197,6 +201,15 @@ export function PerpsTradeView() {
                     </button>
                   ))}
                 </div>
+                {/* Sizing is a share of the balance, so with nothing to size the
+                    control is inert. Say why rather than leaving a dead slider. */}
+                {balance <= 0n && (
+                  <p className={styles.sizerHint}>
+                    {account
+                      ? `Add ${COLLATERAL.sym} to this wallet to size a position.`
+                      : `Connect a wallet holding ${COLLATERAL.sym} to size a position.`}
+                  </p>
+                )}
               </div>
             </div>
 

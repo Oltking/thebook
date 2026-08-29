@@ -64,6 +64,7 @@
 .pct:active:not(:disabled) { transform: translateY(1px); }
 .pct.active { border-color: var(--accent,#1db954); color: var(--accent,#1db954); background: var(--accent-soft,rgba(29,185,84,.1)); }
 .pct:disabled { opacity: .45; cursor: default; }
+.sizerHint { margin: 0; font-size: .75rem; color: var(--text-dim,#565e56); text-align: center; }
 
 .total { display: flex; justify-content: space-between; font-size: .85rem; color: var(--text-secondary,#8b948b); margin: 4px 0 14px; }
 .submit { width: 100%; padding: 14px 16px; border: none; border-radius: 12px; font-weight: 700; font-size: .98rem; letter-spacing: .02em; color: #fff; cursor: pointer; transition: transform .1s ease, box-shadow .15s ease, filter .15s ease; }
