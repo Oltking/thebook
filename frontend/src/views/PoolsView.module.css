@@ -53,9 +53,26 @@
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
+/* The pool selector holds variable-length pair names (WVARA/WUSDC is nearly twice
+   the width of WETH/WUSDT), so it cannot share the equal-width flex row the short
+   preset chips use: four of them on one line forces every label to shrink until it
+   clips. A grid that fits as many whole columns as the width allows wraps to two
+   rows on a phone and one on a desktop, and never truncates the name of the pool
+   you are about to put money into. */
+.poolChips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .chip {
   flex: 1;
   min-width: 0;
+  /* Belt and braces: a chip that still cannot fit its label degrades to an
+     ellipsis rather than spilling its text past the edge of the card. */
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 6px 8px;
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.09));
   border-radius: 8px;

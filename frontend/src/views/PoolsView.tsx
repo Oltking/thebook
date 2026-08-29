@@ -178,7 +178,7 @@ export function PoolsView() {
 
       <div className={styles.panel}>
         <p className={styles.section}>Pool</p>
-        <div className={styles.chips}>
+        <div className={styles.poolChips}>
           {pools.map((p) => {
             const a = symbols[String(p.token_a)] ?? 'A';
             const b = symbols[String(p.token_b)] ?? 'B';
