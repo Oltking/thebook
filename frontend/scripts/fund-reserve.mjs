@@ -1,10 +1,13 @@
-// Fund the perps house reserve (optional, admin only).
+// Fund the perps house reserve (admin only, REQUIRED before perps trade).
 //
-// The reserve pays out perp profits. Funding it moves USD from the admin's own
-// DEX balance into the reserve. Virtual-balance model: Join grants the admin its
-// starting USD, so this just Joins (idempotent) then calls FundReserve. Futures
-// open/close without this; the reserve matters once winning positions need large
-// payouts.
+// The reserve is the pot that pays out winning positions. It holds real collateral:
+// this script approves the DEX to pull `AMOUNT` of the collateral token from the
+// admin's own wallet, then calls FundReserve to move it into the program.
+//
+// This is not optional. The contract refuses to open a position unless the reserve
+// covers it with a margin (MIN_COVERAGE_BPS), so with a reserve of zero every open
+// reverts with InsufficientCoverage. That is the coverage floor doing its job, not
+// a bug: the venue will not take on risk it could not pay out.
 //
 // Usage (from frontend/, after deploy + setting VITE_* in .env):
 //   VARA_SEED="<admin seed>" node scripts/fund-reserve.mjs

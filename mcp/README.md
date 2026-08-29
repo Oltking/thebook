@@ -32,6 +32,50 @@ mainnet: the agent trades the actual wUSDT/wUSDC/wETH/wVARA in its wallet.
 | `thebook_cancel_order` / `thebook_my_orders` | Manage resting orders |
 | `thebook_claim` / `thebook_withdraw` | Read and pull proceeds / cancelled escrow back to the wallet |
 
+### Liquidity pools
+
+A constant-product AMM (`x·y=k`) sitting beside the order book. It always quotes a
+price, so it is the reliable counterparty when the book is thin.
+
+| Tool | What it does |
+| --- | --- |
+| `thebook_pools` | List the pools with their reserves and total shares |
+| `thebook_quote_swap` | Price a swap without sending it: output amount and the 0.3% fee |
+| `thebook_pool_swap` | Swap through a pool, receiving at least `minOut`. Approve the input token first |
+| `thebook_add_liquidity` | Supply both sides, receive LP shares. Approve both tokens first |
+| `thebook_remove_liquidity` | Burn shares, take back both reserves including accrued fees |
+| `thebook_pool_position` | This wallet's shares and what they currently redeem for |
+
+**How LPs earn.** Each swap keeps a 0.3% fee **in the pool**. There is no separate
+reward balance and nothing to harvest: the reserves grow while the share count does
+not, so every share redeems for more over time. `thebook_pool_position` is where
+that shows up.
+
+**Impermanent loss is real.** If the pool price moves away from where you deposited,
+withdrawing can return less value than simply holding the two tokens. Fees offset
+this; they do not guarantee covering it. Don't add liquidity on a model's own
+initiative — that is a position, not a trade.
+
+`thebook_remove_liquidity` deliberately keeps working while the venue is paused, so
+a pause can never trap a provider's funds.
+
+### VARA wrapping
+
+Native VARA pays gas; **wVARA** is the VFT token the exchange understands. They
+convert 1:1 through the wVARA program — a wrapper, not a trade: no price, no
+slippage, no counterparty.
+
+| Tool | What it does |
+| --- | --- |
+| `thebook_vara_balances` | Native VARA and wVARA balances side by side |
+| `thebook_wrap_vara` | Native VARA → wVARA, so it can be traded, pooled, or posted as collateral |
+| `thebook_unwrap_vara` | wVARA → native VARA, for example to top up gas |
+
+These three sit **outside the spend limits below.** Wrapping changes the form of a
+balance, not its value or its owner, so a cap would block a safe operation while
+protecting nothing. Keep some native VARA back when wrapping, or the account cannot
+pay for its next transaction.
+
 Amounts and prices are token **smallest-units** (sized by each token's decimals:
 wVARA 12, wETH 18, wUSDT/wUSDC 6). A limit `price` is quote smallest-units per one
 whole base.
@@ -128,7 +172,8 @@ thebookdex is non-custodial: the agent trades the **real bridged tokens already 
 its wallet**. There is no faucet and no starting balance.
 
 1. Hold **wUSDT / wUSDC** to buy and **wETH / wVARA** to sell in the seed's account
-   (address is `book.address`).
+   (address is `book.address`). Native VARA in the account is not tradeable until
+   `thebook_wrap_vara` turns it into wVARA.
 2. It needs a little VARA for gas — or set `THEBOOK_VOUCHER_URL` so gas is
    sponsor-paid and it needs none.
 3. `thebook_approve` the amount the next order escrows, place it, then
