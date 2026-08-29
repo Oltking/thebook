@@ -146,6 +146,9 @@
   grid-template-columns: auto 1fr;
   gap: 6px 16px;
   font-size: 13px;
+  /* The selector above wraps to two rows on a phone, so the stats need their own
+     separation from it rather than relying on the chip row's own bottom edge. */
+  margin-top: 12px;
 }
 
 .stats > div { display: contents; }

@@ -418,5 +418,18 @@
      and drop the logo wordmark to the mark alone to make room. */
   .modeSwitch { left: 50%; }
   .modeSwitch button { padding: 7px 10px; font-size: 11px; letter-spacing: 0.05em; }
-  .logo { font-size: 0; gap: 0; }
+
+  /* Drop the wordmark to the mark alone, and centre it on the header rather than
+     leaving it in flow. In flow it sits immediately after the hamburger, so the
+     wide right cluster (theme toggle + Connect) pushes the apparent centre left.
+     Taking it out of flow centres it on the viewport whatever the two sides weigh;
+     the hamburger and the actions still settle left and right on their own. */
+  .logo {
+    font-size: 0;
+    gap: 0;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
 }
