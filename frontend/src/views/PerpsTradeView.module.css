@@ -45,7 +45,10 @@
    Percent buttons sit under it for the common stops, including Max. */
 .sizer { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 
-.slider { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
+/* The global `input` rule in index.css gives every input a border, radius and
+   padding, which on a range input paints a box around the whole track. Clear them:
+   the track and thumb below are the only chrome this control should have. */
+.slider { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; border: none; border-radius: 0; padding: 0; cursor: pointer; }
 .slider:disabled { cursor: default; opacity: .45; }
 /* Track and thumb have to be declared per engine: a selector list containing an
    unknown pseudo-element is dropped whole by both, so these cannot be merged. */
