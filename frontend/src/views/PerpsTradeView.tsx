@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useAccount } from '@gear-js/react-hooks';
+import { CandlestickChart } from 'lucide-react';
 import { AllowanceGate } from '../components/ui/AllowanceGate';
 import { EmptyState } from '../components/ui/EmptyState';
+import { TradeChart } from '../components/chart/TradeChart';
+import { useMarketData } from '../providers/MarketDataProvider';
 import { usePerpMarkets, usePerpPositions, useWalletBalances, useAllowances } from '../hooks/useSpot';
 import { useSpotActions } from '../hooks/useSpotActions';
 import { parseUnits, formatUnits, formatPrice } from '../lib/units';
@@ -40,6 +43,7 @@ export function PerpsTradeView() {
   const [leverage, setLeverage] = useState(2);
   const [marginStr, setMarginStr] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [chartOpen, setChartOpen] = useState(false);
 
   const marginRaw = parseUnits(marginStr, COLLATERAL.dec);
   const notionalRaw = marginRaw * BigInt(leverage);
@@ -47,6 +51,30 @@ export function PerpsTradeView() {
   const balance = balances[COLLATERAL.addr] ?? 0n;
   const insufficient = marginRaw > 0n && marginRaw > balance;
   const mark = market ? BigInt(market.mark as any) : 0n;
+
+  // The perp symbol is already the bare asset ("ETH", "VARA"), which is how the
+  // price feed keys it. Strip a wrapped prefix defensively in case a market is ever
+  // listed as wETH.
+  const chartAsset = (market?.symbol ?? '').replace(/^[wW]/, '').toUpperCase();
+  const { prices, priceHistory } = useMarketData();
+  const oraclePrice = useMemo(() => {
+    const feed = prices[chartAsset as keyof typeof prices];
+    return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
+  }, [prices, chartAsset]);
+
+  // ── margin slider ──
+  // Sizing by percentage of the wallet balance is the fast path most of the time,
+  // so the slider drives the same `marginStr` the input does rather than holding a
+  // second source of truth that could drift out of step with a typed amount.
+  const marginPct = balance > 0n
+    ? Math.min(100, Number((marginRaw * 100n) / balance))
+    : 0;
+  const setMarginPct = (pct: number) => {
+    if (balance <= 0n) return;
+    // Round-trips exactly: formatUnits at the token's own decimals is lossless, so
+    // reparsing it yields the raw amount back.
+    setMarginStr(pct <= 0 ? '' : formatUnits((balance * BigInt(pct)) / 100n, COLLATERAL.dec));
+  };
 
   const symOf = (id: bigint | string) => markets.find((m) => String(m.id) === String(id))?.symbol ?? `#${id}`;
 
@@ -85,11 +113,36 @@ export function PerpsTradeView() {
           ))}
         </div>
         {market && (
-          <span className={styles.mark}>
-            mark <b>{mark > 0n ? `$${formatPrice(mark, MARK_DEC)}` : '—'}</b>
-          </span>
+          <div className={styles.headRight}>
+            <span className={styles.mark}>
+              mark <b>{mark > 0n ? `$${formatPrice(mark, MARK_DEC)}` : '—'}</b>
+            </span>
+            <button
+              type="button"
+              className={`${styles.chartBtn} ${chartOpen ? styles.active : ''}`}
+              onClick={() => setChartOpen((o) => !o)}
+              aria-expanded={chartOpen}
+              aria-label={chartOpen ? 'Hide chart' : `Show ${chartAsset}/USD chart`}
+              title={chartOpen ? 'Hide chart' : `Show ${chartAsset}/USD chart`}
+            >
+              <CandlestickChart size={18} />
+            </button>
+          </div>
         )}
       </div>
+
+      {market && chartOpen && (
+        <div className={`${styles.panel} ${styles.chartPanel}`}>
+          <TradeChart
+            asset={chartAsset}
+            oraclePrice={oraclePrice}
+            priceHistory={priceHistory}
+            bids={[]}
+            asks={[]}
+            trades={[]}
+          />
+        </div>
+      )}
 
       {liveMarkets.length === 0 ? (
         <div className={styles.panel} style={{ gridColumn: '1 / -1' }}>
@@ -118,6 +171,33 @@ export function PerpsTradeView() {
                 <span>Balance: {formatUnits(balance, COLLATERAL.dec)} {COLLATERAL.sym}</span>
               </span>
               <input className={styles.input} inputMode="decimal" placeholder="0.00" value={marginStr} onChange={(e) => setMarginStr(e.target.value)} />
+
+              <div className={styles.sizer}>
+                <input
+                  type="range"
+                  className={styles.slider}
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={marginPct}
+                  disabled={balance <= 0n}
+                  onChange={(e) => setMarginPct(Number(e.target.value))}
+                  aria-label="Margin as a percentage of balance"
+                />
+                <div className={styles.pcts}>
+                  {[25, 50, 75, 100].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`${styles.pct} ${marginPct === p ? styles.active : ''}`}
+                      disabled={balance <= 0n}
+                      onClick={() => setMarginPct(p)}
+                    >
+                      {p === 100 ? 'Max' : `${p}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className={styles.total}>

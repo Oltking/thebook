@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { CandlestickChart } from 'lucide-react';
 import { PairPicker } from '../components/ui/PairPicker';
 import { AllowanceGate } from '../components/ui/AllowanceGate';
 import { RiskBanner } from '../components/ui/RiskBanner';
@@ -205,11 +206,13 @@ export function SpotTradeView() {
     return q > 0n ? `≈ ${formatUnits(q, quoteDec, 4)} ${quoteSym}` : null;
   }, [pair, side, otype, effPrice, maxSpendRaw, priceRaw, qtyRaw, baseDec, quoteDec, baseUnit, baseSym, quoteSym]);
 
-  // On phones the chart is collapsed behind a toggle so the order form leads; on
-  // larger screens it always shows.
+  // The chart starts open on a large screen and collapsed on a phone, where the
+  // order form should lead. `null` means "nobody has chosen yet", so the default
+  // can follow the viewport; once the header's chart button is used, that explicit
+  // choice wins at every width.
   const { isMobile } = useViewport();
-  const [chartOpen, setChartOpen] = useState(false);
-  const showChart = !isMobile || chartOpen;
+  const [chartOpen, setChartOpen] = useState<boolean | null>(null);
+  const showChart = chartOpen ?? !isMobile;
 
   const submit = async () => {
     if (!pair) return;
@@ -250,9 +253,21 @@ export function SpotTradeView() {
       <div className={styles.head}>
         <PairPicker pairs={pairs} value={pairId} onChange={setPairId} className={styles.picker} />
         {pair && (
-          <span className={styles.total}>
-            {baseSym}/{quoteSym}
-          </span>
+          <div className={styles.headRight}>
+            <span className={styles.pairName}>
+              {baseSym}/{quoteSym}
+            </span>
+            <button
+              type="button"
+              className={`${styles.chartBtn} ${showChart ? styles.active : ''}`}
+              onClick={() => setChartOpen(!showChart)}
+              aria-expanded={showChart}
+              aria-label={showChart ? 'Hide chart' : `Show ${chartAsset}/USD chart`}
+              title={showChart ? 'Hide chart' : `Show ${chartAsset}/USD chart`}
+            >
+              <CandlestickChart size={18} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -263,15 +278,6 @@ export function SpotTradeView() {
       ) : (
         <>
           <div className={styles.mainCol}>
-          {isMobile && (
-            <button
-              className={styles.chartToggle}
-              onClick={() => setChartOpen((v) => !v)}
-              aria-expanded={chartOpen}
-            >
-              {chartOpen ? 'Hide chart ▴' : `Show ${chartAsset}/USD chart ▾`}
-            </button>
-          )}
           {showChart && (
             <div className={`${styles.panel} ${styles.chartPanel}`}>
               <TradeChart
