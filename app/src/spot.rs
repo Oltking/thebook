@@ -27,7 +27,7 @@
 //! an error without crediting the escrow keeps the user's money (audit C-03). Every
 //! validation that can be done before the await is done before the await.
 
-use crate::types::{RawPayload, SailsReply, Side};
+use crate::types::{RawPayload, SailsReply, Side, TransferError};
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
 use sails_rs::gstd::{exec, msg};
@@ -69,8 +69,8 @@ pub enum SpotError {
     NotOwner,
     /// Nothing to withdraw for that token.
     NothingToClaim,
-    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-    TransferFailed,
+    /// The on-chain VFT transfer failed with detailed reason.
+    TransferFailed(TransferError),
     /// Trading is paused. Cancel and withdraw remain open.
     Paused,
     /// The fill would be worse than the caller's stated slippage bound.
@@ -201,7 +201,6 @@ pub struct SpotOrder {
     pub released: u128,
 }
 
-#[derive(Default)]
 pub struct SpotState {
     /// Admin / listing authority (the multisig on mainnet). Set at program init.
     pub admin: ActorId,
@@ -247,6 +246,62 @@ pub struct SpotState {
     /// LP shares per (provider, pool). A share is a claim on a fraction of the pool,
     /// not a balance of anything withdrawable on its own.
     pub lp_shares: BTreeMap<(ActorId, u64), u128>,
+
+    // ── Configurable gas for VFT cross-program calls ──
+    /// Gas limit for each VFT cross-program call. Default: 10_000_000_000.
+    /// Can be updated by admin via `set_vft_call_gas` to adapt to token program changes.
+    pub vft_call_gas: u64,
+
+    // ── Governance-configurable parameters ──
+    /// Maximum leverage for perps positions. Default: 5.
+    pub perp_max_leverage: u32,
+    /// Trading fee per side for perps (basis points). Default: 10 (0.1%).
+    pub perp_fee_bps: u128,
+    /// Maintenance margin requirement for perps (basis points). Default: 100 (1%).
+    pub perp_maintenance_bps: u128,
+    /// Maximum mark price deviation per update (basis points). Default: 1_000 (10%).
+    pub perp_max_mark_deviation_bps: u128,
+    /// Swap fee for AMM pools (basis points). Default: 30 (0.3%).
+    pub amm_fee_bps: u128,
+
+    // ── LP Vault (12-month lock, close-only switch right) ──
+    /// LP vault holding collateral backing perps, with 12-month lock and close-only right.
+    pub lp_vault: crate::perps_spot::LpVault,
+}
+
+impl Default for SpotState {
+    fn default() -> Self {
+        Self {
+            admin: ActorId::zero(),
+            pending_admin: ActorId::zero(),
+            paused: false,
+            pairs: Vec::new(),
+            next_pair_id: 0,
+            orders: BTreeMap::new(),
+            levels: BTreeMap::new(),
+            next_oid: 0,
+            claims: BTreeMap::new(),
+            escrow: BTreeMap::new(),
+            dust: BTreeMap::new(),
+            perp_collateral: ActorId::zero(),
+            perp_keeper: ActorId::zero(),
+            perp_reserve: 0,
+            perp_markets: Vec::new(),
+            next_perp_market: 0,
+            perp_positions: Vec::new(),
+            next_perp_pos: 0,
+            amm_pools: Vec::new(),
+            next_pool_id: 0,
+            lp_shares: BTreeMap::new(),
+            vft_call_gas: 10_000_000_000,
+            perp_max_leverage: 5,
+            perp_fee_bps: 10,
+            perp_maintenance_bps: 100,
+            perp_max_mark_deviation_bps: 1_000,
+            amm_fee_bps: 30,
+            lp_vault: crate::perps_spot::LpVault::default(),
+        }
+    }
 }
 
 impl SpotState {
@@ -254,14 +309,24 @@ impl SpotState {
         if amount == 0 {
             return;
         }
-        *self.claims.entry((who, token)).or_insert(0) += amount;
+        *self.claims.entry((who, token)).or_insert(0) = self
+            .claims
+            .get(&(who, token))
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(amount);
     }
 
     fn escrow_add(&mut self, token: ActorId, amount: u128) {
         if amount == 0 {
             return;
         }
-        *self.escrow.entry(token).or_insert(0) += amount;
+        *self.escrow.entry(token).or_insert(0) = self
+            .escrow
+            .get(&token)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(amount);
     }
 
     fn escrow_sub(&mut self, token: ActorId, amount: u128) {
@@ -451,19 +516,24 @@ impl<'a> SpotService<'a> {
             }
         }
         // Verify decimals against each token before recording anything.
-        match vft_decimals(base).await {
-            Some(d) if d == base_dec => {}
-            Some(_) => return Err(SpotError::DecimalsMismatch),
-            None => return Err(SpotError::TransferFailed),
+        let vft_gas = self.state.borrow().vft_call_gas;
+        match vft_decimals_with_gas(vft_gas, base).await {
+            Ok(d) if d == base_dec => {}
+            Ok(_) => return Err(SpotError::DecimalsMismatch),
+            Err(e) => return Err(SpotError::TransferFailed(e)),
         }
-        match vft_decimals(quote).await {
-            Some(d) if d == quote_dec => {}
-            Some(_) => return Err(SpotError::DecimalsMismatch),
-            None => return Err(SpotError::TransferFailed),
+        match vft_decimals_with_gas(vft_gas, quote).await {
+            Ok(d) if d == quote_dec => {}
+            Ok(_) => return Err(SpotError::DecimalsMismatch),
+            Err(e) => return Err(SpotError::TransferFailed(e)),
         }
+        // The PairExists check is done TWICE: once before the awaits (advisory),
+        // and once AFTER the awaits on the mut borrow that does the insert.
+        // This eliminates TOCTOU: a concurrent listing between the decimals
+        // verification and the insert is caught by the second check.
         let id = {
             let mut st = self.state.borrow_mut();
-            // Re-check after the awaits: another listing could have landed meanwhile.
+            // Authoritative re-check after the awaits.
             if st.pairs.iter().any(|p| {
                 (p.base == base && p.quote == quote) || (p.base == quote && p.quote == base)
             }) {
@@ -530,6 +600,61 @@ impl<'a> SpotService<'a> {
         }
         self.state.borrow_mut().pending_admin = new_admin;
         let _ = self.emit_event(SpotEvent::AdminProposed { pending: new_admin });
+        Ok(())
+    }
+
+    /// Set the gas limit for VFT cross-program calls. Admin-only.
+    /// Allows adapting to token program gas cost changes without redeploy.
+    #[export]
+    pub fn set_vft_call_gas(&mut self, gas: u64) -> Result<(), SpotError> {
+        self.require_admin()?;
+        if gas == 0 {
+            return Err(SpotError::BadParams);
+        }
+        self.state.borrow_mut().vft_call_gas = gas;
+        Ok(())
+    }
+
+    /// Set maximum leverage for perps. Admin-only.
+    #[export]
+    pub fn set_perp_max_leverage(&mut self, leverage: u32) -> Result<(), SpotError> {
+        self.require_admin()?;
+        if leverage == 0 {
+            return Err(SpotError::BadParams);
+        }
+        self.state.borrow_mut().perp_max_leverage = leverage;
+        Ok(())
+    }
+
+    /// Set trading fee for perps (basis points). Admin-only.
+    #[export]
+    pub fn set_perp_fee_bps(&mut self, fee_bps: u128) -> Result<(), SpotError> {
+        self.require_admin()?;
+        self.state.borrow_mut().perp_fee_bps = fee_bps;
+        Ok(())
+    }
+
+    /// Set maintenance margin for perps (basis points). Admin-only.
+    #[export]
+    pub fn set_perp_maintenance_bps(&mut self, bps: u128) -> Result<(), SpotError> {
+        self.require_admin()?;
+        self.state.borrow_mut().perp_maintenance_bps = bps;
+        Ok(())
+    }
+
+    /// Set maximum mark price deviation per update (basis points). Admin-only.
+    #[export]
+    pub fn set_perp_max_mark_deviation_bps(&mut self, bps: u128) -> Result<(), SpotError> {
+        self.require_admin()?;
+        self.state.borrow_mut().perp_max_mark_deviation_bps = bps;
+        Ok(())
+    }
+
+    /// Set swap fee for AMM (basis points). Admin-only.
+    #[export]
+    pub fn set_amm_fee_bps(&mut self, fee_bps: u128) -> Result<(), SpotError> {
+        self.require_admin()?;
+        self.state.borrow_mut().amm_fee_bps = fee_bps;
         Ok(())
     }
 
@@ -756,8 +881,10 @@ impl<'a> SpotService<'a> {
         }
         // Pull the escrow in. Everything after this point must either succeed or
         // credit the escrow back to the caller.
-        if !vft_transfer_from(escrow_token, caller, escrow_amt).await {
-            return Err(SpotError::TransferFailed);
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, escrow_token, caller, escrow_amt).await
+        {
+            return Err(SpotError::TransferFailed(e));
         }
 
         let mut events: Vec<SpotEvent> = Vec::new();
@@ -964,10 +1091,11 @@ impl<'a> SpotService<'a> {
             }
             want
         };
-        if !vft_transfer(token, caller, amount).await {
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_with_gas(vft_gas, token, caller, amount).await {
             let mut st = self.state.borrow_mut();
             *st.claims.entry((caller, token)).or_insert(0) += amount;
-            return Err(SpotError::TransferFailed);
+            return Err(SpotError::TransferFailed(e));
         }
         let _ = self.emit_event(SpotEvent::Withdrawn {
             who: caller,
@@ -1012,8 +1140,9 @@ impl<'a> SpotService<'a> {
         let scale = 10u128
             .checked_pow(base_dec as u32)
             .ok_or(SpotError::BadParams)?;
-        if !vft_transfer_from(quote, caller, max_quote).await {
-            return Err(SpotError::TransferFailed);
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, quote, caller, max_quote).await {
+            return Err(SpotError::TransferFailed(e));
         }
 
         let mut events: Vec<SpotEvent> = Vec::new();
@@ -1131,8 +1260,9 @@ impl<'a> SpotService<'a> {
             }
             (pair.base, pair.quote, pair.base_dec)
         };
-        if !vft_transfer_from(base, caller, qty).await {
-            return Err(SpotError::TransferFailed);
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, base, caller, qty).await {
+            return Err(SpotError::TransferFailed(e));
         }
 
         let mut events: Vec<SpotEvent> = Vec::new();
@@ -1244,8 +1374,12 @@ impl<'a> SpotService<'a> {
 //
 // Gas is now in the gas slot and `value` is 0, which is correct: these are pure
 // message calls and should never transfer native tokens.
-
-/// Gas handed to a single VFT call.
+//
+// IMPORTANT: `reply_deposit = 0` assumes VFT `Transfer`/`TransferFrom` return a small
+// `bool` reply that fits in the default reply deposit. If the token program returns
+// larger replies or is upgraded, this may need adjustment.
+//
+// Gas handed to a single VFT call.
 ///
 /// Previously this was `gas_available() / 2`, which starves any method making more
 /// than one cross-program call: the first hands away half the budget, the second
@@ -1261,10 +1395,8 @@ impl<'a> SpotService<'a> {
 /// its `TransferFrom` fail outright. 10 billion clears both with room, while still
 /// leaving a two-call method like `add_liquidity` enough budget for its second call
 /// and its replies out of a 30 billion transaction limit.
-const VFT_CALL_GAS: u64 = 10_000_000_000;
-
-fn vft_call_gas() -> u64 {
-    VFT_CALL_GAS.min(exec::gas_available() / 2)
+fn vft_call_gas(st: &SpotState) -> u64 {
+    st.vft_call_gas.min(exec::gas_available() / 2)
 }
 
 /// Build the SCALE route payload for a service method call on a VFT program.
@@ -1275,16 +1407,34 @@ pub fn vft_route(service: &str, method: &str, args: Vec<u8>) -> Vec<u8> {
     payload
 }
 
+/// Result of a VFT cross-program call.
+pub type VftResult = Result<(), TransferError>;
+
 /// Move `value` of `token` from `from` into the DEX via VFT `TransferFrom`. Requires a
-/// prior `approve`. Returns whether the on-chain transfer succeeded.
-pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bool {
+/// prior `approve`. Returns detailed error on failure.
+pub async fn vft_transfer_from(
+    st: &SpotState,
+    token: ActorId,
+    from: ActorId,
+    value: u128,
+) -> VftResult {
+    vft_transfer_from_with_gas(vft_call_gas(st), token, from, value).await
+}
+
+/// Internal helper that takes gas as an explicit parameter.
+/// Used by service methods that need to read gas from state before awaiting.
+pub async fn vft_transfer_from_with_gas(
+    gas: u64,
+    token: ActorId,
+    from: ActorId,
+    value: u128,
+) -> VftResult {
     let dex = exec::program_id();
     let payload = vft_route(
         "Vft",
         "TransferFrom",
         (from, dex, U256::from(value)).encode(),
     );
-    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
@@ -1292,15 +1442,34 @@ pub async fn vft_transfer_from(token: ActorId, from: ActorId, value: u128) -> bo
         0,
         0,
     ) {
-        Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
-        Err(_) => false,
+        Ok(fut) => match fut.await {
+            Ok(reply) => {
+                if reply.0 {
+                    Ok(())
+                } else {
+                    // Token program returned false — typically insufficient allowance/balance
+                    Err(TransferError::InsufficientAllowance)
+                }
+            }
+            Err(_) => Err(TransferError::ProgramError), // trap or decode error in reply
+        },
+        Err(_) => Err(TransferError::SendFailed), // send failed (gas, queue full, etc.)
     }
 }
 
 /// Transfer `value` of `token` from the DEX vault to `to` via VFT `Transfer`.
-pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
+pub async fn vft_transfer(st: &SpotState, token: ActorId, to: ActorId, value: u128) -> VftResult {
+    vft_transfer_with_gas(vft_call_gas(st), token, to, value).await
+}
+
+/// Internal helper that takes gas as an explicit parameter.
+pub async fn vft_transfer_with_gas(
+    gas: u64,
+    token: ActorId,
+    to: ActorId,
+    value: u128,
+) -> VftResult {
     let payload = vft_route("Vft", "Transfer", (to, U256::from(value)).encode());
-    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<bool>>(
         token,
         RawPayload(payload),
@@ -1308,16 +1477,29 @@ pub async fn vft_transfer(token: ActorId, to: ActorId, value: u128) -> bool {
         0,
         0,
     ) {
-        Ok(fut) => fut.await.map(|r| r.0).unwrap_or(false),
-        Err(_) => false,
+        Ok(fut) => match fut.await {
+            Ok(reply) => {
+                if reply.0 {
+                    Ok(())
+                } else {
+                    Err(TransferError::ProgramError) // transfer failed (insufficient balance, paused, etc.)
+                }
+            }
+            Err(_) => Err(TransferError::ProgramError),
+        },
+        Err(_) => Err(TransferError::SendFailed),
     }
 }
 
 /// Read a token's declared decimals from its `VftMetadata` service, so a listing can
 /// verify what the admin typed instead of trusting it (audit M-14).
-pub async fn vft_decimals(token: ActorId) -> Option<u8> {
+pub async fn vft_decimals(st: &SpotState, token: ActorId) -> Result<u8, TransferError> {
+    vft_decimals_with_gas(vft_call_gas(st), token).await
+}
+
+/// Internal helper that takes gas as an explicit parameter.
+pub async fn vft_decimals_with_gas(gas: u64, token: ActorId) -> Result<u8, TransferError> {
     let payload = vft_route("VftMetadata", "Decimals", Vec::new());
-    let gas = vft_call_gas();
     match msg::send_with_gas_for_reply_as::<RawPayload, SailsReply<u8>>(
         token,
         RawPayload(payload),
@@ -1325,8 +1507,11 @@ pub async fn vft_decimals(token: ActorId) -> Option<u8> {
         0,
         0,
     ) {
-        Ok(fut) => fut.await.map(|r| r.0).ok(),
-        Err(_) => None,
+        Ok(fut) => match fut.await {
+            Ok(reply) => Ok(reply.0),
+            Err(_) => Err(TransferError::ProgramError),
+        },
+        Err(_) => Err(TransferError::SendFailed),
     }
 }
 

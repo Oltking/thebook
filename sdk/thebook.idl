@@ -17,8 +17,8 @@ type SpotError = enum {
   NotOwner,
   /// Nothing to withdraw for that token.
   NothingToClaim,
-  /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-  TransferFailed,
+  /// The on-chain VFT transfer failed with detailed reason.
+  TransferFailed: TransferError,
   /// Trading is paused. Cancel and withdraw remain open.
   Paused,
   /// The fill would be worse than the caller's stated slippage bound.
@@ -29,6 +29,21 @@ type SpotError = enum {
   DecimalsMismatch,
   /// No pending admin, or the caller is not the pending admin.
   NotPendingAdmin,
+};
+
+/// Detailed reason for a VFT cross-program transfer failure.
+/// Allows callers to distinguish retryable vs non-retryable failures.
+type TransferError = enum {
+  /// The token program returned false (typically insufficient allowance or balance).
+  InsufficientAllowance,
+  /// The token program trapped or returned a decode error (program bug / pause / upgrade).
+  ProgramError,
+  /// The cross-program message send failed (gas exhaustion, queue full, etc.).
+  SendFailed,
+  /// The reply could not be decoded (version mismatch, corrupted reply).
+  DecodeError,
+  /// Generic/unknown failure — preserved for backward compatibility.
+  Unknown,
 };
 
 /// `Ord` matters: `Side` is part of the spot price-level index key
@@ -86,8 +101,8 @@ type AmmError = enum {
   PoolInactive,
   /// The global pool cap is reached.
   TooManyPools,
-  /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-  TransferFailed,
+  /// The on-chain VFT transfer failed with detailed reason.
+  TransferFailed: TransferError,
   /// Trading is paused. Removing liquidity remains open.
   Paused,
   /// The result would be worse than the caller's stated bound.
@@ -130,18 +145,81 @@ type PerpsError = enum {
   PositionNotFound,
   NotLiquidatable,
   BookFull,
-  TransferFailed,
+  TransferFailed: TransferError,
   NoCollateral,
   /// Opening would push this side's open interest past the market cap.
   OiCapExceeded,
   /// Trading is paused. Closing and liquidating stay open.
   Paused,
+  /// This market is close-only: existing positions can close/liquidate, but no
+  /// new positions may be opened.
+  CloseOnly,
   /// The mark update deviates further from the previous mark than the bound allows.
   MarkDeviationTooLarge,
   /// The reserve is too thin relative to what it already owes to accept new risk.
   InsufficientCoverage,
   /// An amount overflowed. Trapping beats a silently wrong number.
   Overflow,
+  /// LP vault: deposit amount is zero.
+  LpZeroAmount,
+  /// LP vault: lock period not expired.
+  LpLocked,
+  /// LP vault: deposit not found.
+  LpDepositNotFound,
+  /// LP vault: insufficient shares for action.
+  LpInsufficientShares,
+  /// LP vault: close-only already active.
+  LpCloseOnlyAlreadyActive,
+};
+
+/// Individual LP deposit with lock tracking.
+type LpDeposit = struct {
+  id: u64,
+  lp: actor_id,
+  amount: u128,
+  shares: u128,
+  deposit_block: u32,
+  /// Block when lock expires (deposit_block + LOCK_DURATION_BLOCKS).
+  unlock_block: u32,
+};
+
+/// LP vault state summary.
+type LpVaultState = struct {
+  total_collateral: u128,
+  total_shares: u128,
+  close_only: bool,
+  deposit_count: u32,
+};
+
+/// Mainnet metrics for transparency (committee request).
+type MainnetMetrics = struct {
+  timestamp_block: u32,
+  tvl: u128,
+  perp_reserve: u128,
+  lp_vault_collateral: u128,
+  position_margin: u128,
+  active_markets: u32,
+  total_volume_30d: u128,
+  total_volume_60d: u128,
+  unique_wallets_30d: u32,
+  unique_wallets_60d: u32,
+  pool_health: vec MarketHealth,
+  lp_vault: LpVaultState,
+};
+
+/// Per-market health metrics.
+type MarketHealth = struct {
+  market_id: u64,
+  symbol: str,
+  mark: u128,
+  reserve: u128,
+  long_oi: u128,
+  short_oi: u128,
+  net_skew: u128,
+  skew_cap: u128,
+  skew_utilization_bps: u128,
+  close_only: bool,
+  excluded: bool,
 };
 
 type PerpMarket = struct {
@@ -156,6 +234,11 @@ type PerpMarket = struct {
   /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
   long_oi: u128,
   short_oi: u128,
+  /// Whether the market accepts new positions. Close/liquidate stay open.
+  close_only: bool,
+  /// Excluded from new positions at launch (e.g., VARA market per committee recommendation).
+  /// Existing positions can still close/liquidate.
+  excluded: bool,
   /// Max open interest per side. Required at market creation: there is no
   /// unlimited default, because the safe value should not depend on an operator
   /// remembering a second call (audit M-03).
@@ -164,6 +247,8 @@ type PerpMarket = struct {
   /// crowded side, falls while shorts are. Longs pay the increase, shorts receive
   /// its negation; both settle against the reserve, which is the counterparty.
   cum_funding: i128,
+  /// Cumulative holding-fee index charged to every open position.
+  cum_holding: i128,
   /// Block `cum_funding` was last advanced.
   funding_block: u32,
 };
@@ -213,9 +298,22 @@ service Spot {
   ProposeAdmin : (new_admin: actor_id) -> result (null, SpotError);
   /// Re-open a delisted pair. Admin-only.
   RelistPair : (pair_id: u64) -> result (null, SpotError);
+  /// Set swap fee for AMM (basis points). Admin-only.
+  SetAmmFeeBps : (fee_bps: u128) -> result (null, SpotError);
   /// Halt or resume trading. Cancel and withdraw are deliberately never gated on
   /// this, so pausing during an incident cannot trap user funds (audit H-08).
   SetPaused : (paused: bool) -> result (null, SpotError);
+  /// Set trading fee for perps (basis points). Admin-only.
+  SetPerpFeeBps : (fee_bps: u128) -> result (null, SpotError);
+  /// Set maintenance margin for perps (basis points). Admin-only.
+  SetPerpMaintenanceBps : (bps: u128) -> result (null, SpotError);
+  /// Set maximum leverage for perps. Admin-only.
+  SetPerpMaxLeverage : (leverage: u32) -> result (null, SpotError);
+  /// Set maximum mark price deviation per update (basis points). Admin-only.
+  SetPerpMaxMarkDeviationBps : (bps: u128) -> result (null, SpotError);
+  /// Set the gas limit for VFT cross-program calls. Admin-only.
+  /// Allows adapting to token program gas cost changes without redeploy.
+  SetVftCallGas : (gas: u64) -> result (null, SpotError);
   /// Sweep accumulated rounding dust for a token to the admin's claimable balance.
   /// Dust is real, already-held tokens that no claim references (audit M-06).
   SweepDust : (token: actor_id) -> result (u128, SpotError);
@@ -382,8 +480,9 @@ service Amm {
 service PerpsV1 {
   /// Admin: list a perp market. `max_oi` is required and must be non-zero — the
   /// reserve's exposure is bounded at creation, not by a remembered follow-up
-  /// (audit M-03).
-  AddMarket : (symbol: str, max_oi: u128) -> result (u64, PerpsError);
+  /// (audit M-03). `excluded` marks markets that cannot accept new positions at
+  /// launch (e.g., VARA market per committee recommendation).
+  AddMarket : (symbol: str, max_oi: u128, excluded: bool) -> result (u64, PerpsError);
   /// Close your position, settling PnL and funding against the reserve and
   /// crediting the payout to your claimable collateral (withdraw via
   /// `Spot/Withdraw`). Never gated on the pause switch, and never gated on a live
@@ -398,6 +497,18 @@ service PerpsV1 {
   /// it vanished exactly when liquidation mattered most, so nobody would run a bot
   /// for it (audit L-07).
   Liquidate : (position_id: u64) -> result (null, PerpsError);
+  /// LP deposits collateral into the vault, receives shares pro-rata.
+  /// Locked for 12 months (LP_LOCK_DURATION_BLOCKS).
+  /// Requires prior `approve` of collateral token.
+  LpDeposit : (amount: u128) -> result (u128, PerpsError);
+  /// LP redeems shares for collateral after lock expires.
+  /// Shares are burned, collateral returned pro-rata.
+  LpRedeem : (deposit_id: u64) -> result (u128, PerpsError);
+  /// LP reverts close-only mode (requires >50% shares).
+  LpRevertCloseOnly : () -> result (null, PerpsError);
+  /// LP triggers close-only mode for all perps markets.
+  /// Requires >50% of total LP shares supporting the trigger.
+  LpTriggerCloseOnly : () -> result (null, PerpsError);
   /// Open an isolated-margin position. Escrows `margin` of the collateral token
   /// (requires a prior `approve`); notional = margin * leverage at the mark.
   /// 
@@ -405,6 +516,9 @@ service PerpsV1 {
   /// post-await re-checks exist because the await yields to other messages, and
   /// both credit the margin back before returning (audit C-03, M-08).
   OpenPosition : (market_id: u64, is_long: bool, margin: u128, leverage: u32) -> result (u64, PerpsError);
+  /// Admin: put one perp market into open or close-only mode. Existing positions
+  /// can always close or be liquidated; this only gates new risk.
+  SetCloseOnly : (market_id: u64, close_only: bool) -> result (null, PerpsError);
   /// Admin: set the collateral (settlement) token — the USDT VFT program.
   SetCollateral : (token: actor_id) -> result (null, PerpsError);
   /// Admin: set the keeper account allowed to push mark prices. The zero address is
@@ -415,12 +529,17 @@ service PerpsV1 {
   /// 
   /// Bounded to `MAX_MARK_DEVIATION_BPS` from the previous mark, so a compromised
   /// keeper cannot reprice the book in a single transaction and liquidate it
-  /// (audit H-04). The bound is skipped only for the first mark, and once the feed
-  /// is stale past `MARK_EXIT_AGE` — by then positions can already exit at entry,
-  /// so a fresh start is not a lever over anyone.
+  /// (audit H-04). The bound is skipped only for the very first mark (mark == 0
+  /// and mark_block == 0). After initialization, the bound always applies — even
+  /// after prolonged staleness — because a returning keeper could otherwise jump
+  /// the mark arbitrarily, distorting funding, liquidation prices, and PnL for
+  /// positions that have not yet exited at entry.
   SetMark : (market_id: u64, price: u128) -> result (null, PerpsError);
   /// Admin: cap open interest per side on a market.
   SetMarketCap : (market_id: u64, max_oi: u128) -> result (null, PerpsError);
+  /// Permissionless tick: accrue funding for all active markets up to current block.
+  /// Anyone can call this to keep funding indices fresh between keeper updates.
+  Tick : () -> result (null, PerpsError);
   /// Admin: withdraw reserve profit to the admin's claimable collateral.
   /// 
   /// Capped at the amount above current liability, so solvency is a contract
@@ -434,6 +553,15 @@ service PerpsV1 {
   query GetConfig : () -> struct { actor_id, actor_id };
   /// Liquidation price for a position (0 if none).
   query GetLiqPrice : (position_id: u64) -> u128;
+  /// Returns LP deposit details for a specific deposit.
+  query GetLpDeposit : (deposit_id: u64) -> opt LpDeposit;
+  /// Returns all LP deposits for a specific LP.
+  query GetLpDepositsFor : (lp: actor_id) -> vec LpDeposit;
+  /// Returns LP vault state.
+  query GetLpVault : () -> LpVaultState;
+  /// Returns comprehensive mainnet metrics for transparency (committee request).
+  /// Includes 30/60-day volume, unique wallets, TVL, active markets, pool health.
+  query GetMainnetMetrics : () -> MainnetMetrics;
   query GetMarkets : () -> vec PerpMarket;
   /// A trader's open positions with PnL at the current mark, paginated (audit L-05):
   /// `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
@@ -443,6 +571,8 @@ service PerpsV1 {
   /// see the reserve is thin *before* entering, rather than discovering it as a
   /// truncated payout on the way out (audit M-04).
   query GetReserveHealth : () -> struct { u128, u128, u128 };
+  /// Returns current skew at mark prices for a market.
+  query GetSkewAtMark : (market_id: u64) -> opt struct { u128, u128, u128 };
 
   events {
     MarketAdded: struct {
@@ -497,6 +627,25 @@ service PerpsV1 {
     };
     CollateralSet: struct {
       token: actor_id
+    };
+    LpDeposited: struct {
+      lp: actor_id,
+      amount: u128,
+      shares: u128,
+      unlock_block: u32,
+    };
+    LpRedeemed: struct {
+      lp: actor_id,
+      amount: u128,
+      shares: u128,
+    };
+    LpCloseOnlyTriggered: struct {
+      trigger_lp: actor_id,
+      supporting_shares: u128,
+      total_shares: u128,
+    };
+    LpCloseOnlyReverted: struct {
+      trigger_lp: actor_id
     };
   }
 };

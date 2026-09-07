@@ -357,6 +357,106 @@ server.tool('thebook_remove_liquidity', 'Burn LP shares and take back your share
   }),
 );
 
+// ── Perpetual Futures ──
+server.tool('thebook_perp_markets', 'List the perpetual markets (id, symbol, mark, OI, caps). Read this first to get a marketId.',
+  {}, tool((b) => b.perps.markets()),
+);
+server.tool('thebook_skew_at_mark', 'Current skew at mark prices for a market (long, short, net notional).',
+  { marketId: z.number().int().describe('Market id from thebook_perp_markets') },
+  tool((b, { marketId }) => b.perps.getSkewAtMark(BigInt(marketId))),
+);
+server.tool('thebook_mainnet_metrics', 'Mainnet metrics: TVL, volume, unique wallets, pool health, LP vault state. For transparency and monitoring.',
+  {}, tool((b) => b.perps.getMainnetMetrics()),
+);
+server.tool('thebook_lp_vault', 'LP vault state: total collateral, shares, close-only status, deposit count.',
+  {}, tool((b) => b.perps.getLpVault()),
+);
+server.tool('thebook_lp_deposit', 'Deposit collateral into the LP vault and receive shares pro-rata. Locked for 12 months. Requires prior `approve` of collateral token.',
+  {
+    amount: bnStr.describe('Collateral smallest-units to deposit'),
+    confirm: confirmField,
+  },
+  tool(async (b, { amount, confirm }) => {
+    const human = checkSpend({ tokenId: (await b.perps.getConfig())[0], raw: amount, confirm, what: 'LP deposit' });
+    const shares = await b.perps.lpDeposit(BigInt(amount));
+    return `Deposited ${human}, received ${shares} shares.`;
+  }),
+);
+server.tool('thebook_lp_redeem', 'Redeem LP shares for collateral after 12-month lock expires. Shares are burned, collateral returned pro-rata.',
+  {
+    depositId: z.number().int().describe('Deposit id from thebook_lp_vault or your deposit history'),
+    confirm: confirmField,
+  },
+  tool(async (b, { depositId, confirm }) => {
+    const collateralId = (await b.perps.getConfig())[0];
+    const human = checkSpend({ tokenId: collateralId, raw: '0', confirm, what: 'LP redeem' });
+    const amount = await b.perps.lpRedeem(BigInt(depositId));
+    return `Redeemed ${depositId} for ${amount} collateral.`;
+  }),
+);
+server.tool('thebook_lp_trigger_close_only', 'Trigger close-only mode for all perps markets. Requires >50% of total LP shares supporting the trigger.',
+  { confirm: confirmField },
+  tool(async (b, { confirm }) => {
+    const human = checkSpend({ tokenId: (await b.perps.getConfig())[0], raw: '0', confirm, what: 'Trigger close-only' });
+    await b.perps.lpTriggerCloseOnly();
+    return `Close-only mode triggered. ${human} was the signal.`;
+  }),
+);
+server.tool('thebook_lp_revert_close_only', 'Revert close-only mode for all perps markets. Requires >50% of total LP shares supporting the trigger.',
+  { confirm: confirmField },
+  tool(async (b, { confirm }) => {
+    const human = checkSpend({ tokenId: (await b.perps.getConfig())[0], raw: '0', confirm, what: 'Revert close-only' });
+    await b.perps.lpRevertCloseOnly();
+    return 'Close-only mode reverted.';
+  }),
+);
+server.tool('thebook_tick', 'Permissionless tick: accrue funding for all active markets up to current block. Anyone can call this to keep funding indices fresh between keeper updates.',
+  {}, tool((b) => b.perps.tick()),
+);
+// ── Perps Admin (governance-configurable parameters) ──
+server.tool('thebook_set_perp_max_leverage', 'Admin: set maximum leverage for perps (default 5).',
+  { leverage: z.number().int().min(1).max(50).describe('Maximum leverage, e.g., 5 for 5x') },
+  tool(async (b, { leverage }) => {
+    await b.perps.setPerpMaxLeverage(leverage);
+    return `Perps max leverage set to ${leverage}x.`;
+  }),
+);
+server.tool('thebook_set_perp_fee_bps', 'Admin: set trading fee for perps (basis points).',
+  { feeBps: z.number().int().min(0).max(10000).describe('Fee in basis points, e.g., 10 for 0.1%') },
+  tool(async (b, { feeBps }) => {
+    await b.perps.setPerpFeeBps(feeBps);
+    return `Perps fee set to ${feeBps} bps (${feeBps / 100}%).`;
+  }),
+);
+server.tool('thebook_set_perp_maintenance_bps', 'Admin: set maintenance margin for perps (basis points).',
+  { bps: z.number().int().min(0).max(10000).describe('Maintenance margin in basis points, e.g., 100 for 1%') },
+  tool(async (b, { bps }) => {
+    await b.perps.setPerpMaintenanceBps(bps);
+    return `Perps maintenance margin set to ${bps} bps (${bps / 100}%).`;
+  }),
+);
+server.tool('thebook_set_perp_max_mark_deviation_bps', 'Admin: set maximum mark price deviation per update (basis points).',
+  { bps: z.number().int().min(0).max(50000).describe('Max deviation in basis points, e.g., 1000 for 10%') },
+  tool(async (b, { bps }) => {
+    await b.perps.setPerpMaxMarkDeviationBps(bps);
+    return `Perps max mark deviation set to ${bps} bps (${bps / 100}%).`;
+  }),
+);
+server.tool('thebook_set_amm_fee_bps', 'Admin: set swap fee for AMM pools (basis points).',
+  { feeBps: z.number().int().min(0).max(10000).describe('Swap fee in basis points, e.g., 30 for 0.3%') },
+  tool(async (b, { feeBps }) => {
+    await b.perps.setAmmFeeBps(feeBps);
+    return `AMM fee set to ${feeBps} bps (${feeBps / 100}%).`;
+  }),
+);
+server.tool('thebook_set_vft_call_gas', 'Admin: set gas limit for VFT cross-program calls.',
+  { gas: z.number().int().min(1000000).describe('Gas limit per VFT call, e.g., 10000000000 for 10B') },
+  tool(async (b, { gas }) => {
+    await b.perps.setVftCallGas(gas);
+    return `VFT call gas set to ${gas}.`;
+  }),
+);
+
 // ── Settlement ──
 server.tool('thebook_claim', 'Your withdrawable balance (fills + cancelled escrow) for a token, in smallest-units.',
   { token: z.string().describe('Token VFT program id (0x…)') },

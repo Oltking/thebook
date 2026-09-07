@@ -48,3 +48,21 @@ pub enum Side {
     Buy,
     Sell,
 }
+
+/// Detailed reason for a VFT cross-program transfer failure.
+/// Allows callers to distinguish retryable vs non-retryable failures.
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum TransferError {
+    /// The token program returned false (typically insufficient allowance or balance).
+    InsufficientAllowance,
+    /// The token program trapped or returned a decode error (program bug / pause / upgrade).
+    ProgramError,
+    /// The cross-program message send failed (gas exhaustion, queue full, etc.).
+    SendFailed,
+    /// The reply could not be decoded (version mismatch, corrupted reply).
+    DecodeError,
+    /// Generic/unknown failure — preserved for backward compatibility.
+    Unknown,
+}

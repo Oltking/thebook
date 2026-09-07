@@ -23,7 +23,8 @@ use sails_rs::gtest::*;
 use thebook::WASM_BINARY;
 use thebook_client::perps_v_1::io as perp1_io;
 use thebook_client::spot::io as spot_io;
-use thebook_client::*;
+use thebook_client::{LpVaultState as ClientLpVaultState, Side};
+use thebook_client::{ThebookClient, ThebookClientCtors, ThebookClientProgram};
 use thebook_token::WASM_BINARY as TOKEN_WASM;
 use thebook_token_client::faucet::io as tok_faucet_io;
 use thebook_token_client::vft::io as tok_vft_io;
@@ -40,7 +41,7 @@ const CAROL: u64 = 3;
 type Book = (Vec<(u128, u128)>, Vec<(u128, u128)>);
 
 /// Faucet mint per claim, per token.
-const FAUCET_USD: u64 = 100_000;
+const FAUCET_USD: u64 = 1_000_000;
 const FAUCET_ETH: u64 = 1_000_000;
 
 /// Handles for a deployed test environment.
@@ -59,11 +60,12 @@ async fn deploy() -> Env {
     let env = GtestEnv::new(system, ALICE.into());
 
     let code_id = env.system().submit_code(WASM_BINARY);
-    let program = env
-        .deploy::<ThebookClientProgram>(code_id, b"thebookdex".to_vec())
-        .new()
-        .await
-        .unwrap();
+    let program = ThebookClientCtors::new(Deployment::<
+        ThebookClientProgram,
+        sails_rs::client::GtestEnv,
+    >::new(env.clone(), code_id, b"thebookdex".to_vec()))
+    .await
+    .unwrap();
     // The DEX sends VFT messages and must hold native balance to cover the
     // existential deposit reserved for each reply.
     env.system()
@@ -80,6 +82,9 @@ async fn deploy() -> Env {
             .new(name.to_string(), symbol.to_string(), 6, U256::from(faucet))
             .await
             .unwrap();
+        // Fund token program with VARA for gas
+        env.system()
+            .transfer(ALICE, token.id(), 10_000_000_000_000, false);
         ids.push(token.id());
     }
     Env {
@@ -139,6 +144,16 @@ async fn claim_and_approve(env: &GtestEnv, token: ActorId, dex: ActorId, who: u6
         .await
         .unwrap()
         .unwrap();
+    let _: bool = tok
+        .vft()
+        .pending_call::<tok_vft_io::Approve>((dex, U256::from(amount)))
+        .await
+        .unwrap();
+}
+
+/// Just approve (for accounts that already claimed faucet).
+async fn approve(env: &GtestEnv, token: ActorId, dex: ActorId, who: u64, amount: u128) {
+    let tok = as_tok(env, token, who);
     let _: bool = tok
         .vft()
         .pending_call::<tok_vft_io::Approve>((dex, U256::from(amount)))
@@ -774,6 +789,7 @@ async fn spot_unknown_pair_rejects() {
 // ── Perps ───────────────────────────────────────────────────────────────────────────
 
 /// Set up perps: USDT collateral, a keeper, one capped market, a funded reserve.
+/// Opens a position for ALICE and funds the reserve.
 async fn setup_perps(e: &Env, max_oi: u128) -> u64 {
     let dex = e.program.id();
     let _: () = e
@@ -794,7 +810,7 @@ async fn setup_perps(e: &Env, max_oi: u128) -> u64 {
     let market: u64 = e
         .program
         .perps_v_1()
-        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), max_oi))
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), max_oi, false))
         .await
         .unwrap()
         .unwrap();
@@ -807,6 +823,34 @@ async fn setup_perps(e: &Env, max_oi: u128) -> u64 {
         .await
         .unwrap()
         .unwrap();
+    market
+}
+
+/// Set up perps without opening positions or funding reserve (for tests that need empty perps).
+async fn setup_perps_empty(e: &Env, max_oi: u128) -> u64 {
+    let _dex = e.program.id();
+    let _: () = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetCollateral>((e.usd,))
+        .await
+        .unwrap()
+        .unwrap();
+    let _: () = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::SetKeeper>((ActorId::from(CAROL),))
+        .await
+        .unwrap()
+        .unwrap();
+    let market: u64 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), max_oi, false))
+        .await
+        .unwrap()
+        .unwrap();
+    set_mark(e, market, 2000).await;
     market
 }
 
@@ -847,7 +891,7 @@ async fn perps_first_open_is_refused_against_an_empty_reserve() {
     let market: u64 = e
         .program
         .perps_v_1()
-        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), u128::MAX / 2))
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), u128::MAX / 2, false))
         .await
         .unwrap()
         .unwrap();
@@ -881,7 +925,7 @@ async fn perps_market_requires_an_oi_cap() {
     let unbounded: Result<u64, _> = e
         .program
         .perps_v_1()
-        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), 0u128))
+        .pending_call::<perp1_io::AddMarket>(("ETH".to_string(), 0u128, false))
         .await
         .unwrap();
     assert!(
@@ -943,14 +987,14 @@ async fn perps_open_close_profit_settles_to_claim() {
     let dex = e.program.id();
     let market = setup_perps(&e, u128::MAX / 2).await;
 
-    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    claim_and_approve(&e.env, e.usd, dex, BOB, 1_000).await;
     let pos: u64 = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 2u32))
         .await
         .unwrap()
         .unwrap();
-    // Mark rises 5% (within the deviation bound): pnl = 20_000 * 100 / 2000 = 1_000.
+    // Mark rises 5% (within the deviation bound): pnl = 2_000 * 100 / 2000 = 100.
     set_mark(&e, market, 2100).await;
     let (payout, pnl): (u128, i128) = as_dex(&e.env, dex, BOB)
         .perps_v_1()
@@ -958,10 +1002,10 @@ async fn perps_open_close_profit_settles_to_claim() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(pnl, 1_000);
-    // notional 20_000 → open fee 20 (margin 9_980); payout 10_980 − close fee 20.
-    assert_eq!(payout, 10_960, "margin + profit − 0.1%/side fees");
-    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 10_960);
+    assert_eq!(pnl, 100);
+    // notional 2_000 → open fee 2 (margin 998); payout 1_098 − close fee 2.
+    assert_eq!(payout, 1_096, "margin + profit − 0.1%/side fees");
+    assert_eq!(claim_of(&e.env, dex, BOB, e.usd).await, 1_096);
     assert_solvent(&e, e.usd).await;
 }
 
@@ -974,15 +1018,16 @@ async fn perps_open_close_profit_settles_to_claim() {
 async fn perps_rejected_open_returns_the_margin() {
     let e = deploy().await;
     let dex = e.program.id();
-    let market = setup_perps(&e, 25_000).await;
+    // Use max_oi = 3_000 so second position (total 4_000 notional) exceeds it
+    let market = setup_perps(&e, 3_000).await;
 
-    claim_and_approve(&e.env, e.usd, dex, BOB, 20_000).await;
+    claim_and_approve(&e.env, e.usd, dex, BOB, 4_000).await;
     let wallet_before = balance_of(&e.env, e.usd, BOB).await;
 
-    // First open: notional 20_000, within the 25_000 cap.
+    // First open: notional 2_000, within the 3_000 cap.
     let _: u64 = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 2u32))
         .await
         .unwrap()
         .unwrap();
@@ -992,14 +1037,14 @@ async fn perps_rejected_open_returns_the_margin() {
         .pending_call::<perp1_io::GetReserve>(())
         .await
         .unwrap();
-    assert_eq!(reserve, 50_020, "reserve grew by the open fee");
-    assert_eq!(balance_of(&e.env, e.usd, BOB).await, wallet_before - 10_000);
+    assert_eq!(reserve, 50_002, "reserve grew by the open fee");
+    assert_eq!(balance_of(&e.env, e.usd, BOB).await, wallet_before - 1_000);
 
-    // Second open would push long OI to 40_000, past the cap. It must be rejected —
+    // Second open would push long OI to 4_000, past the 3_000 cap. It must be rejected —
     // and it must not take the margin.
     let res: Result<u64, _> = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 2u32))
         .await
         .unwrap();
     assert!(
@@ -1013,7 +1058,7 @@ async fn perps_rejected_open_returns_the_margin() {
     // escrow, so the second 10_000 never leaves the wallet at all.
     assert_eq!(
         balance_of(&e.env, e.usd, BOB).await,
-        wallet_before - 10_000,
+        wallet_before - 1_000,
         "C-03: a rejected open must not take a second margin from the wallet",
     );
     assert_eq!(
@@ -1032,7 +1077,7 @@ async fn perps_invalid_open_rejects_before_escrow() {
     let dex = e.program.id();
     let market = setup_perps(&e, u128::MAX / 2).await;
 
-    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    claim_and_approve(&e.env, e.usd, dex, BOB, 1_000).await;
     let before = balance_of(&e.env, e.usd, BOB).await;
 
     for (margin, leverage, why) in [
@@ -1078,11 +1123,11 @@ async fn perps_reserve_withdrawal_is_capped_by_open_liability() {
     claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
     let _: u64 = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 2u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 2u32))
         .await
         .unwrap()
         .unwrap();
-    set_mark(&e, market, 2100).await; // BOB is up 1_000
+    set_mark(&e, market, 2100).await; // BOB is up 100
 
     let (reserve, liability, coverage): (u128, u128, u128) = e
         .program
@@ -1124,10 +1169,10 @@ async fn perps_liquidation_pays_the_liquidator() {
     let dex = e.program.id();
     let market = setup_perps(&e, u128::MAX / 2).await;
 
-    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    claim_and_approve(&e.env, e.usd, dex, BOB, 1_000).await;
     let pos: u64 = as_dex(&e.env, dex, BOB)
         .perps_v_1()
-        .pending_call::<perp1_io::OpenPosition>((market, true, 10_000u128, 5u32))
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 5u32))
         .await
         .unwrap()
         .unwrap();
@@ -1136,9 +1181,9 @@ async fn perps_liquidation_pays_the_liquidator() {
     // position is under water. At 5x, that takes a much larger move than at 20x —
     // which is the point of the reduction.
     //
-    // margin 10_000 at 5x -> notional 50_000, open fee 50, margin 9_950.
-    // maintenance = 50_000 * 1% = 500. At mark 1620:
-    //   pnl = 50_000 * (1620 - 2000) / 2000 = -9_500, equity = 450 <= 500.
+    // margin 1_000 at 5x -> notional 5_000, open fee 5, margin 995.
+    // maintenance = 5_000 * 1% = 50. At mark 1620:
+    //   pnl = 5_000 * (1620 - 2000) / 2000 = -950, equity = 45 <= 50.
     for price in [1800u128, 1620] {
         set_mark(&e, market, price).await;
     }
@@ -1467,4 +1512,183 @@ fn legacy_attack_surface_is_gone() {
     assert!(idl.contains("CreatePool : (token_a: actor_id, token_b: actor_id"));
     assert!(idl.contains("min_shares: u128"));
     assert!(idl.contains("min_amount_out: u128"));
+}
+
+// ── Funding rate & skew_at_mark tests ────────────────────────────────────────────
+
+/// Test that tick() can be called (funding accrual tested via set_mark in other tests).
+/// Note: gtest doesn't advance block height between transactions, so funding
+/// accrual is tested via set_mark in other tests.
+#[tokio::test]
+async fn perps_tick_can_be_called() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let market = setup_perps_empty(&e, u128::MAX / 2).await;
+
+    // Fund reserve using ALICE (admin) - ALICE must claim faucet first
+    claim_and_approve(&e.env, e.usd, dex, ALICE, 100_000).await;
+    let _: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::FundReserve>((100_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Open positions on both sides to create imbalance
+    // ALICE already claimed faucet, just need to approve
+    approve(&e.env, e.usd, dex, ALICE, 10_000).await;
+    let _: u64 = as_dex(&e.env, dex, ALICE)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    let _: u64 = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, false, 1_000u128, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Tick should be callable without error
+    let _: () = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::Tick>(())
+        .await
+        .unwrap()
+        .unwrap();
+}
+
+/// Test skew_at_mark returns correct values.
+#[tokio::test]
+async fn perps_skew_at_mark_calculates_correctly() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let market = setup_perps_empty(&e, u128::MAX / 2).await;
+
+    // Fund reserve using ALICE (admin) - ALICE must claim faucet first
+    claim_and_approve(&e.env, e.usd, dex, ALICE, 100_000).await;
+    let _: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::FundReserve>((100_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Initially no positions, skew should be 0
+    let skew: Option<(u128, u128, u128)> = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetSkewAtMark>((market,))
+        .await
+        .unwrap();
+    assert_eq!(skew, Some((0, 0, 0)));
+
+    // Open long position - ALICE already claimed faucet
+    approve(&e.env, e.usd, dex, ALICE, 10_000).await;
+    let _: u64 = as_dex(&e.env, dex, ALICE)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 2_000u128, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Skew should equal long notional (no shorts)
+    let skew: Option<(u128, u128, u128)> = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetSkewAtMark>((market,))
+        .await
+        .unwrap();
+    assert!(skew.is_some());
+    let (long, short, net) = skew.unwrap();
+    assert!(long > 0, "long notional at mark should be > 0");
+    assert_eq!(short, 0, "short should be 0");
+    assert_eq!(net, long, "net skew should equal long when no shorts");
+
+    // Open short position
+    claim_and_approve(&e.env, e.usd, dex, BOB, 10_000).await;
+    let _: u64 = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, false, 1_000u128, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Skew should be |long - short|
+    let skew: Option<(u128, u128, u128)> = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetSkewAtMark>((market,))
+        .await
+        .unwrap();
+    assert!(skew.is_some());
+    let (long, short, net) = skew.unwrap();
+    assert!(short > 0, "short notional at mark should be > 0");
+    assert_eq!(
+        net,
+        long.abs_diff(short),
+        "net skew should be |long - short|"
+    );
+}
+
+/// Test LP vault deposit and redeem.
+#[tokio::test]
+async fn perps_lp_vault_deposit_and_redeem() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let _market = setup_perps_empty(&e, u128::MAX / 2).await;
+
+    // Alice deposits 10_000 USDT
+    claim_and_approve(&e.env, e.usd, dex, ALICE, 10_000).await;
+    let shares: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((10_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // First depositor gets amount - MINIMUM_LIQUIDITY shares (10_000 - 1_000 = 9_000)
+    // MINIMUM_LIQUIDITY (1_000) is locked permanently
+    assert_eq!(shares, 9_000);
+
+    // Check vault state
+    let vault: ClientLpVaultState = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetLpVault>(())
+        .await
+        .unwrap();
+    assert_eq!(vault.total_collateral, 10_000);
+    // total_shares includes the locked minimum liquidity (9_000 + 1_000 = 10_000)
+    assert_eq!(vault.total_shares, 10_000);
+    assert_eq!(vault.deposit_count, 1);
+
+    // Bob deposits 5_000 USDT - gets pro-rata shares
+    claim_and_approve(&e.env, e.usd, dex, BOB, 5_000).await;
+    let bob_shares: u128 = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((5_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+    // Pro-rata: 5_000 * 10_000 / 10_000 = 5_000 shares
+    assert_eq!(bob_shares, 5_000);
+
+    // Vault totals updated
+    let vault: ClientLpVaultState = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetLpVault>(())
+        .await
+        .unwrap();
+    assert_eq!(vault.total_collateral, 15_000);
+    assert_eq!(vault.total_shares, 15_000);
+    assert_eq!(vault.deposit_count, 2);
 }

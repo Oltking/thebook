@@ -5,28 +5,26 @@ import { AllowanceGate } from '../components/ui/AllowanceGate';
 import { EmptyState } from '../components/ui/EmptyState';
 import { TradeChart } from '../components/chart/TradeChart';
 import { useMarketData } from '../providers/MarketDataProvider';
-import { usePerpMarkets, usePerpPositions, useWalletBalances, useAllowances } from '../hooks/useSpot';
+import { usePerpMarkets, usePerpPositions, useWalletBalances, useAllowances, usePerpConfig } from '../hooks/useSpot';
 import { useSpotActions } from '../hooks/useSpotActions';
 import { parseUnits, formatUnits, formatPrice } from '../lib/units';
 import { RiskBanner } from '../components/ui/RiskBanner';
 import styles from './PerpsTradeView.module.css';
-
-// Perps settle in wUSDT (6 decimals) on Vara mainnet.
-const COLLATERAL = { addr: '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e', dec: 6, sym: 'wUSDT' };
-// Capped at the contract's MAX_LEVERAGE (5x). Offering a level the contract will
-// reject just produces a failed transaction the user pays gas for.
-const LEVERAGES = [1, 2, 3, 4, 5];
-// Marks are published in pico-USD ($1 = 1e12). Micro-USD left sub-cent assets like
-// VARA with three significant figures; see scripts/perps-keeper.mjs.
-const MARK_DEC = 12;
 
 export function PerpsTradeView() {
   const { account } = useAccount();
   const { markets } = usePerpMarkets();
   const { positions, refresh: refreshPositions } = usePerpPositions();
   const actions = useSpotActions();
+  const { config: perpConfig } = usePerpConfig();
 
-  const collateralList = useMemo(() => [COLLATERAL.addr], []);
+  // Collateral is determined by the contract (set_collateral). Read from first market.
+  const collateralAddr = useMemo(() => {
+    const m = markets.find(m => m.active && !m.excluded);
+    return m?.symbol ? null : '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e';
+  }, [markets]);
+  
+  const collateralList = useMemo(() => [collateralAddr ?? '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e'], [collateralAddr]);
   const { balances, refresh: refreshBal } = useWalletBalances(collateralList);
   const { allowances, refresh: refreshAllow } = useAllowances(collateralList);
 
@@ -45,10 +43,14 @@ export function PerpsTradeView() {
   const [err, setErr] = useState<string | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
 
-  const marginRaw = parseUnits(marginStr, COLLATERAL.dec);
+  // Collateral decimals - default to 6 (wUSDT) but could be read from contract
+  const collateralDec = 6; // wUSDT on Vara mainnet
+
+  const marginRaw = parseUnits(marginStr, collateralDec);
   const notionalRaw = marginRaw * BigInt(leverage);
-  const allowance = allowances[COLLATERAL.addr] ?? 0n;
-  const balance = balances[COLLATERAL.addr] ?? 0n;
+  const collateralAddrDynamic = collateralAddr ?? '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e';
+  const allowance = allowances[collateralAddrDynamic] ?? 0n;
+  const balance = balances[collateralAddrDynamic] ?? 0n;
   const insufficient = marginRaw > 0n && marginRaw > balance;
   const mark = market ? BigInt(market.mark as any) : 0n;
 
@@ -61,6 +63,10 @@ export function PerpsTradeView() {
     const feed = prices[chartAsset as keyof typeof prices];
     return feed ? Number(feed.price_usd_micro) / 1_000_000 : 0;
   }, [prices, chartAsset]);
+
+  // Leverage options from perp config (default 5x)
+  const maxLeverage = perpConfig?.maxLeverage ?? 5;
+  const LEVERAGES = useMemo(() => Array.from({ length: maxLeverage }, (_, i) => i + 1), [maxLeverage]);
 
   // ── margin slider ──
   // Sizing by percentage of the wallet balance is the fast path most of the time,
@@ -77,7 +83,7 @@ export function PerpsTradeView() {
     if (balance <= 0n) return;
     // Round-trips exactly: formatUnits at the token's own decimals is lossless, so
     // reparsing it yields the raw amount back.
-    setMarginStr(pct <= 0 ? '' : formatUnits((balance * BigInt(pct)) / 100n, COLLATERAL.dec));
+    setMarginStr(pct <= 0 ? '' : formatUnits((balance * BigInt(pct)) / 100n, collateralDec));
   };
 
   const symOf = (id: bigint | string) => markets.find((m) => String(m.id) === String(id))?.symbol ?? `#${id}`;
@@ -119,7 +125,7 @@ export function PerpsTradeView() {
         {market && (
           <div className={styles.headRight}>
             <span className={styles.mark}>
-              mark <b>{mark > 0n ? `$${formatPrice(mark, MARK_DEC)}` : '—'}</b>
+              mark <b>{mark > 0n ? `$${formatPrice(mark, collateralDec)}` : '—'}</b>
             </span>
             <button
               type="button"
@@ -171,8 +177,8 @@ export function PerpsTradeView() {
 
             <div className={styles.field}>
               <span className={styles.label}>
-                <span>Margin ({COLLATERAL.sym})</span>
-                <span>Balance: {formatUnits(balance, COLLATERAL.dec)} {COLLATERAL.sym}</span>
+                <span>Margin (wUSDT)</span>
+                <span>Balance: {formatUnits(balance, collateralDec)} wUSDT</span>
               </span>
               <input className={styles.input} inputMode="decimal" placeholder="0.00" value={marginStr} onChange={(e) => setMarginStr(e.target.value)} />
 
@@ -206,8 +212,8 @@ export function PerpsTradeView() {
                 {balance <= 0n && (
                   <p className={styles.sizerHint}>
                     {account
-                      ? `Add ${COLLATERAL.sym} to this wallet to size a position.`
-                      : `Connect a wallet holding ${COLLATERAL.sym} to size a position.`}
+                      ? `Add wUSDT to this wallet to size a position.`
+                      : `Connect a wallet holding wUSDT to size a position.`}
                   </p>
                 )}
               </div>
@@ -215,21 +221,21 @@ export function PerpsTradeView() {
 
             <div className={styles.total}>
               <span>Position size</span>
-              <span>{formatUnits(notionalRaw, COLLATERAL.dec)} {COLLATERAL.sym}</span>
+              <span>{formatUnits(notionalRaw, collateralDec)} wUSDT</span>
             </div>
 
             {!account ? (
               <p className={styles.empty}>Connect a wallet to trade.</p>
             ) : insufficient ? (
-              <button className={`${styles.submit} ${isLong ? styles.long : styles.short}`} disabled>Insufficient {COLLATERAL.sym}</button>
+              <button className={`${styles.submit} ${isLong ? styles.long : styles.short}`} disabled>Insufficient wUSDT</button>
             ) : mark === 0n ? (
               <button className={`${styles.submit} ${isLong ? styles.long : styles.short}`} disabled>Awaiting mark price</button>
             ) : (
               <AllowanceGate
                 allowance={allowance}
                 needed={marginRaw}
-                symbol={COLLATERAL.sym}
-                onApprove={(amt) => actions.approve(COLLATERAL.addr, amt)}
+                symbol="wUSDT"
+                onApprove={(amt) => actions.approve(collateralAddr ?? '0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e', amt)}
                 onApproved={refreshAllow}
               >
                 <button className={`${styles.submit} ${isLong ? styles.long : styles.short}`} disabled={!canOpen} onClick={open}>
@@ -252,10 +258,10 @@ export function PerpsTradeView() {
                     <button className={styles.close} onClick={() => close(p.id)} disabled={actions.pending}>Close</button>
                   </div>
                   <div className={styles.meta}>
-                    <span>size {formatUnits(p.notional, COLLATERAL.dec)}</span>
-                    <span>margin {formatUnits(p.margin, COLLATERAL.dec)}</span>
+                    <span>size {formatUnits(p.notional, collateralDec)}</span>
+                    <span>margin {formatUnits(p.margin, collateralDec)}</span>
                     <span className={p.pnl >= 0n ? styles.up : styles.down}>
-                      pnl {p.pnl >= 0n ? '+' : '-'}{formatUnits(p.pnl < 0n ? -p.pnl : p.pnl, COLLATERAL.dec)}
+                      pnl {p.pnl >= 0n ? '+' : '-'}{formatUnits(p.pnl < 0n ? -p.pnl : p.pnl, collateralDec)}
                     </span>
                   </div>
                 </div>
@@ -263,7 +269,7 @@ export function PerpsTradeView() {
             )}
           </div>
 
-          <p className={styles.note}>Perpetual futures carry liquidation risk. Positions settle in {COLLATERAL.sym}; proceeds appear in your Portfolio to withdraw.</p>
+          <p className={styles.note}>Perpetual futures carry liquidation risk. Positions settle in wUSDT; proceeds appear in your Portfolio to withdraw.</p>
         </>
       )}
     </div>

@@ -90,39 +90,48 @@ declare global {
 
   export type PerpsError = "NotAdmin" | "NotKeeper" | "BadParams" | "NoMarket" | "MarketInactive" | "StaleMark" | "LeverageTooHigh" | "InsufficientMargin" | "PositionNotFound" | "NotLiquidatable" | "BookFull" | "TransferFailed" | "NoCollateral" | "OiCapExceeded" | "Paused" | "MarkDeviationTooLarge" | "InsufficientCoverage" | "Overflow";
 
-  export interface PerpMarket {
+export interface PerpMarket {
     id: number | string | bigint;
     symbol: string;
     /**
      * Mark price (arbitrary consistent units; PnL uses price ratios so the unit cancels).
-    */
+     */
     mark: number | string | bigint;
     /**
      * Block the mark was last published.
-    */
+     */
     mark_block: number;
     active: boolean;
     /**
      * Open interest (sum of position notional) per side — the house's directional
      * exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
-    */
+     */
     long_oi: number | string | bigint;
     short_oi: number | string | bigint;
+    /**
+     * Excluded from new positions at launch (e.g., VARA market per committee recommendation).
+     * Existing positions can still close/liquidate.
+     */
+    excluded: boolean;
     /**
      * Max open interest per side. Required at market creation: there is no
      * unlimited default, because the safe value should not depend on an operator
      * remembering a second call (audit M-03).
-    */
+     */
     max_oi: number | string | bigint;
     /**
      * Cumulative funding index in `FUNDING_SCALE` units. Rises while longs are the
      * crowded side, falls while shorts are. Longs pay the increase, shorts receive
      * its negation; both settle against the reserve, which is the counterparty.
-    */
+     */
     cum_funding: number | string | bigint;
     /**
+     * Cumulative holding-fee index charged to every open position.
+     */
+    cum_holding: number | string | bigint;
+    /**
      * Block `cum_funding` was last advanced.
-    */
+     */
     funding_block: number;
   }
 

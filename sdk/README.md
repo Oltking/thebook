@@ -88,10 +88,16 @@ wallet**. There is no faucet and no starting balance.
 > and cancelled orders are removed from contract state — their history is in the
 > event log, so keep your own records if you need them.
 
-**Perps** (`book.perps`) — cash-settled, wUSDT collateral, up to **5x**. Built but **not yet enabled on mainnet** (no live mark keeper).
+**Perps** (`book.perps`) — cash-settled, wUSDT collateral, up to **5x** (governance-configurable, up to 20x). **Live on mainnet** with keeper mark prices.
 - `open(marketId, isLong, margin, leverage)` / `close(positionId)` / `liquidate(positionId)`
-- Reads: `markets()`, `reserve()`, `reserveHealth()` → `{ reserve, liability, coverageBps }`, `positions(owner?, offset?, limit?)`, `liqPrice(positionId)`
-- Keeper/admin: `setMark(marketId, price)` (bounded to a 10% move per update, keeper key only), `addMarket(symbol, maxOi)` (**`maxOi` is required**), `setCollateral(token)`, `setKeeper(who)`, `setMarketCap(marketId, maxOi)`, `fundReserve(amount)`, `withdrawReserve(amount)` (capped by open liability)
+- `lpDeposit(amount)` / `lpRedeem(depositId)` / `lpTriggerCloseOnly()` / `lpRevertCloseOnly()` — LP vault with 12-month lock and close-only switch right
+- `tick()` — permissionless funding accrual for all markets
+- `getMainnetMetrics()` — TVL, volume, unique wallets, pool health, LP vault state
+- `getSkewAtMark(marketId)` — current skew at mark prices
+- `getLpVault()` / `getLpDeposit(depositId)` / `getLpDepositsFor(lp)` — LP vault state
+- Reads: `markets()`, `reserve()`, `reserveHealth()` → `{ reserve, liability, coverageBps }`, `positions(owner?, offset?, limit?)`, `liqPrice(positionId)`, `getSkewAtMark(marketId)`, `getMainnetMetrics()`, `getLpVault()`, `getLpDeposit(depositId)`, `getLpDepositsFor(lp)`
+- Keeper/admin: `setMark(marketId, price)` (bounded to a 10% move per update, keeper key only), `addMarket(symbol, maxOi, excluded?)` (**`maxOi` is required**, `excluded` marks markets like VARA that can't accept new positions at launch), `setCollateral(token)`, `setKeeper(who)`, `setMarketCap(marketId, maxOi)`, `fundReserve(amount)`, `withdrawReserve(amount)` (capped by open liability)
+- Admin (governance): `setPerpMaxLeverage(leverage)`, `setPerpFeeBps(feeBps)`, `setPerpMaintenanceBps(bps)`, `setPerpMaxMarkDeviationBps(bps)`, `setAmmFeeBps(feeBps)`, `setVftCallGas(gas)`
 
 > **The house is your counterparty.** Check `reserveHealth()` before opening: if the
 > reserve is short, winning positions are paid only what it can cover. Opening is

@@ -224,11 +224,11 @@ export function SpotTradeView() {
         await actions.placeLimit(id, side, priceRaw, qtyRaw);
       } else if (side === 'Buy') {
         if (maxSpendRaw <= 0n) throw new Error('Enter a max spend');
-        // Derive the base qty ceiling from the budget at the reference price (with a
-        // small buffer so max-spend is the true limiter); the contract still caps
-        // spend at maxSpendRaw, so an over-estimate only means we spend a bit less.
+        // Derive the base qty ceiling from the budget at the reference price.
+        // The contract enforces maxSpendRaw as the hard cap and minBaseOut as the slippage bound.
+        // No buffer needed here — the contract enforces exact bounds.
         const buyQty =
-          effPrice > 0n ? (maxSpendRaw * baseUnit * 102n) / (effPrice * 100n) : qtyRaw;
+          effPrice > 0n ? (maxSpendRaw * baseUnit) / effPrice : qtyRaw;
         if (buyQty <= 0n) throw new Error('Enter a max spend');
         if (minBaseOut <= 0n) throw new Error('No reference price yet — use a limit order');
         await actions.marketBuy(id, buyQty, maxSpendRaw, minBaseOut);

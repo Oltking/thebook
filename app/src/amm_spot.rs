@@ -29,7 +29,8 @@
 //! credited back to the provider's claimable balance rather than kept. Same rule as
 //! spot and perps (audit C-03).
 
-use crate::spot::{SpotError, SpotState, vft_transfer_from};
+use crate::spot::{SpotError, SpotState, vft_transfer_from_with_gas};
+use crate::types::TransferError;
 use sails_rs::cell::RefCell;
 use sails_rs::gstd::msg;
 use sails_rs::prelude::*;
@@ -67,8 +68,8 @@ pub enum AmmError {
     PoolInactive,
     /// The global pool cap is reached.
     TooManyPools,
-    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-    TransferFailed,
+    /// The on-chain VFT transfer failed with detailed reason.
+    TransferFailed(TransferError),
     /// Trading is paused. Removing liquidity remains open.
     Paused,
     /// The result would be worse than the caller's stated bound.
@@ -89,6 +90,7 @@ impl From<SpotError> for AmmError {
             SpotError::Overflow => AmmError::Overflow,
             SpotError::Paused => AmmError::Paused,
             SpotError::DecimalsMismatch => AmmError::DecimalsMismatch,
+            SpotError::TransferFailed(e) => AmmError::TransferFailed(e),
             _ => AmmError::BadParams,
         }
     }
@@ -178,11 +180,12 @@ pub fn swap_output(
     amount_in: u128,
     reserve_in: u128,
     reserve_out: u128,
+    fee_bps: u128,
 ) -> Result<(u128, u128), AmmError> {
     if amount_in == 0 || reserve_in == 0 || reserve_out == 0 {
         return Err(AmmError::AmountTooSmall);
     }
-    let fee = amount_in.checked_mul(FEE_BPS).ok_or(AmmError::Overflow)? / 10_000;
+    let fee = amount_in.checked_mul(fee_bps).ok_or(AmmError::Overflow)? / 10_000;
     let in_after_fee = amount_in - fee;
     let numerator = reserve_out
         .checked_mul(in_after_fee)
@@ -192,7 +195,8 @@ pub fn swap_output(
         .ok_or(AmmError::Overflow)?;
     let out = numerator / denominator;
     // Never let a swap empty the pool: the invariant requires a non-zero reserve.
-    if out == 0 || out >= reserve_out {
+    // Allow out == 0 (tiny swaps on deep pools effectively donate to LPs).
+    if out >= reserve_out {
         return Err(AmmError::AmountTooSmall);
     }
     Ok((out, fee))
@@ -287,6 +291,7 @@ impl<'a> AmmService<'a> {
         if token_a == ActorId::zero() || token_b == ActorId::zero() || token_a == token_b {
             return Err(AmmError::BadParams);
         }
+        let vft_gas = self.state.borrow().vft_call_gas;
         {
             let st = self.state.borrow();
             if st.amm_pools.len() >= MAX_POOLS {
@@ -296,15 +301,15 @@ impl<'a> AmmService<'a> {
                 return Err(AmmError::PoolExists);
             }
         }
-        match crate::spot::vft_decimals(token_a).await {
-            Some(d) if d == dec_a => {}
-            Some(_) => return Err(AmmError::DecimalsMismatch),
-            None => return Err(AmmError::TransferFailed),
+        match crate::spot::vft_decimals_with_gas(vft_gas, token_a).await {
+            Ok(d) if d == dec_a => {}
+            Ok(_) => return Err(AmmError::DecimalsMismatch),
+            Err(e) => return Err(AmmError::TransferFailed(e)),
         }
-        match crate::spot::vft_decimals(token_b).await {
-            Some(d) if d == dec_b => {}
-            Some(_) => return Err(AmmError::DecimalsMismatch),
-            None => return Err(AmmError::TransferFailed),
+        match crate::spot::vft_decimals_with_gas(vft_gas, token_b).await {
+            Ok(d) if d == dec_b => {}
+            Ok(_) => return Err(AmmError::DecimalsMismatch),
+            Err(e) => return Err(AmmError::TransferFailed(e)),
         }
         let id = {
             let mut st = self.state.borrow_mut();
@@ -391,13 +396,14 @@ impl<'a> AmmService<'a> {
 
         // Two transfers. If the second fails after the first succeeded, the first is
         // credited back rather than kept (audit C-03).
-        if !vft_transfer_from(pool.token_a, caller, amount_a).await {
-            return Err(AmmError::TransferFailed);
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, pool.token_a, caller, amount_a).await {
+            return Err(AmmError::TransferFailed(e));
         }
-        if !vft_transfer_from(pool.token_b, caller, amount_b).await {
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, pool.token_b, caller, amount_b).await {
             let mut st = self.state.borrow_mut();
             st.credit(caller, pool.token_a, amount_a);
-            return Err(AmmError::TransferFailed);
+            return Err(AmmError::TransferFailed(e));
         }
 
         let minted = {
@@ -551,17 +557,20 @@ impl<'a> AmmService<'a> {
         } else {
             (pool.reserve_b, pool.reserve_a)
         };
-        let (quoted, _) = swap_output(amount_in, reserve_in, reserve_out)?;
+        let fee_bps = self.state.borrow().amm_fee_bps;
+        let (quoted, _) = swap_output(amount_in, reserve_in, reserve_out, fee_bps)?;
         if quoted < min_amount_out {
             return Err(AmmError::SlippageExceeded);
         }
 
-        if !vft_transfer_from(token_in, caller, amount_in).await {
-            return Err(AmmError::TransferFailed);
+        let vft_gas = self.state.borrow().vft_call_gas;
+        if let Err(e) = vft_transfer_from_with_gas(vft_gas, token_in, caller, amount_in).await {
+            return Err(AmmError::TransferFailed(e));
         }
 
         let (out, fee) = {
             let mut st = self.state.borrow_mut();
+            let fee_bps = st.amm_fee_bps;
             let p = match st.amm_pools.iter_mut().find(|p| p.id == pool_id) {
                 Some(p) => p,
                 None => {
@@ -575,7 +584,7 @@ impl<'a> AmmService<'a> {
             } else {
                 (p.reserve_b, p.reserve_a)
             };
-            let (out, fee) = match swap_output(amount_in, r_in, r_out) {
+            let (out, fee) = match swap_output(amount_in, r_in, r_out, fee_bps) {
                 Ok(v) if v.0 >= min_amount_out => v,
                 _ => {
                     st.credit(caller, token_in, amount_in);
@@ -663,7 +672,8 @@ impl<'a> AmmService<'a> {
         } else {
             return (0, 0);
         };
-        swap_output(amount_in, r_in, r_out).unwrap_or((0, 0))
+        let fee_bps = st.amm_fee_bps;
+        swap_output(amount_in, r_in, r_out, fee_bps).unwrap_or((0, 0))
     }
 }
 
@@ -698,7 +708,7 @@ mod tests {
     fn swap_takes_the_fee_and_grows_k() {
         let (ra, rb) = (1_000_000u128, 1_000_000u128);
         let k_before = ra * rb;
-        let (out, fee) = swap_output(10_000, ra, rb).unwrap();
+        let (out, fee) = swap_output(10_000, ra, rb, 30).unwrap();
         assert_eq!(fee, 30, "0.3% of 10_000");
         // The whole input enters the pool; only `out` leaves.
         let k_after = (ra + 10_000) * (rb - out);
@@ -711,8 +721,8 @@ mod tests {
     #[test]
     fn swap_output_falls_as_size_grows() {
         let (ra, rb) = (1_000_000u128, 1_000_000u128);
-        let small = swap_output(1_000, ra, rb).unwrap().0;
-        let large = swap_output(100_000, ra, rb).unwrap().0;
+        let small = swap_output(1_000, ra, rb, 30).unwrap().0;
+        let large = swap_output(100_000, ra, rb, 30).unwrap().0;
         // Price impact: ten times the input must return less than ten times the output.
         assert!(large < small * 100);
     }
@@ -722,7 +732,7 @@ mod tests {
         let (ra, rb) = (1_000u128, 1_000u128);
         // However large the input, the output stays strictly inside the reserve.
         for amount in [10_000u128, 1_000_000, u128::from(u64::MAX)] {
-            match swap_output(amount, ra, rb) {
+            match swap_output(amount, ra, rb, 30) {
                 Ok((out, _)) => assert!(out < rb, "swap drained the pool"),
                 Err(_) => {}
             }
@@ -769,10 +779,10 @@ mod tests {
 
         // Trade back and forth; each leg leaves its fee behind.
         for _ in 0..10 {
-            let (out, _) = swap_output(10_000, ra, rb).unwrap();
+            let (out, _) = swap_output(10_000, ra, rb, 30).unwrap();
             ra += 10_000;
             rb -= out;
-            let (back, _) = swap_output(out, rb, ra).unwrap();
+            let (back, _) = swap_output(out, rb, ra, 30).unwrap();
             rb += out;
             ra -= back;
         }

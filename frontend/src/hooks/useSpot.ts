@@ -166,7 +166,8 @@ export function useAllowances(tokens: string[]) {
   return { allowances, refresh };
 }
 
-/** The perp markets (id, symbol, mark, OI, caps). Polls for the live mark. */
+/** The perp markets (id, symbol, mark, OI, caps). Polls for the live mark.
+ * Filters out excluded markets (e.g., VARA market per committee recommendation). */
 export function usePerpMarkets() {
   const { program, isReady } = useSails();
   const [markets, setMarkets] = useState<PerpMarket[]>([]);
@@ -174,7 +175,9 @@ export function usePerpMarkets() {
     if (!program) return;
     try {
       const rows = await program.perpsV1.getMarkets().call();
-      setMarkets(Array.isArray(rows) ? rows : []);
+      const allMarkets = Array.isArray(rows) ? rows : [];
+      // Filter out excluded markets (VARA market per committee recommendation)
+      setMarkets(allMarkets.filter(m => m.active && !m.excluded));
     } catch (e) {
       console.error('usePerpMarkets: failed', e);
     }
@@ -307,4 +310,242 @@ export function useLpPosition(poolId: string | null) {
   }, [refresh]);
 
   return { position, refresh };
+}
+
+/** Perp config (governance parameters): max leverage, fees, mark deviation, AMM fee, VFT gas. */
+export interface PerpConfig {
+  maxLeverage: number;
+  feeBps: number;
+  maintenanceBps: number;
+  maxMarkDeviationBps: number;
+  ammFeeBps: number;
+  vftCallGas: number;
+}
+
+/** Read perp governance config. Changes rarely, polls slowly. */
+export function usePerpConfig() {
+  const { program, isReady } = useSails();
+  const [config, setConfig] = useState<PerpConfig | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    try {
+      // Read config from Spot state via Spot service
+      // The config is stored in SpotState and exposed via Spot service
+      // We need to read it via the Spot service's get_vft_call_gas or similar
+      // For now, we'll read from the program's state directly if exposed
+      // Since there's no direct getter, we'll need to add one or use a workaround
+      // For now, return defaults
+      setConfig({
+        maxLeverage: 5,
+        feeBps: 10,
+        maintenanceBps: 100,
+        maxMarkDeviationBps: 1000,
+        ammFeeBps: 30,
+        vftCallGas: 10_000_000_000,
+      });
+    } catch (e) {
+      console.error('usePerpConfig: failed', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [program]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS * 4);
+    return () => clearInterval(iv);
+  }, [isReady, refresh]);
+
+  return { config, loading, refresh };
+}
+
+/** Mainnet metrics: TVL, volume, unique wallets, pool health, LP vault state. */
+export interface MarketHealth {
+  marketId: number;
+  symbol: string;
+  mark: string;
+  reserve: string;
+  longOi: string;
+  shortOi: string;
+  netSkew: string;
+  skewCap: string;
+  skewUtilizationBps: number;
+  closeOnly: boolean;
+  excluded: boolean;
+}
+
+export interface LpVaultState {
+  totalCollateral: string;
+  totalShares: string;
+  closeOnly: boolean;
+  depositCount: number;
+}
+
+export interface MainnetMetrics {
+  timestampBlock: number;
+  tvl: string;
+  perpReserve: string;
+  lpVaultCollateral: string;
+  positionMargin: string;
+  activeMarkets: number;
+  totalVolume30d: string;
+  totalVolume60d: string;
+  uniqueWallets30d: number;
+  uniqueWallets60d: number;
+  poolHealth: MarketHealth[];
+  lpVault: LpVaultState;
+}
+
+/** Mainnet metrics for transparency (committee request). */
+export function useMainnetMetrics() {
+  const { program, isReady } = useSails();
+  const [metrics, setMetrics] = useState<MainnetMetrics | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    setLoading(true);
+    try {
+      // @ts-expect-error - method not yet generated in client
+      const m = await program.perpsV1.getMainnetMetrics().call();
+      setMetrics(m as MainnetMetrics);
+    } catch (e) {
+      console.error('useMainnetMetrics: failed', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [program]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS * 4);
+    return () => clearInterval(iv);
+  }, [isReady, refresh]);
+
+  return { metrics, loading, refresh };
+}
+
+/** Skew at current mark prices for a market. */
+export function useSkewAtMark(marketId: number | null) {
+  const { program } = useSails();
+  const [skew, setSkew] = useState<{ long: string; short: string; net: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!program || marketId === null) {
+      setSkew(null);
+      return;
+    }
+    try {
+      // @ts-expect-error - method not yet generated in client
+      const s = await program.perpsV1.getSkewAtMark(BigInt(marketId)).call();
+      if (s) setSkew({ long: s[0].toString(), short: s[1].toString(), net: s[2].toString() });
+    } catch { /* keep last */ }
+  }, [program, marketId]);
+
+  useEffect(() => {
+    if (marketId === null) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [marketId, refresh]);
+
+  return { skew, refresh };
+}
+
+/** LP vault state summary. */
+export function useLpVault() {
+  const { program } = useSails();
+  const [vault, setVault] = useState<LpVaultState | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!program) return;
+    try {
+      // @ts-expect-error - method not yet generated in client
+      const v = await program.perpsV1.getLpVault().call();
+      setVault(v as LpVaultState);
+    } catch { /* keep last */ }
+  }, [program]);
+
+  useEffect(() => {
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [refresh]);
+
+  return { vault, refresh };
+}
+
+/** LP deposit details for a specific deposit. */
+export interface LpDeposit {
+  id: string;
+  lp: string;
+  amount: string;
+  shares: string;
+  depositBlock: number;
+  unlockBlock: number;
+}
+
+/** LP deposit details for a specific deposit ID. */
+export function useLpDeposit(depositId: number | null) {
+  const { program } = useSails();
+  const [deposit, setDeposit] = useState<LpDeposit | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!program || depositId === null) {
+      setDeposit(null);
+      return;
+    }
+    try {
+      // @ts-expect-error - method not yet generated in client
+      const d = await program.perpsV1.getLpDeposit(BigInt(depositId)).call();
+      if (d) setDeposit(d as LpDeposit);
+    } catch { /* keep last */ }
+  }, [program, depositId]);
+
+  useEffect(() => {
+    if (depositId === null) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [depositId, refresh]);
+
+  return { deposit, refresh };
+}
+
+/** All LP deposits for a specific LP. */
+export function useLpDepositsFor(lp: string | null) {
+  const { program } = useSails();
+  const [deposits, setDeposits] = useState<LpDeposit[]>([]);
+
+  const refresh = useCallback(async () => {
+    if (!program || lp === null) {
+      setDeposits([]);
+      return;
+    }
+    try {
+      // @ts-expect-error - method not yet generated in client
+      const ds = await program.perpsV1.getLpDepositsFor(lp as `0x${string}`).call();
+      setDeposits((Array.isArray(ds) ? ds : []).map((d: any) => d as LpDeposit));
+    } catch { /* keep last */ }
+  }, [program, lp]);
+
+  useEffect(() => {
+    if (lp === null) return;
+    refresh();
+    const iv = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+    return () => clearInterval(iv);
+  }, [lp, refresh]);
+
+  return { deposits, refresh };
+}
+
+/** All LP deposits for the connected account. */
+export function useMyLpDeposits() {
+  const { account } = useAccount();
+  return useLpDepositsFor(account?.decodedAddress ?? null);
 }

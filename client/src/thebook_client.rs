@@ -122,12 +122,43 @@ pub mod spot {
             &mut self,
             pair_id: u64,
         ) -> sails_rs::client::PendingCall<io::RelistPair, Self::Env>;
+        /// Set swap fee for AMM (basis points). Admin-only.
+        fn set_amm_fee_bps(
+            &mut self,
+            fee_bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetAmmFeeBps, Self::Env>;
         /// Halt or resume trading. Cancel and withdraw are deliberately never gated on
         /// this, so pausing during an incident cannot trap user funds (audit H-08).
         fn set_paused(
             &mut self,
             paused: bool,
         ) -> sails_rs::client::PendingCall<io::SetPaused, Self::Env>;
+        /// Set trading fee for perps (basis points). Admin-only.
+        fn set_perp_fee_bps(
+            &mut self,
+            fee_bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpFeeBps, Self::Env>;
+        /// Set maintenance margin for perps (basis points). Admin-only.
+        fn set_perp_maintenance_bps(
+            &mut self,
+            bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaintenanceBps, Self::Env>;
+        /// Set maximum leverage for perps. Admin-only.
+        fn set_perp_max_leverage(
+            &mut self,
+            leverage: u32,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaxLeverage, Self::Env>;
+        /// Set maximum mark price deviation per update (basis points). Admin-only.
+        fn set_perp_max_mark_deviation_bps(
+            &mut self,
+            bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaxMarkDeviationBps, Self::Env>;
+        /// Set the gas limit for VFT cross-program calls. Admin-only.
+        /// Allows adapting to token program gas cost changes without redeploy.
+        fn set_vft_call_gas(
+            &mut self,
+            gas: u64,
+        ) -> sails_rs::client::PendingCall<io::SetVftCallGas, Self::Env>;
         /// Sweep accumulated rounding dust for a token to the admin's claimable balance.
         /// Dust is real, already-held tokens that no claim references (audit M-06).
         fn sweep_dust(
@@ -247,11 +278,47 @@ pub mod spot {
         ) -> sails_rs::client::PendingCall<io::RelistPair, Self::Env> {
             self.pending_call((pair_id,))
         }
+        fn set_amm_fee_bps(
+            &mut self,
+            fee_bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetAmmFeeBps, Self::Env> {
+            self.pending_call((fee_bps,))
+        }
         fn set_paused(
             &mut self,
             paused: bool,
         ) -> sails_rs::client::PendingCall<io::SetPaused, Self::Env> {
             self.pending_call((paused,))
+        }
+        fn set_perp_fee_bps(
+            &mut self,
+            fee_bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpFeeBps, Self::Env> {
+            self.pending_call((fee_bps,))
+        }
+        fn set_perp_maintenance_bps(
+            &mut self,
+            bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaintenanceBps, Self::Env> {
+            self.pending_call((bps,))
+        }
+        fn set_perp_max_leverage(
+            &mut self,
+            leverage: u32,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaxLeverage, Self::Env> {
+            self.pending_call((leverage,))
+        }
+        fn set_perp_max_mark_deviation_bps(
+            &mut self,
+            bps: u128,
+        ) -> sails_rs::client::PendingCall<io::SetPerpMaxMarkDeviationBps, Self::Env> {
+            self.pending_call((bps,))
+        }
+        fn set_vft_call_gas(
+            &mut self,
+            gas: u64,
+        ) -> sails_rs::client::PendingCall<io::SetVftCallGas, Self::Env> {
+            self.pending_call((gas,))
         }
         fn sweep_dust(
             &mut self,
@@ -329,7 +396,13 @@ pub mod spot {
         sails_rs::io_struct_impl!(PlaceLimit (pair_id: u64, side: super::Side, price: u128, qty: u128) -> Result<u64, super::SpotError>);
         sails_rs::io_struct_impl!(ProposeAdmin (new_admin: ActorId) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(RelistPair (pair_id: u64) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetAmmFeeBps (fee_bps: u128) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(SetPaused (paused: bool) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetPerpFeeBps (fee_bps: u128) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetPerpMaintenanceBps (bps: u128) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetPerpMaxLeverage (leverage: u32) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetPerpMaxMarkDeviationBps (bps: u128) -> Result<(), super::SpotError>);
+        sails_rs::io_struct_impl!(SetVftCallGas (gas: u64) -> Result<(), super::SpotError>);
         sails_rs::io_struct_impl!(SweepDust (token: ActorId) -> Result<u128, super::SpotError>);
         sails_rs::io_struct_impl!(Withdraw (token: ActorId, amount: Option<u128>) -> Result<u128, super::SpotError>);
         sails_rs::io_struct_impl!(GetAdmin () -> (ActorId,ActorId,));
@@ -657,11 +730,13 @@ pub mod perps_v_1 {
         type Env: sails_rs::client::GearEnv;
         /// Admin: list a perp market. `max_oi` is required and must be non-zero — the
         /// reserve's exposure is bounded at creation, not by a remembered follow-up
-        /// (audit M-03).
+        /// (audit M-03). `excluded` marks markets that cannot accept new positions at
+        /// launch (e.g., VARA market per committee recommendation).
         fn add_market(
             &mut self,
             symbol: String,
             max_oi: u128,
+            excluded: bool,
         ) -> sails_rs::client::PendingCall<io::AddMarket, Self::Env>;
         /// Close your position, settling PnL and funding against the reserve and
         /// crediting the payout to your claimable collateral (withdraw via
@@ -686,6 +761,28 @@ pub mod perps_v_1 {
             &mut self,
             position_id: u64,
         ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env>;
+        /// LP deposits collateral into the vault, receives shares pro-rata.
+        /// Locked for 12 months (LP_LOCK_DURATION_BLOCKS).
+        /// Requires prior `approve` of collateral token.
+        fn lp_deposit(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::LpDeposit, Self::Env>;
+        /// LP redeems shares for collateral after lock expires.
+        /// Shares are burned, collateral returned pro-rata.
+        fn lp_redeem(
+            &mut self,
+            deposit_id: u64,
+        ) -> sails_rs::client::PendingCall<io::LpRedeem, Self::Env>;
+        /// LP reverts close-only mode (requires >50% shares).
+        fn lp_revert_close_only(
+            &mut self,
+        ) -> sails_rs::client::PendingCall<io::LpRevertCloseOnly, Self::Env>;
+        /// LP triggers close-only mode for all perps markets.
+        /// Requires >50% of total LP shares supporting the trigger AND at least 2 distinct LPs.
+        fn lp_trigger_close_only(
+            &mut self,
+        ) -> sails_rs::client::PendingCall<io::LpTriggerCloseOnly, Self::Env>;
         /// Open an isolated-margin position. Escrows `margin` of the collateral token
         /// (requires a prior `approve`); notional = margin * leverage at the mark.
         ///
@@ -699,6 +796,13 @@ pub mod perps_v_1 {
             margin: u128,
             leverage: u32,
         ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env>;
+        /// Admin: put one perp market into open or close-only mode. Existing positions
+        /// can always close or be liquidated; this only gates new risk.
+        fn set_close_only(
+            &mut self,
+            market_id: u64,
+            close_only: bool,
+        ) -> sails_rs::client::PendingCall<io::SetCloseOnly, Self::Env>;
         /// Admin: set the collateral (settlement) token — the USDT VFT program.
         fn set_collateral(
             &mut self,
@@ -715,9 +819,11 @@ pub mod perps_v_1 {
         ///
         /// Bounded to `MAX_MARK_DEVIATION_BPS` from the previous mark, so a compromised
         /// keeper cannot reprice the book in a single transaction and liquidate it
-        /// (audit H-04). The bound is skipped only for the first mark, and once the feed
-        /// is stale past `MARK_EXIT_AGE` — by then positions can already exit at entry,
-        /// so a fresh start is not a lever over anyone.
+        /// (audit H-04). The bound is skipped only for the very first mark (mark == 0
+        /// and mark_block == 0). After initialization, the bound always applies — even
+        /// after prolonged staleness — because a returning keeper could otherwise jump
+        /// the mark arbitrarily, distorting funding, liquidation prices, and PnL for
+        /// positions that have not yet exited at entry.
         fn set_mark(
             &mut self,
             market_id: u64,
@@ -729,6 +835,9 @@ pub mod perps_v_1 {
             market_id: u64,
             max_oi: u128,
         ) -> sails_rs::client::PendingCall<io::SetMarketCap, Self::Env>;
+        /// Permissionless tick: accrue funding for all active markets up to current block.
+        /// Anyone can call this to keep funding indices fresh between keeper updates.
+        fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env>;
         /// Admin: withdraw reserve profit to the admin's claimable collateral.
         ///
         /// Capped at the amount above current liability, so solvency is a contract
@@ -748,6 +857,23 @@ pub mod perps_v_1 {
             &self,
             position_id: u64,
         ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env>;
+        /// Returns LP deposit details for a specific deposit.
+        fn get_lp_deposit(
+            &self,
+            deposit_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetLpDeposit, Self::Env>;
+        /// Returns all LP deposits for a specific LP.
+        fn get_lp_deposits_for(
+            &self,
+            lp: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetLpDepositsFor, Self::Env>;
+        /// Returns LP vault state.
+        fn get_lp_vault(&self) -> sails_rs::client::PendingCall<io::GetLpVault, Self::Env>;
+        /// Returns comprehensive mainnet metrics for transparency (committee request).
+        /// Includes 30/60-day volume, unique wallets, TVL, active markets, pool health.
+        fn get_mainnet_metrics(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetMainnetMetrics, Self::Env>;
         fn get_markets(&self) -> sails_rs::client::PendingCall<io::GetMarkets, Self::Env>;
         /// A trader's open positions with PnL at the current mark, paginated (audit L-05):
         /// `(id, market_id, is_long, notional, entry, margin, leverage, pnl)`.
@@ -764,6 +890,11 @@ pub mod perps_v_1 {
         fn get_reserve_health(
             &self,
         ) -> sails_rs::client::PendingCall<io::GetReserveHealth, Self::Env>;
+        /// Returns current skew at mark prices for a market.
+        fn get_skew_at_mark(
+            &self,
+            market_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetSkewAtMark, Self::Env>;
     }
     pub struct PerpsV1Impl;
     impl<E: sails_rs::client::GearEnv> PerpsV1 for sails_rs::client::Service<PerpsV1Impl, E> {
@@ -772,8 +903,9 @@ pub mod perps_v_1 {
             &mut self,
             symbol: String,
             max_oi: u128,
+            excluded: bool,
         ) -> sails_rs::client::PendingCall<io::AddMarket, Self::Env> {
-            self.pending_call((symbol, max_oi))
+            self.pending_call((symbol, max_oi, excluded))
         }
         fn close_position(
             &mut self,
@@ -793,6 +925,28 @@ pub mod perps_v_1 {
         ) -> sails_rs::client::PendingCall<io::Liquidate, Self::Env> {
             self.pending_call((position_id,))
         }
+        fn lp_deposit(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::LpDeposit, Self::Env> {
+            self.pending_call((amount,))
+        }
+        fn lp_redeem(
+            &mut self,
+            deposit_id: u64,
+        ) -> sails_rs::client::PendingCall<io::LpRedeem, Self::Env> {
+            self.pending_call((deposit_id,))
+        }
+        fn lp_revert_close_only(
+            &mut self,
+        ) -> sails_rs::client::PendingCall<io::LpRevertCloseOnly, Self::Env> {
+            self.pending_call(())
+        }
+        fn lp_trigger_close_only(
+            &mut self,
+        ) -> sails_rs::client::PendingCall<io::LpTriggerCloseOnly, Self::Env> {
+            self.pending_call(())
+        }
         fn open_position(
             &mut self,
             market_id: u64,
@@ -801,6 +955,13 @@ pub mod perps_v_1 {
             leverage: u32,
         ) -> sails_rs::client::PendingCall<io::OpenPosition, Self::Env> {
             self.pending_call((market_id, is_long, margin, leverage))
+        }
+        fn set_close_only(
+            &mut self,
+            market_id: u64,
+            close_only: bool,
+        ) -> sails_rs::client::PendingCall<io::SetCloseOnly, Self::Env> {
+            self.pending_call((market_id, close_only))
         }
         fn set_collateral(
             &mut self,
@@ -828,6 +989,9 @@ pub mod perps_v_1 {
         ) -> sails_rs::client::PendingCall<io::SetMarketCap, Self::Env> {
             self.pending_call((market_id, max_oi))
         }
+        fn tick(&mut self) -> sails_rs::client::PendingCall<io::Tick, Self::Env> {
+            self.pending_call(())
+        }
         fn withdraw_reserve(
             &mut self,
             amount: u128,
@@ -842,6 +1006,26 @@ pub mod perps_v_1 {
             position_id: u64,
         ) -> sails_rs::client::PendingCall<io::GetLiqPrice, Self::Env> {
             self.pending_call((position_id,))
+        }
+        fn get_lp_deposit(
+            &self,
+            deposit_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetLpDeposit, Self::Env> {
+            self.pending_call((deposit_id,))
+        }
+        fn get_lp_deposits_for(
+            &self,
+            lp: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetLpDepositsFor, Self::Env> {
+            self.pending_call((lp,))
+        }
+        fn get_lp_vault(&self) -> sails_rs::client::PendingCall<io::GetLpVault, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_mainnet_metrics(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetMainnetMetrics, Self::Env> {
+            self.pending_call(())
         }
         fn get_markets(&self) -> sails_rs::client::PendingCall<io::GetMarkets, Self::Env> {
             self.pending_call(())
@@ -862,26 +1046,43 @@ pub mod perps_v_1 {
         ) -> sails_rs::client::PendingCall<io::GetReserveHealth, Self::Env> {
             self.pending_call(())
         }
+        fn get_skew_at_mark(
+            &self,
+            market_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetSkewAtMark, Self::Env> {
+            self.pending_call((market_id,))
+        }
     }
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(AddMarket (symbol: String, max_oi: u128) -> Result<u64, super::PerpsError>);
+        sails_rs::io_struct_impl!(AddMarket (symbol: String, max_oi: u128, excluded: bool) -> Result<u64, super::PerpsError>);
         sails_rs::io_struct_impl!(ClosePosition (position_id: u64) -> Result<(u128,i128,), super::PerpsError>);
         sails_rs::io_struct_impl!(FundReserve (amount: u128) -> Result<u128, super::PerpsError>);
         sails_rs::io_struct_impl!(Liquidate (position_id: u64) -> Result<(), super::PerpsError>);
+        sails_rs::io_struct_impl!(LpDeposit (amount: u128) -> Result<u128, super::PerpsError>);
+        sails_rs::io_struct_impl!(LpRedeem (deposit_id: u64) -> Result<u128, super::PerpsError>);
+        sails_rs::io_struct_impl!(LpRevertCloseOnly () -> Result<(), super::PerpsError>);
+        sails_rs::io_struct_impl!(LpTriggerCloseOnly () -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(OpenPosition (market_id: u64, is_long: bool, margin: u128, leverage: u32) -> Result<u64, super::PerpsError>);
+        sails_rs::io_struct_impl!(SetCloseOnly (market_id: u64, close_only: bool) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetCollateral (token: ActorId) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetKeeper (keeper: ActorId) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetMark (market_id: u64, price: u128) -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(SetMarketCap (market_id: u64, max_oi: u128) -> Result<(), super::PerpsError>);
+        sails_rs::io_struct_impl!(Tick () -> Result<(), super::PerpsError>);
         sails_rs::io_struct_impl!(WithdrawReserve (amount: u128) -> Result<u128, super::PerpsError>);
         sails_rs::io_struct_impl!(GetConfig () -> (ActorId,ActorId,));
         sails_rs::io_struct_impl!(GetLiqPrice (position_id: u64) -> u128);
+        sails_rs::io_struct_impl!(GetLpDeposit (deposit_id: u64) -> Option<super::LpDeposit>);
+        sails_rs::io_struct_impl!(GetLpDepositsFor (lp: ActorId) -> Vec<super::LpDeposit>);
+        sails_rs::io_struct_impl!(GetLpVault () -> super::LpVaultState);
+        sails_rs::io_struct_impl!(GetMainnetMetrics () -> super::MainnetMetrics);
         sails_rs::io_struct_impl!(GetMarkets () -> Vec<super::PerpMarket>);
         sails_rs::io_struct_impl!(GetPositions (owner: ActorId, offset: u32, limit: u32) -> Vec<(u64,u64,bool,u128,u128,u128,u32,i128,)>);
         sails_rs::io_struct_impl!(GetReserve () -> u128);
         sails_rs::io_struct_impl!(GetReserveHealth () -> (u128,u128,u128,));
+        sails_rs::io_struct_impl!(GetSkewAtMark (market_id: u64) -> Option<(u128,u128,u128,)>);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -943,6 +1144,25 @@ pub mod perps_v_1 {
             CollateralSet {
                 token: ActorId,
             },
+            LpDeposited {
+                lp: ActorId,
+                amount: u128,
+                shares: u128,
+                unlock_block: u32,
+            },
+            LpRedeemed {
+                lp: ActorId,
+                amount: u128,
+                shares: u128,
+            },
+            LpCloseOnlyTriggered {
+                trigger_lp: ActorId,
+                supporting_shares: u128,
+                total_shares: u128,
+            },
+            LpCloseOnlyReverted {
+                trigger_lp: ActorId,
+            },
         }
         impl sails_rs::client::Event for PerpsV1Events {
             const EVENT_NAMES: &'static [Route] = &[
@@ -956,6 +1176,10 @@ pub mod perps_v_1 {
                 "ReserveWithdrawn",
                 "KeeperSet",
                 "CollateralSet",
+                "LpDeposited",
+                "LpRedeemed",
+                "LpCloseOnlyTriggered",
+                "LpCloseOnlyReverted",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for PerpsV1Impl {
@@ -985,8 +1209,8 @@ pub enum SpotError {
     NotOwner,
     /// Nothing to withdraw for that token.
     NothingToClaim,
-    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-    TransferFailed,
+    /// The on-chain VFT transfer failed with detailed reason.
+    TransferFailed(TransferError),
     /// Trading is paused. Cancel and withdraw remain open.
     Paused,
     /// The fill would be worse than the caller's stated slippage bound.
@@ -997,6 +1221,23 @@ pub enum SpotError {
     DecimalsMismatch,
     /// No pending admin, or the caller is not the pending admin.
     NotPendingAdmin,
+}
+/// Detailed reason for a VFT cross-program transfer failure.
+/// Allows callers to distinguish retryable vs non-retryable failures.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum TransferError {
+    /// The token program returned false (typically insufficient allowance or balance).
+    InsufficientAllowance,
+    /// The token program trapped or returned a decode error (program bug / pause / upgrade).
+    ProgramError,
+    /// The cross-program message send failed (gas exhaustion, queue full, etc.).
+    SendFailed,
+    /// The reply could not be decoded (version mismatch, corrupted reply).
+    DecodeError,
+    /// Generic/unknown failure — preserved for backward compatibility.
+    Unknown,
 }
 /// `Ord` matters: `Side` is part of the spot price-level index key
 /// `(pair_id, side, price)`, which is what makes matching walk levels instead of
@@ -1064,8 +1305,8 @@ pub enum AmmError {
     PoolInactive,
     /// The global pool cap is reached.
     TooManyPools,
-    /// The on-chain VFT transfer failed (bad allowance/balance, or program error).
-    TransferFailed,
+    /// The on-chain VFT transfer failed with detailed reason.
+    TransferFailed(TransferError),
     /// Trading is paused. Removing liquidity remains open.
     Paused,
     /// The result would be worse than the caller's stated bound.
@@ -1112,18 +1353,91 @@ pub enum PerpsError {
     PositionNotFound,
     NotLiquidatable,
     BookFull,
-    TransferFailed,
+    TransferFailed(TransferError),
     NoCollateral,
     /// Opening would push this side's open interest past the market cap.
     OiCapExceeded,
     /// Trading is paused. Closing and liquidating stay open.
     Paused,
+    /// This market is close-only: existing positions can close/liquidate, but no
+    /// new positions may be opened.
+    CloseOnly,
     /// The mark update deviates further from the previous mark than the bound allows.
     MarkDeviationTooLarge,
     /// The reserve is too thin relative to what it already owes to accept new risk.
     InsufficientCoverage,
     /// An amount overflowed. Trapping beats a silently wrong number.
     Overflow,
+    /// LP vault: deposit amount is zero.
+    LpZeroAmount,
+    /// LP vault: lock period not expired.
+    LpLocked,
+    /// LP vault: deposit not found.
+    LpDepositNotFound,
+    /// LP vault: insufficient shares for action.
+    LpInsufficientShares,
+    /// LP vault: close-only already active.
+    LpCloseOnlyAlreadyActive,
+    /// LP vault: deposit too small to cover minimum liquidity lock.
+    LpAmountTooSmall,
+}
+/// Individual LP deposit with lock tracking.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct LpDeposit {
+    pub id: u64,
+    pub lp: ActorId,
+    pub amount: u128,
+    pub shares: u128,
+    pub deposit_block: u32,
+    /// Block when lock expires (deposit_block + LOCK_DURATION_BLOCKS).
+    pub unlock_block: u32,
+}
+/// LP vault state summary.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct LpVaultState {
+    pub total_collateral: u128,
+    pub total_shares: u128,
+    pub close_only: bool,
+    pub deposit_count: u32,
+}
+/// Mainnet metrics for transparency (committee request).
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MainnetMetrics {
+    pub timestamp_block: u32,
+    pub tvl: u128,
+    pub perp_reserve: u128,
+    pub lp_vault_collateral: u128,
+    pub position_margin: u128,
+    pub active_markets: u32,
+    pub total_volume_30d: u128,
+    pub total_volume_60d: u128,
+    pub unique_wallets_30d: u32,
+    pub unique_wallets_60d: u32,
+    pub pool_health: Vec<MarketHealth>,
+    pub lp_vault: LpVaultState,
+}
+/// Per-market health metrics.
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MarketHealth {
+    pub market_id: u64,
+    pub symbol: String,
+    pub mark: u128,
+    pub reserve: u128,
+    pub long_oi: u128,
+    pub short_oi: u128,
+    pub net_skew: u128,
+    pub skew_cap: u128,
+    pub skew_utilization_bps: u128,
+    pub close_only: bool,
+    pub excluded: bool,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1140,6 +1454,11 @@ pub struct PerpMarket {
     /// exposure. Capped by `max_oi` so the reserve's worst-case loss is bounded.
     pub long_oi: u128,
     pub short_oi: u128,
+    /// Whether the market accepts new positions. Close/liquidate stay open.
+    pub close_only: bool,
+    /// Excluded from new positions at launch (e.g., VARA market per committee recommendation).
+    /// Existing positions can still close/liquidate.
+    pub excluded: bool,
     /// Max open interest per side. Required at market creation: there is no
     /// unlimited default, because the safe value should not depend on an operator
     /// remembering a second call (audit M-03).
@@ -1148,6 +1467,8 @@ pub struct PerpMarket {
     /// crowded side, falls while shorts are. Longs pay the increase, shorts receive
     /// its negation; both settle against the reserve, which is the counterparty.
     pub cum_funding: i128,
+    /// Cumulative holding-fee index charged to every open position.
+    pub cum_holding: i128,
     /// Block `cum_funding` was last advanced.
     pub funding_block: u32,
 }

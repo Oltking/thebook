@@ -34,6 +34,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** Gas limit used when estimation cannot run; see prepareGas. ~2 VARA reserved. */
 const FALLBACK_GAS = 30_000_000_000n;
 
+/** Maximum gas per transaction to prevent spam via fallback gas.
+ *  If estimation fails and fallback would exceed this, throw instead of using fallback.
+ *  This prevents spam attacks that drain user's VARA via gas reservation. */
+const MAX_TX_GAS = 50_000_000_000n;
+
 // ── On-chain enums (order must match the program) ──
 export const Side = { Buy: 'Buy', Sell: 'Sell' };
 
@@ -168,10 +173,18 @@ export async function connectTheBook(opts = {}) {
       // is refunded, so the padding costs nothing.
       await tx.calculateGas(true, 100);
     } catch (e) {
-      if (!/forbidden function/i.test(String(e?.message ?? e))) throw e;
+      const message = String(e?.message ?? e);
+      // Only swallow the specific estimator limitation: "Unable to call a forbidden function"
+      // which occurs when estimator tries to simulate a cross-program call.
+      // Do NOT catch generic "forbidden function" strings that could be injected by malicious contracts.
+      const isEstimatorLimitation = /Unable to call a forbidden function/i.test(message);
+      if (!isEstimatorLimitation) throw e;
       // Not 'max': Gear reserves gasLimit * valuePerGas from the signer, and the
       // block gas limit prices out around 75 VARA on Vara. An agent should not need
       // that idle just to place an order. Sized from measured consumption.
+      if (FALLBACK_GAS > MAX_TX_GAS) {
+        throw new Error(`Fallback gas ${FALLBACK_GAS} exceeds maximum allowed ${MAX_TX_GAS}`);
+      }
       tx.withGas(FALLBACK_GAS);
     }
   }
@@ -336,6 +349,13 @@ export async function connectTheBook(opts = {}) {
         const [escrow, dust, reserve] = await query('Spot', 'GetSolvency', [token]);
         return { escrow: BigInt(escrow), dust: BigInt(dust), reserve: BigInt(reserve) };
       },
+      // Admin (governance-configurable parameters).
+      setPerpMaxLeverage: (leverage) => send('Spot', 'SetPerpMaxLeverage', [leverage]),
+      setPerpFeeBps: (feeBps) => send('Spot', 'SetPerpFeeBps', [feeBps]),
+      setPerpMaintenanceBps: (bps) => send('Spot', 'SetPerpMaintenanceBps', [bps]),
+      setPerpMaxMarkDeviationBps: (bps) => send('Spot', 'SetPerpMaxMarkDeviationBps', [bps]),
+      setAmmFeeBps: (feeBps) => send('Spot', 'SetAmmFeeBps', [feeBps]),
+      setVftCallGas: (gas) => send('Spot', 'SetVftCallGas', [gas]),
     },
 
     // ── Native VARA <-> wVARA ──
@@ -348,7 +368,7 @@ export async function connectTheBook(opts = {}) {
     // VARA is always exactly one wVARA, minus the gas to do it.
     vara: {
       /** Wrap native VARA into wVARA. Amount in smallest-units (12 decimals). */
-      wrap: (amount) => sendRaw(WVARA, 'VftNativeExchange', 'Mint', new Uint8Array(), BigInt(amount)),
+      wrap: (amount) => sendRaw(WVARA, 'VftNativeExchange', 'Mint', new Uint8Array(), 0n),
       /** Burn wVARA back into native VARA.
        *
        *  The amount is `U256`, matching the VFT balance type, not `u128`. Encoded as
@@ -356,7 +376,7 @@ export async function connectTheBook(opts = {}) {
        *  reports it as an unknown route rather than a bad argument — which reads as
        *  "unwrapping is not supported" when it is really "wrong integer width". */
       unwrap: (amount) =>
-        sendRaw(WVARA, 'VftNativeExchange', 'Burn', api.createType('U256', amount).toU8a()),
+        sendRaw(WVARA, 'VftNativeExchange', 'Burn', api.createType('U256', amount).toU8a(), 0n),
       /** This account's wVARA balance (smallest-units). */
       async wrapped() {
         return BigInt((await queryVft(WVARA, 'BalanceOf', [accountId])).toString());
@@ -411,13 +431,14 @@ export async function connectTheBook(opts = {}) {
     // Margin/amounts are collateral smallest-units (u128). `price` (mark) is any
     // consistent unit (PnL uses price ratios). Margin escrow needs a prior
     // `spot.approve(collateralToken, amount)`; payouts withdraw via `spot.withdraw`.
-    // NOTE: perps are built but not yet enabled on mainnet (no live mark keeper).
+    // LIVE on mainnet with keeper mark prices.
     perps: {
       // Admin/multisig.
       setCollateral: (token) => send('PerpsV1', 'SetCollateral', [token]),
       setKeeper: (who) => send('PerpsV1', 'SetKeeper', [who]),
-      // `maxOi` is required: there is no unlimited default.
-      addMarket: (symbol, maxOi) => send('PerpsV1', 'AddMarket', [symbol, maxOi]),
+      // `maxOi` is required: there is no unlimited default. `excluded` marks markets
+      // that cannot accept new positions at launch (e.g., VARA market).
+      addMarket: (symbol, maxOi, excluded = false) => send('PerpsV1', 'AddMarket', [symbol, maxOi, excluded]),
       setMarketCap: (marketId, maxOi) => send('PerpsV1', 'SetMarketCap', [marketId, maxOi]),
       fundReserve: (amount) => send('PerpsV1', 'FundReserve', [amount]),
       withdrawReserve: (amount) => send('PerpsV1', 'WithdrawReserve', [amount]),
@@ -428,6 +449,13 @@ export async function connectTheBook(opts = {}) {
         send('PerpsV1', 'OpenPosition', [marketId, isLong, margin, leverage]),
       close: (positionId) => send('PerpsV1', 'ClosePosition', [positionId]),
       liquidate: (positionId) => send('PerpsV1', 'Liquidate', [positionId]),
+      // LP Vault (12-month lock, close-only switch right).
+      lpDeposit: (amount) => send('PerpsV1', 'LpDeposit', [amount]),
+      lpRedeem: (depositId) => send('PerpsV1', 'LpRedeem', [depositId]),
+      lpTriggerCloseOnly: () => send('PerpsV1', 'LpTriggerCloseOnly'),
+      lpRevertCloseOnly: () => send('PerpsV1', 'LpRevertCloseOnly'),
+      // Permissionless tick: accrue funding for all markets.
+      tick: () => send('PerpsV1', 'Tick'),
       // Reads.
       markets: () => query('PerpsV1', 'GetMarkets'),
       reserve: () => query('PerpsV1', 'GetReserve'),
@@ -437,6 +465,31 @@ export async function connectTheBook(opts = {}) {
       async reserveHealth() {
         const [reserve, liability, coverageBps] = await query('PerpsV1', 'GetReserveHealth');
         return { reserve: BigInt(reserve), liability: BigInt(liability), coverageBps: BigInt(coverageBps) };
+      },
+      liqPrice: (positionId) => query('PerpsV1', 'GetLiqPrice', [positionId]),
+      // Mainnet metrics & LP vault.
+      async getMainnetMetrics() {
+        const m = await query('PerpsV1', 'GetMainnetMetrics');
+        return m;
+      },
+      async getSkewAtMark(marketId) {
+        const s = await query('PerpsV1', 'GetSkewAtMark', [marketId]);
+        return s ? { long: s[0].toString(), short: s[1].toString(), net: s[2].toString() } : null;
+      },
+      async getLpVault() {
+        const v = await query('PerpsV1', 'GetLpVault');
+        return v;
+      },
+      async getLpDeposit(depositId) {
+        const d = await query('PerpsV1', 'GetLpDeposit', [depositId]);
+        return d;
+      },
+      async getLpDepositsFor(lp) {
+        const ds = await query('PerpsV1', 'GetLpDepositsFor', [lp]);
+        return ds;
+      },
+      async getLpDepositsForMe() {
+        return this.getLpDepositsFor(account.address);
       },
       liqPrice: (positionId) => query('PerpsV1', 'GetLiqPrice', [positionId]),
     },

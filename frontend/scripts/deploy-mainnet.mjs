@@ -82,16 +82,20 @@ const MARKETS = [
   { name: 'VARA/USDC', base: T.wVARA, quote: T.wUSDC },
 ];
 // Perp markets (mark feed by symbol). Collateral = wUSDT.
-//
-// `maxOi` is REQUIRED at creation and has no unlimited default: the reserve's
-// directional exposure must be bounded from the first block, not by an operator
-// remembering a separate `SetMarketCap` call (audit M-03). These are conservative
-// opening caps in wUSDT smallest-units (6 decimals) — raise them deliberately once
-// the reserve is funded and the market has traded.
-const PERP_MARKETS = [
-  { symbol: 'ETH', maxOi: 25_000_000_000n },   // 25,000 wUSDT per side
-  { symbol: 'VARA', maxOi: 10_000_000_000n },  // 10,000 wUSDT per side
-];
+ //
+ // `maxOi` is REQUIRED at creation and has no unlimited default: the reserve's
+ // directional exposure must be bounded from the first block, not by an operator
+ // remembering a separate `SetMarketCap` call (audit M-03). These are conservative
+ // opening caps in wUSDT smallest-units (6 decimals) — raise them deliberately once
+ // the reserve is funded and the market has traded.
+ //
+ // `excluded: true` marks markets that cannot accept new positions at launch
+ // (e.g., VARA market per committee recommendation). Existing positions can
+ // still close/liquidate.
+ const PERP_MARKETS = [
+   { symbol: 'ETH', maxOi: 25_000_000_000n, excluded: false },   // 25,000 wUSDT per side
+   { symbol: 'VARA', maxOi: 10_000_000_000n, excluded: true },  // 10,000 wUSDT per side
+ ];
 
 await waitReady();
 const api = await GearApi.create({ providerAddress: NODE_ADDRESS });
@@ -195,8 +199,8 @@ console.log('\n  wiring perps:');
 await call('PerpsV1', 'SetCollateral', T.wUSDT.addr);
 console.log(`    collateral = wUSDT`);
 for (const m of PERP_MARKETS) {
-  const id = await call('PerpsV1', 'AddMarket', m.symbol, m.maxOi.toString());
-  console.log(`    market ${m.symbol.padEnd(5)} id=${id}  max_oi=${m.maxOi} (per side)`);
+  const id = await call('PerpsV1', 'AddMarket', m.symbol, m.maxOi.toString(), m.excluded);
+  console.log(`    market ${m.symbol.padEnd(5)} id=${id}  max_oi=${m.maxOi}  excluded=${m.excluded}`);
 }
 // actor_id args must be 32-byte hex, not an SS58 string.
 //

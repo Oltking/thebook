@@ -114,5 +114,39 @@ export function useSpotActions() {
       call<[bigint, bigint]>(() => program!.perpsV1.closePosition(positionId)),
     liquidate: (positionId: bigint) =>
       call<null>(() => program!.perpsV1.liquidate(positionId)),
+
+    // LP Vault (12-month lock, close-only switch right).
+    lpDeposit: (amount: bigint) =>
+      // @ts-expect-error - method not yet generated in client
+      call<bigint>(() => program!.perpsV1.lpDeposit(amount)),
+    lpRedeem: (depositId: bigint) =>
+      // @ts-expect-error - method not yet generated in client
+      call<bigint>(() => program!.perpsV1.lpRedeem(depositId)),
+    lpTriggerCloseOnly: () =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.perpsV1.lpTriggerCloseOnly()),
+    lpRevertCloseOnly: () =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.perpsV1.lpRevertCloseOnly()),
+
+    // Perps admin (governance-configurable parameters).
+    setPerpMaxLeverage: (leverage: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setPerpMaxLeverage(leverage)),
+    setPerpFeeBps: (feeBps: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setPerpFeeBps(feeBps)),
+    setPerpMaintenanceBps: (bps: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setPerpMaintenanceBps(bps)),
+    setPerpMaxMarkDeviationBps: (bps: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setPerpMaxMarkDeviationBps(bps)),
+    setAmmFeeBps: (feeBps: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setAmmFeeBps(feeBps)),
+    setVftCallGas: (gas: number) =>
+      // @ts-expect-error - method not yet generated in client
+      call<null>(() => program!.spot.setVftCallGas(gas)),
   };
 }
