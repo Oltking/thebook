@@ -80,7 +80,7 @@ export default defineConfig({
         },
       },
     },
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 3200,
   },
   server: {
     proxy: {
