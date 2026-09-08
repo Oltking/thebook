@@ -28,10 +28,10 @@ export function PerpsTradeView() {
   const { balances, refresh: refreshBal } = useWalletBalances(collateralList);
   const { allowances, refresh: refreshAllow } = useAllowances(collateralList);
 
-  // Only markets that are actually enabled and named; the contract can hold empty
-  // reserved slots (blank symbol / inactive) that must not render as "-PERP".
+  // Only markets that are actually enabled, named, and not excluded; the contract can hold
+  // empty reserved slots (blank symbol / inactive / excluded) that must not render as "-PERP".
   const liveMarkets = useMemo(
-    () => markets.filter((m) => m.active && typeof m.symbol === 'string' && m.symbol.trim() !== ''),
+    () => markets.filter((m) => m.active && !m.excluded && typeof m.symbol === 'string' && m.symbol.trim() !== ''),
     [markets],
   );
 
@@ -45,6 +45,8 @@ export function PerpsTradeView() {
 
   // Collateral decimals - default to 6 (wUSDT) but could be read from contract
   const collateralDec = 6; // wUSDT on Vara mainnet
+  // Mark prices are in pico-USD (12 decimals), not collateral decimals
+  const markDec = 12;
 
   const marginRaw = parseUnits(marginStr, collateralDec);
   const notionalRaw = marginRaw * BigInt(leverage);
@@ -125,7 +127,7 @@ export function PerpsTradeView() {
         {market && (
           <div className={styles.headRight}>
             <span className={styles.mark}>
-              mark <b>{mark > 0n ? `$${formatPrice(mark, collateralDec)}` : '—'}</b>
+              mark <b>{mark > 0n ? `$${formatPrice(mark, markDec)}` : '—'}</b>
             </span>
             <button
               type="button"
