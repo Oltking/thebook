@@ -40,7 +40,7 @@ const SEED = process.env.KEEPER_SEED ?? process.env.VARA_SEED;
 if (!process.env.KEEPER_SEED && process.env.VARA_SEED) {
   console.warn('  ! Using VARA_SEED. Set KEEPER_SEED to a dedicated keeper key with no admin rights (audit H-09).');
 }
-const PROGRAM_ID = process.env.THEBOOK_PROGRAM_ID ?? '0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3';
+const PROGRAM_ID = process.env.PROGRAM_ID ?? process.env.THEBOOK_PROGRAM_ID ?? '0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f';
 // Required, no default: this script signs (audit H-09).
 const NODE_ADDRESS = requireNode({ cliNode: CLI_NODE });
 const INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 15_000);
@@ -96,7 +96,7 @@ const book = await connectTheBook({ seed: SEED, programId: PROGRAM_ID, node: NOD
 console.log(`\n  thebookdex perps keeper (mark prices)`);
 console.log(`  node:    ${NODE_ADDRESS}`);
 console.log(`  keeper:  ${book.address}`);
-console.log(`  markets: 0=ETH 1=VARA  ·  loop ${INTERVAL_MS}ms\n`);
+console.log(`  markets: 0=ETH  ·  loop ${INTERVAL_MS}ms\n`);
 
 /** Largest single move the contract accepts, in basis points (MAX_MARK_DEVIATION_BPS). */
 const MAX_STEP_BPS = 1000n;
@@ -142,13 +142,17 @@ async function pushMark(marketId, label, usd, markets) {
 }
 
 async function tick() {
-  // Read current marks so a step can be computed against what is actually on chain.
+  // Read current markets so a step can be computed against what is actually on chain.
   const markets = await book.perps.markets();
-  const [eth, vara] = await Promise.all([ethUsd(), varaUsd()]);
-  const pushed = (await Promise.all([
-    pushMark(0, 'ETH', eth, markets),
-    pushMark(1, 'VARA', vara, markets),
-  ])).filter(Boolean);
+  const pushes = [];
+  for (const m of markets) {
+    if (m.symbol === 'ETH') {
+      pushes.push(ethUsd().then((price) => pushMark(m.id, 'ETH', price, markets)));
+    } else if (m.symbol === 'VARA') {
+      pushes.push(varaUsd().then((price) => pushMark(m.id, 'VARA', price, markets)));
+    }
+  }
+  const pushed = (await Promise.all(pushes)).filter(Boolean);
   console.log(`  ✓ ${new Date().toISOString()}  marks ${pushed.length ? pushed.join('  ') : 'nothing pushed'}`);
 }
 

@@ -170,6 +170,8 @@ type PerpsError = enum {
   LpInsufficientShares,
   /// LP vault: close-only already active.
   LpCloseOnlyAlreadyActive,
+  /// LP vault: deposit too small to cover minimum liquidity lock.
+  LpAmountTooSmall,
 };
 
 /// Individual LP deposit with lock tracking.
@@ -507,7 +509,7 @@ service PerpsV1 {
   /// LP reverts close-only mode (requires >50% shares).
   LpRevertCloseOnly : () -> result (null, PerpsError);
   /// LP triggers close-only mode for all perps markets.
-  /// Requires >50% of total LP shares supporting the trigger.
+  /// Requires >50% of total LP shares supporting the trigger AND at least 2 distinct LPs.
   LpTriggerCloseOnly : () -> result (null, PerpsError);
   /// Open an isolated-margin position. Escrows `margin` of the collateral token
   /// (requires a prior `approve`); notional = margin * leverage at the mark.

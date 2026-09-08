@@ -6,7 +6,7 @@ futures over the same collateral.
 [![Build Status](https://github.com/deveier/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/deveier/thebook/actions)
 [![Network](https://img.shields.io/badge/Vara-mainnet-brightgreen)](https://idea.gear-tech.io/programs?node=wss://rpc.vara.network)
 
-> **Live on Vara mainnet:** `0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3`
+> **Live on Vara mainnet:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
 >
 > This is the remediated build. A [full-stack security assessment](docs/audit-remediation.md)
 > found three exploitable critical defects in the previous program; all are fixed

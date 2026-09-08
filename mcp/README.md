@@ -130,7 +130,7 @@ id. For **Claude Desktop** (`claude_desktop_config.json`) or **Claude Code**
       "args": ["-y", "@thebookdex/mcp"],
       "env": {
         "VARA_SEED": "your twelve word mainnet mnemonic",
-        "THEBOOK_PROGRAM_ID": "0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3",
+        "THEBOOK_PROGRAM_ID": "0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f",
         "NODE_ADDRESS": "wss://rpc.vara.network",
         "THEBOOK_VOUCHER_URL": "https://thebookdex.xyz/api/voucher",
         "THEBOOK_MAX_TRADE_USD": "100",
@@ -155,7 +155,7 @@ Running from a local checkout instead of npm:
       "args": ["/absolute/path/to/thebook/mcp/server.mjs"],
       "env": {
         "VARA_SEED": "…",
-        "THEBOOK_PROGRAM_ID": "0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3"
+        "THEBOOK_PROGRAM_ID": "0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f"
       }
     }
   }

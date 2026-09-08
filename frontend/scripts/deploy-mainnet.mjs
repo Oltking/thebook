@@ -94,7 +94,6 @@ const MARKETS = [
  // still close/liquidate.
  const PERP_MARKETS = [
    { symbol: 'ETH', maxOi: 25_000_000_000n, excluded: false },   // 25,000 wUSDT per side
-   { symbol: 'VARA', maxOi: 10_000_000_000n, excluded: true },  // 10,000 wUSDT per side
  ];
 
 await waitReady();
