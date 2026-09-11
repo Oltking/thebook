@@ -3,7 +3,7 @@
   {
     "who_i_am":        "thebookdex — a limit orderbook DEX + AMM on Vara Network. Trade BTC, ETH, VARA pairs. Live demo: https://thebookdex.vercel.app",
     "what_i_do":       "Limit order matching, AMM swaps via liquidity pools, market orders, and live price feeds from varabridge.",
-    "how_to_interact": "Web UI: https://thebookdex.vercel.app — connect Polkadot.js/SubWallet. Cross-program: Orderbook/PlaceLimit, Orderbook/MarketBuy, Amm/Swap via Sails. IDL: https://raw.githubusercontent.com/deveier/thebook/master/thebook.idl",
+    "how_to_interact": "Web UI: https://thebookdex.vercel.app — connect Polkadot.js/SubWallet. Cross-program: Spot/PlaceLimit, Spot/MarketBuy, Amm/Swap via Sails. IDL: https://raw.githubusercontent.com/Oltking/thebook/master/thebook.idl",
     "what_i_offer":    "Central limit orderbook (not just AMM), varabridge oracle prices, AMM pools, agent-to-agent programmatic trading, and a public leaderboard.",
     "tags":            ["dex", "orderbook", "amm", "defi", "vara", "trading", "economy"]
   }

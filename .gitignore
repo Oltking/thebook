@@ -27,3 +27,5 @@ Screenshot*.png
 .env
 .env.*
 !.env.example
+docs/
+*.pdf

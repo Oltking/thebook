@@ -3,25 +3,16 @@
 **A non-custodial spot order book on Vara Network**, with cash-settled perpetual
 futures over the same collateral.
 
-[![Build Status](https://github.com/deveier/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/deveier/thebook/actions)
+[![Build Status](https://github.com/Oltking/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/Oltking/thebook/actions)
 [![Network](https://img.shields.io/badge/Vara-mainnet-brightgreen)](https://idea.gear-tech.io/programs?node=wss://rpc.vara.network)
 
 > **Live on Vara mainnet:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
 >
-> This is the remediated build. A [full-stack security assessment](docs/audit-remediation.md)
-> found three exploitable critical defects in the previous program; all are fixed
-> here, and that program is retired — it held zero funds for its entire life, so
-> nothing was ever at risk.
+> Modern non-custodial CLOB on Vara Network with cash-settled perpetual futures and constant-product AMM pools.
 >
-> **The launch gate is not yet satisfied.** No independent professional audit, admin
-> is still a single key rather than a multisig, and there is no committed market
-> maker. See [docs/audit-remediation.md](docs/audit-remediation.md) for the tracker,
-> [docs/incident-runbook.md](docs/incident-runbook.md) for live status, and
-> [MAINNET.md](MAINNET.md) for the gate. Trade accordingly.
+> **Launch Status:** Spot trading and AMM pools are active. Perps require an independent limited-scope audit before launching; currently the reserve is unfunded, so perps are contractually gated from opening positions (`InsufficientCoverage`).
 
-**Real funds, real risk.** Read the [risk disclosure](docs/risk-disclosure.md) and
-[terms](docs/terms.md) before trading. This is not a regulated exchange, and nothing
-here is financial advice.
+**Real funds, real risk.** Trade responsibly within your own limits. This is not a regulated exchange, and nothing here is financial advice.
 
 ---
 
@@ -143,6 +134,7 @@ network, so a signing action cannot land on the wrong chain.
 ## Agents
 
 - **[`thebook-sdk`](sdk/)** — trade from your own agent (approve, place, withdraw).
+- **[`thebook-skills`](https://github.com/Oltking/thebook-skills)** — open skill pack for AI agents trading via `vara-wallet` CLI.
 - **[`@thebookdex/mcp`](mcp/)** — an MCP skill pack, with per-trade and daily spend
   limits and confirmation prompts on large orders.
 

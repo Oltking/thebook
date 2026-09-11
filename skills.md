@@ -1,114 +1,85 @@
-# thebook-dex
+# thebookdex — Agent & Developer Integration Guide
 
-On-chain DEX on Vara Network with a central limit orderbook and AMM liquidity pools. Other agents can trade, provide liquidity, and query market data via cross-program Sails calls.
+On-chain central limit orderbook (CLOB) and constant-product AMM pools on **Vara Network** for humans and AI agents.
 
-## Services
+- **Program ID (Vara Mainnet):** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+- **Network RPC:** `wss://rpc.vara.network`
+- **Frontend App:** [https://thebookdex.vercel.app](https://thebookdex.vercel.app)
+- **Agent Skill Pack:** [https://github.com/Oltking/thebook-skills](https://github.com/Oltking/thebook-skills)
 
-### Orderbook Service
+---
 
-Central limit orderbook for BTC, ETH, VARA pairs denominated in USD.
+## 1. Quickstart with AI Agents
 
-| Method | Call pattern | Description |
-|---|---|---|
-| `Join` | `Orderbook/Join(name, strategy)` | Register your agent identity **and get your starting balances**. Idempotent, trade immediately after |
-| `Deposit` | `Orderbook/Deposit(kind, amount)` | Optional (real-custody): credit an internal balance from real VFT tokens (approve the DEX first) |
-| `Withdraw` | `Orderbook/Withdraw(kind, amount)` | Optional (real-custody): send an internal balance back out as real VFT tokens |
-| `PlaceLimit` | `Orderbook/PlaceLimit(side, asset, price, qty)` | Place a limit buy/sell order |
-| `MarketBuy` | `Orderbook/MarketBuy(asset, qty)` | Market buy asset using USD |
-| `MarketSell` | `Orderbook/MarketSell(asset, qty)` | Market sell asset for USD |
-| `CancelOrder` | `Orderbook/CancelOrder(oid)` | Cancel your open order |
-| `GetTokens` | Query (no gas) | Registered VFT token ids as `(usd, btc, eth, vara)` |
-| `GetOrderbook(asset)` | Query (no gas) | Get current bid/ask depth |
-| `GetPortfolio` | Query (no gas) | Check internal balances |
-| `GetTrades(asset, limit)` | Query (no gas) | Recent trade history |
+To teach any agent (Claude Code, Cursor, Codex, OpenClaw) to trade non-custodially on thebookdex:
 
-`TokenKind` is `Usd | Btc | Eth | Vara`. `Asset` (tradeable) is `BTC | ETH | VARA`.
+```bash
+# 1. Install wallet CLI and add the skill pack
+npm install -g vara-wallet
+npx skills add Oltking/thebook-skills
 
-### Funding an agent
-
-Virtual-balance model: **`Orderbook/Join` grants your starting balances directly**,
-so an agent is funded the moment it joins and can trade right away. Nothing else is
-required.
-
-Optional real-token custody: a deployment may also enable moving real VFT tokens in
-and out of the DEX vault. To use it:
-
-1. `Orderbook/GetTokens` → the four token program ids.
-2. On the relevant token program: `Faucet/Claim` (once per account), then
-   `Vft/Approve(dex_program_id, amount)`.
-3. `Orderbook/Deposit(kind, amount)` credits an internal balance from those tokens;
-   `Orderbook/Withdraw(kind, amount)` sends them back out.
-
-### AMM Service
-
-Automated market maker with constant product formula.
-
-| Method | Call pattern | Description |
-|---|---|---|
-| `CreatePool` | `Amm/CreatePool(asset_a, asset_b)` | New liquidity pool |
-| `AddLiquidity` | `Amm/AddLiquidity(pool_id, amount_a, amount_b)` | Provide liquidity |
-| `RemoveLiquidity` | `Amm/RemoveLiquidity(pool_id, lp_amount)` | Withdraw liquidity |
-| `Swap` | `Amm/Swap(pool_id, asset_in, amount_in, min_amount_out)` | Swap tokens |
-| `ListPools` | Query (no gas) | List all pools |
-| `GetPool(id)` | Query (no gas) | Get pool state |
-
-### Perps Service
-
-On-chain perpetual futures with isolated margin, settled at a keeper-published mark
-price against a house reserve. Prices/margin are in **USD cents**; size is in asset
-units (`1 asset = 100000`).
-
-| Method | Call pattern | Description |
-|---|---|---|
-| `OpenPosition` | `Perps/OpenPosition(asset, is_long, margin, leverage)` | Open/add an isolated position (leverage ≤ 20) |
-| `ClosePosition` | `Perps/ClosePosition(asset)` | Close at mark; returns `(payout, pnl)` cents |
-| `Liquidate` | `Perps/Liquidate(owner, asset)` | Permissionless close when equity ≤ maintenance |
-| `GetPositions(owner)` | Query (no gas) | `(asset, is_long, size, entry, margin, leverage, pnl)` rows |
-| `GetMarkPrices` | Query (no gas) | `(btc, eth, vara)` mark prices in cents |
-| `GetLiqPrice(owner, asset)` | Query (no gas) | Liquidation price in cents |
-
-Mark prices are pushed by the admin keeper (`SetMarkPrices`); PnL is paid from /
-absorbed by the admin-seeded reserve, so no balance is ever minted.
-
-## How to call (cross-program)
-
-Use the Sails route encoding pattern. Every Sails program echoes the route in the reply, so use `SailsReply<T>` to decode:
-
-```rust
-// Rust (gstd) — place a limit order
-let mut payload = "Orderbook".encode();
-payload.extend("PlaceLimit".encode());
-payload.extend((Side::Buy, Asset::ETH, 100_000_000u64, 1u64).encode());
-
-let result = msg::send_for_reply_as::<RawPayload, SailsReply<Result<u64, ContractError>>>(
-    pid, RawPayload(payload), gas, 0,
-).map_err(...)?.await.map_err(...)?.0;
+# 2. Create an encrypted agent wallet (seed is never exposed)
+vara-wallet wallet create --name agent
 ```
 
-For non-Rust callers, encode the payload as:
-1. SCALE string `"Orderbook"` (compact length + UTF-8 bytes)
-2. SCALE string `"PlaceLimit"` (compact length + UTF-8 bytes)
-3. SCALE-encoded arguments
+Gas is sponsored via Vara vouchers; agents only need their trading tokens.
 
-## Program ID
+---
 
-Set per deployment. thebookdex runs on **Vara mainnet**
-(`wss://rpc.vara.network`) with **real bridged tokens** — balances are real funds,
-not test or play money. Use the ID returned by the deploy step — see
-[DEPLOY.md](./DEPLOY.md).
+## 2. Sails Services & Methods
 
-Before integrating, read the [risk disclosure](docs/risk-disclosure.md): the
-contract has not had an independent professional audit, and the program currently
-deployed is pending an audit-remediation redeploy.
+thebookdex v1 is completely **non-custodial**: orders escrow real VFT tokens during execution, and proceeds settle to withdrawable balances.
 
-## Website
+### Spot Service (`Spot`)
 
-https://thebookdex.vercel.app
+| Method | Call Pattern | Description |
+|---|---|---|
+| `GetPairs` | `Spot/GetPairs()` (Query) | List all curated markets (pair id, base, quote, decimals) |
+| `GetOrderbook` | `Spot/GetOrderbook(pair_id)` (Query) | Read current bid/ask price levels and depth |
+| `PlaceLimit` | `Spot/PlaceLimit(pair_id, side, price, qty)` | Place a resting limit order (approve token first) |
+| `MarketBuy` | `Spot/MarketBuy(pair_id, qty, max_quote)` | Immediate market buy bounded by maximum quote |
+| `MarketSell` | `Spot/MarketSell(pair_id, qty)` | Immediate market sell |
+| `CancelOrder` | `Spot/CancelOrder(order_id)` | Cancel resting order and credit escrow to claims |
+| `GetMyOrders` | `Spot/GetMyOrders()` (Query) | Active open orders for caller |
+| `GetClaim` | `Spot/GetClaim(token)` (Query) | Check claimable / withdrawable balance |
+| `Withdraw` | `Spot/Withdraw(token)` | Withdraw claimable balance back to wallet |
 
-## Source
+### AMM Service (`Amm`)
 
-https://github.com/deveier/thebook
+Constant-product AMM (`x·y=k`) with a 0.3% fee accrued directly to pool reserves.
 
-## Track
+| Method | Call Pattern | Description |
+|---|---|---|
+| `GetPools` | `Amm/GetPools()` (Query) | List all active liquidity pools and reserves |
+| `Swap` | `Amm/Swap(pool_id, token_in, amount_in, min_out)` | Swap tokens with slippage protection |
+| `AddLiquidity` | `Amm/AddLiquidity(pool_id, amount_a, amount_b, min_shares)` | Deposit both tokens to mint LP shares |
+| `RemoveLiquidity` | `Amm/RemoveLiquidity(pool_id, shares, min_a, min_b)` | Burn shares and reclaim reserves |
 
-Economy & Markets — on-chain DEX for agent-to-agent trading.
+### Perps Service (`PerpsV1`)
+
+Cash-settled perpetual futures over wUSDT collateral. *(Requires audit before mainnet launch; currently gated by zero reserve coverage).*
+
+| Method | Call Pattern | Description |
+|---|---|---|
+| `GetMarkets` | `PerpsV1/GetMarkets()` (Query) | Active perps markets and funding rates |
+| `OpenPosition` | `PerpsV1/OpenPosition(market_id, is_long, margin, leverage)` | Open position (leverage ≤ 5) |
+| `ClosePosition` | `PerpsV1/ClosePosition(position_id)` | Close position at current mark |
+| `Liquidate` | `PerpsV1/Liquidate(position_id)` | Liquidate an under-collateralized position |
+
+---
+
+## 3. Developer SDK & MCP Server
+
+- **JavaScript / TypeScript SDK:** [`thebook-sdk`](./sdk) (`npm install thebook-sdk`)
+- **Model Context Protocol Server:** [`@thebookdex/mcp`](./mcp) — MCP tools for desktop and coding assistants with spend limits and confirmation prompts.
+
+---
+
+## 4. Curated Mainnet Tokens (VFT)
+
+| Symbol | Program ID | Decimals |
+|---|---|---|
+| **wVARA** | `0x29c42c668012b1ce20720e4615229215023281ef4676fdc77bf047d7fbcb9d17` | 12 |
+| **wETH** | `0xde45bdbb0345919a11561d43a5082e0b25061d4a2c6eb80009c1cfbccb80d0de` | 18 |
+| **wUSDT** | `0x4255ff4a87a4c13dc39f74ace8c4948bbef2f75fb639d66639a1cfcc99e6243e` | 6 |
+| **wUSDC** | `0xd1de816d7dce6439504552686ab333e5b7302b1549763656b30af1f8a5871b6a` | 6 |
