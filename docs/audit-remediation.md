@@ -5,8 +5,8 @@ Source: `thebook Security Audit.pdf` — 27 August 2026, commit `22970f4`.
 against the compiled WASM.
 
 **Status: every finding is addressed, and the remediated build is deployed at**
-`0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3`
-**(28 August 2026). The launch gate is still not satisfied — see Phase 3.**
+`0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+**(September 2026). Prior builds (0xe754..., 0x8ff9..., 0x7c5d...) are retired.**
 
 Legend: `[x]` done · `[U]` needs the operator — a key, a signature, or a dashboard.
 
@@ -19,9 +19,9 @@ C-02. Probing it showed **zero custodied value in all four tokens for its entire
 life**, so nothing was ever at risk and nothing needed migrating — a rare free
 window, now used.
 
-The remediated build is live at `0x8ff92cab…fac4` with the four markets listed and
-perps wired to a dedicated keeper key. The probe confirms the legacy services are
-absent. **The old program is retired; nothing should point at it again.**
+The remediated build is live at `0xd996d8a6…e78f` with the four spot markets listed,
+VARA-perp excluded, funding + holding fee active, and perps gated behind audit/reserve.
+**The old programs are retired; nothing should point at them again.**
 
 ---
 
@@ -137,7 +137,7 @@ Disclosure
 
 None of these can be done from the repository. All are required before real funds.
 
-- [x] **Redeploy the fixed build.** Done — `0x8ff92cab…fac4`, 28 August 2026.
+- [x] **Redeploy the fixed build.** Done — `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`, September 2026.
 - [ ] **N-of-M multisig as admin**, via `propose_admin` / `accept_admin`. Split the
       keeper key at the same time.
 - [ ] **Independent professional audit** of the reduced program. This remediation is

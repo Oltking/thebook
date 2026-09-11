@@ -30,9 +30,8 @@ Base assets to trade: **ETH** and **VARA**, each quoted against wUSDT and wUSDC.
 | wVARA/wUSDT | `0x29c42c…9d17` | `0x4255ff…6243e` | 12 | 6 |
 | wVARA/wUSDC | `0x29c42c…9d17` | `0xd1de81…871b6a` | 12 | 6 |
 
-## Still needed
+## DEX program ID (Vara Mainnet)
 
-- **DEX program ID** — does not exist until the new spot contract is deployed (testnet
-  dress rehearsal first, then mainnet). Once deployed it feeds `#61` (frontend/SDK/skill
-  config) and every hardcoded program-id reference. The token addresses above are
-  independent of it.
+- **thebook DEX:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+  (Non-custodial spot CLOB + constant-product AMM + cash-settled perps)
+

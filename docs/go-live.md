@@ -3,8 +3,8 @@
 Everything is deployed and verified. What remains is transferring funds and starting
 two processes.
 
-**Program:** `0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3`
-(Vara mainnet, deployed 28 August 2026 after the end-to-end rehearsal passed)
+**Program:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+(Vara mainnet, deployed September 2026)
 
 ---
 
@@ -14,7 +14,7 @@ two processes.
 |---|---|
 | Spot | **Live.** 4 markets, unpaused. Books empty until liquidity arrives |
 | Pools | **Live.** 4 AMM pools created, all empty. 0.3% fee to providers |
-| Perps | **Closed** until the keeper publishes marks and the reserve is funded |
+| Perps | **Closed** (Reserve = 0 enforces audit gate, VARA-perp excluded, funding + holding fee active) |
 | Custodied funds | Zero |
 | Admin | Single key, not yet a multisig |
 
@@ -30,7 +30,7 @@ started. Perps were proven the same way on a throwaway instance of the same buil
 In Vercel, set:
 
 ```
-VITE_PROGRAM_ID = 0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3
+VITE_PROGRAM_ID = 0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f
 ```
 
 and redeploy. Until this is done the live site talks to a retired program.
@@ -178,7 +178,7 @@ To run it locally instead:
 ```sh
 cd frontend
 NODE_ADDRESS=wss://rpc.vara.network \
-PROGRAM_ID=0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3 \
+PROGRAM_ID=0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f \
 ALERT_WEBHOOK=<somewhere a human is paged> \
 node scripts/solvency-monitor.mjs
 ```

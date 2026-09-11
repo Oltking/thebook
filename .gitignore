@@ -22,3 +22,8 @@ thebook-skills/
 
 # Stray screenshots dropped in the repo root
 Screenshot*.png
+
+# Environment files
+.env
+.env.*
+!.env.example

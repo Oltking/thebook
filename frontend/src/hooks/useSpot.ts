@@ -410,9 +410,40 @@ export function useMainnetMetrics() {
     if (!program) return;
     setLoading(true);
     try {
-      // @ts-expect-error - method not yet generated in client
       const m = await program.perpsV1.getMainnetMetrics().call();
-      setMetrics(m as MainnetMetrics);
+      if (m) {
+        setMetrics({
+          timestampBlock: Number(m.timestamp_block),
+          tvl: m.tvl.toString(),
+          perpReserve: m.perp_reserve.toString(),
+          lpVaultCollateral: m.lp_vault_collateral.toString(),
+          positionMargin: m.position_margin.toString(),
+          activeMarkets: Number(m.active_markets),
+          totalVolume30d: m.total_volume_30d.toString(),
+          totalVolume60d: m.total_volume_60d.toString(),
+          uniqueWallets30d: Number(m.unique_wallets_30d),
+          uniqueWallets60d: Number(m.unique_wallets_60d),
+          poolHealth: (m.pool_health || []).map((h) => ({
+            marketId: Number(h.market_id),
+            symbol: h.symbol,
+            mark: h.mark.toString(),
+            reserve: h.reserve.toString(),
+            longOi: h.long_oi.toString(),
+            shortOi: h.short_oi.toString(),
+            netSkew: h.net_skew.toString(),
+            skewCap: h.skew_cap.toString(),
+            skewUtilizationBps: Number(h.skew_utilization_bps),
+            closeOnly: h.close_only,
+            excluded: h.excluded,
+          })),
+          lpVault: {
+            totalCollateral: m.lp_vault.total_collateral.toString(),
+            totalShares: m.lp_vault.total_shares.toString(),
+            closeOnly: m.lp_vault.close_only,
+            depositCount: Number(m.lp_vault.deposit_count),
+          },
+        });
+      }
     } catch (e) {
       console.error('useMainnetMetrics: failed', e);
     } finally {
@@ -441,7 +472,6 @@ export function useSkewAtMark(marketId: number | null) {
       return;
     }
     try {
-      // @ts-expect-error - method not yet generated in client
       const s = await program.perpsV1.getSkewAtMark(BigInt(marketId)).call();
       if (s) setSkew({ long: s[0].toString(), short: s[1].toString(), net: s[2].toString() });
     } catch { /* keep last */ }
@@ -465,9 +495,15 @@ export function useLpVault() {
   const refresh = useCallback(async () => {
     if (!program) return;
     try {
-      // @ts-expect-error - method not yet generated in client
       const v = await program.perpsV1.getLpVault().call();
-      setVault(v as LpVaultState);
+      if (v) {
+        setVault({
+          totalCollateral: v.total_collateral.toString(),
+          totalShares: v.total_shares.toString(),
+          closeOnly: v.close_only,
+          depositCount: Number(v.deposit_count),
+        });
+      }
     } catch { /* keep last */ }
   }, [program]);
 
@@ -501,9 +537,17 @@ export function useLpDeposit(depositId: number | null) {
       return;
     }
     try {
-      // @ts-expect-error - method not yet generated in client
       const d = await program.perpsV1.getLpDeposit(BigInt(depositId)).call();
-      if (d) setDeposit(d as LpDeposit);
+      if (d) {
+        setDeposit({
+          id: d.id.toString(),
+          lp: d.lp.toString(),
+          amount: d.amount.toString(),
+          shares: d.shares.toString(),
+          depositBlock: Number(d.deposit_block),
+          unlockBlock: Number(d.unlock_block),
+        });
+      }
     } catch { /* keep last */ }
   }, [program, depositId]);
 
@@ -528,9 +572,17 @@ export function useLpDepositsFor(lp: string | null) {
       return;
     }
     try {
-      // @ts-expect-error - method not yet generated in client
       const ds = await program.perpsV1.getLpDepositsFor(lp as `0x${string}`).call();
-      setDeposits((Array.isArray(ds) ? ds : []).map((d: any) => d as LpDeposit));
+      setDeposits(
+        (Array.isArray(ds) ? ds : []).map((d) => ({
+          id: d.id.toString(),
+          lp: d.lp.toString(),
+          amount: d.amount.toString(),
+          shares: d.shares.toString(),
+          depositBlock: Number(d.deposit_block),
+          unlockBlock: Number(d.unlock_block),
+        }))
+      );
     } catch { /* keep last */ }
   }, [program, lp]);
 

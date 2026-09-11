@@ -5,6 +5,51 @@ import type { HexString } from '@gear-js/api';
 import { TypeRegistry } from '@polkadot/types';
 import { TransactionBuilder, ActorId, QueryBuilder, getServiceNamePrefix, getFnNamePrefix, ZERO_ADDRESS } from 'sails-js';
 
+export type LpDeposit = {
+  id: number | string | bigint;
+  lp: ActorId;
+  amount: number | string | bigint;
+  shares: number | string | bigint;
+  deposit_block: number;
+  unlock_block: number;
+};
+
+export type LpVaultState = {
+  total_collateral: number | string | bigint;
+  total_shares: number | string | bigint;
+  close_only: boolean;
+  deposit_count: number;
+};
+
+export type MarketHealth = {
+  market_id: number | string | bigint;
+  symbol: string;
+  mark: number | string | bigint;
+  reserve: number | string | bigint;
+  long_oi: number | string | bigint;
+  short_oi: number | string | bigint;
+  net_skew: number | string | bigint;
+  skew_cap: number | string | bigint;
+  skew_utilization_bps: number | string | bigint;
+  close_only: boolean;
+  excluded: boolean;
+};
+
+export type MainnetMetrics = {
+  timestamp_block: number;
+  tvl: number | string | bigint;
+  perp_reserve: number | string | bigint;
+  lp_vault_collateral: number | string | bigint;
+  position_margin: number | string | bigint;
+  active_markets: number;
+  total_volume_30d: number | string | bigint;
+  total_volume_60d: number | string | bigint;
+  unique_wallets_30d: number;
+  unique_wallets_60d: number;
+  pool_health: MarketHealth[];
+  lp_vault: LpVaultState;
+};
+
 export class SailsProgram {
   public readonly registry: TypeRegistry;
   public readonly spot: Spot;
@@ -14,15 +59,20 @@ export class SailsProgram {
 
   constructor(public api: GearApi, programId?: `0x${string}`) {
     const types: Record<string, any> = {
-      SpotError: {"_enum":["NotAdmin","BadParams","PairExists","NoPair","PairInactive","BookFull","NoOrder","NotOwner","NothingToClaim","TransferFailed","Paused","SlippageExceeded","Overflow","DecimalsMismatch","NotPendingAdmin"]},
+      SpotError: {"_enum":{"NotAdmin":"Null","BadParams":"Null","PairExists":"Null","NoPair":"Null","PairInactive":"Null","BookFull":"Null","NoOrder":"Null","NotOwner":"Null","NothingToClaim":"Null","TransferFailed":"TransferError","Paused":"Null","SlippageExceeded":"Null","Overflow":"Null","DecimalsMismatch":"Null","NotPendingAdmin":"Null"}},
+      TransferError: {"_enum":["InsufficientAllowance","ProgramError","SendFailed","DecodeError","Unknown"]},
       Side: {"_enum":["Buy","Sell"]},
       SpotOrder: {"id":"u64","pair_id":"u64","trader":"[u8;32]","side":"Side","price":"u128","qty":"u128","filled":"u128","status":"SpotStatus","escrowed":"u128","released":"u128"},
       SpotStatus: {"_enum":["Open","PartiallyFilled"]},
       SpotPair: {"id":"u64","base":"[u8;32]","quote":"[u8;32]","base_dec":"u8","quote_dec":"u8","active":"bool"},
-      AmmError: {"_enum":["NotAdmin","BadParams","PoolExists","NoPool","PoolInactive","TooManyPools","TransferFailed","Paused","SlippageExceeded","InsufficientShares","AmountTooSmall","Overflow","DecimalsMismatch"]},
+      AmmError: {"_enum":{"NotAdmin":"Null","BadParams":"Null","PoolExists":"Null","NoPool":"Null","PoolInactive":"Null","TooManyPools":"Null","TransferFailed":"TransferError","Paused":"Null","SlippageExceeded":"Null","InsufficientShares":"Null","AmountTooSmall":"Null","Overflow":"Null","DecimalsMismatch":"Null"}},
       AmmPool: {"id":"u64","token_a":"[u8;32]","token_b":"[u8;32]","dec_a":"u8","dec_b":"u8","reserve_a":"u128","reserve_b":"u128","total_shares":"u128","active":"bool"},
-      PerpsError: {"_enum":["NotAdmin","NotKeeper","BadParams","NoMarket","MarketInactive","StaleMark","LeverageTooHigh","InsufficientMargin","PositionNotFound","NotLiquidatable","BookFull","TransferFailed","NoCollateral","OiCapExceeded","Paused","MarkDeviationTooLarge","InsufficientCoverage","Overflow"]},
-      PerpMarket: {"id":"u64","symbol":"String","mark":"u128","mark_block":"u32","active":"bool","long_oi":"u128","short_oi":"u128","max_oi":"u128","cum_funding":"i128","funding_block":"u32"},
+      PerpsError: {"_enum":{"NotAdmin":"Null","NotKeeper":"Null","BadParams":"Null","NoMarket":"Null","MarketInactive":"Null","StaleMark":"Null","LeverageTooHigh":"Null","InsufficientMargin":"Null","PositionNotFound":"Null","NotLiquidatable":"Null","BookFull":"Null","TransferFailed":"TransferError","NoCollateral":"Null","OiCapExceeded":"Null","Paused":"Null","CloseOnly":"Null","MarkDeviationTooLarge":"Null","InsufficientCoverage":"Null","Overflow":"Null","LpZeroAmount":"Null","LpLocked":"Null","LpDepositNotFound":"Null","LpInsufficientShares":"Null","LpCloseOnlyAlreadyActive":"Null","LpAmountTooSmall":"Null"}},
+      LpDeposit: {"id":"u64","lp":"[u8;32]","amount":"u128","shares":"u128","deposit_block":"u32","unlock_block":"u32"},
+      LpVaultState: {"total_collateral":"u128","total_shares":"u128","close_only":"bool","deposit_count":"u32"},
+      MainnetMetrics: {"timestamp_block":"u32","tvl":"u128","perp_reserve":"u128","lp_vault_collateral":"u128","position_margin":"u128","active_markets":"u32","total_volume_30d":"u128","total_volume_60d":"u128","unique_wallets_30d":"u32","unique_wallets_60d":"u32","pool_health":"Vec<MarketHealth>","lp_vault":"LpVaultState"},
+      MarketHealth: {"market_id":"u64","symbol":"String","mark":"u128","reserve":"u128","long_oi":"u128","short_oi":"u128","net_skew":"u128","skew_cap":"u128","skew_utilization_bps":"u128","close_only":"bool","excluded":"bool"},
+      PerpMarket: {"id":"u64","symbol":"String","mark":"u128","mark_block":"u32","active":"bool","long_oi":"u128","short_oi":"u128","close_only":"bool","excluded":"bool","max_oi":"u128","cum_funding":"i128","cum_holding":"i128","funding_block":"u32"},
     }
 
     this.registry = new TypeRegistry();
@@ -267,6 +317,24 @@ export class Spot {
   }
 
   /**
+   * Set swap fee for AMM (basis points). Admin-only.
+  */
+  public setAmmFeeBps(fee_bps: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetAmmFeeBps',
+      fee_bps,
+      'u128',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
    * Halt or resume trading. Cancel and withdraw are deliberately never gated on
    * this, so pausing during an incident cannot trap user funds (audit H-08).
   */
@@ -280,6 +348,97 @@ export class Spot {
       'SetPaused',
       paused,
       'bool',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Set trading fee for perps (basis points). Admin-only.
+  */
+  public setPerpFeeBps(fee_bps: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetPerpFeeBps',
+      fee_bps,
+      'u128',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Set maintenance margin for perps (basis points). Admin-only.
+  */
+  public setPerpMaintenanceBps(bps: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetPerpMaintenanceBps',
+      bps,
+      'u128',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Set maximum leverage for perps. Admin-only.
+  */
+  public setPerpMaxLeverage(leverage: number): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetPerpMaxLeverage',
+      leverage,
+      'u32',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Set maximum mark price deviation per update (basis points). Admin-only.
+  */
+  public setPerpMaxMarkDeviationBps(bps: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetPerpMaxMarkDeviationBps',
+      bps,
+      'u128',
+      'Result<Null, SpotError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Set the gas limit for VFT cross-program calls. Admin-only.
+   * Allows adapting to token program gas cost changes without redeploy.
+  */
+  public setVftCallGas(gas: number | string | bigint): TransactionBuilder<{ ok: null } | { err: SpotError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: SpotError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'Spot',
+      'SetVftCallGas',
+      gas,
+      'u64',
       'Result<Null, SpotError>',
       this._program.programId,
     );
@@ -871,9 +1030,10 @@ export class PerpsV1 {
   /**
    * Admin: list a perp market. `max_oi` is required and must be non-zero — the
    * reserve's exposure is bounded at creation, not by a remembered follow-up
-   * (audit M-03).
+   * (audit M-03). `excluded` marks markets that cannot accept new positions at
+   * launch (e.g., VARA market per committee recommendation).
   */
-  public addMarket($symbol: string, max_oi: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+  public addMarket($symbol: string, max_oi: number | string | bigint, excluded: boolean): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
     return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
       this._program.api,
@@ -881,8 +1041,8 @@ export class PerpsV1 {
       'send_message',
       'PerpsV1',
       'AddMarket',
-      [$symbol, max_oi],
-      '(String, u128)',
+      [$symbol, max_oi, excluded],
+      '(String, u128, bool)',
       'Result<u64, PerpsError>',
       this._program.programId,
     );
@@ -951,6 +1111,82 @@ export class PerpsV1 {
   }
 
   /**
+   * LP deposits collateral into the vault, receives shares pro-rata.
+   * Locked for 12 months (LP_LOCK_DURATION_BLOCKS).
+   * Requires prior `approve` of collateral token.
+  */
+  public lpDeposit(amount: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'LpDeposit',
+      amount,
+      'u128',
+      'Result<u128, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * LP redeems shares for collateral after lock expires.
+   * Shares are burned, collateral returned pro-rata.
+  */
+  public lpRedeem(deposit_id: number | string | bigint): TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: number | string | bigint } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'LpRedeem',
+      deposit_id,
+      'u64',
+      'Result<u128, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * LP reverts close-only mode (requires >50% shares).
+  */
+  public lpRevertCloseOnly(): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'LpRevertCloseOnly',
+      null,
+      null,
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * LP triggers close-only mode for all perps markets.
+   * Requires >50% of total LP shares supporting the trigger AND at least 2 distinct LPs.
+  */
+  public lpTriggerCloseOnly(): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'LpTriggerCloseOnly',
+      null,
+      null,
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
    * Open an isolated-margin position. Escrows `margin` of the collateral token
    * (requires a prior `approve`); notional = margin * leverage at the mark.
    * 
@@ -969,6 +1205,25 @@ export class PerpsV1 {
       [market_id, is_long, margin, leverage],
       '(u64, bool, u128, u32)',
       'Result<u64, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Admin: put one perp market into open or close-only mode. Existing positions
+   * can always close or be liquidated; this only gates new risk.
+  */
+  public setCloseOnly(market_id: number | string | bigint, close_only: boolean): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'SetCloseOnly',
+      [market_id, close_only],
+      '(u64, bool)',
+      'Result<Null, PerpsError>',
       this._program.programId,
     );
   }
@@ -1016,9 +1271,11 @@ export class PerpsV1 {
    * 
    * Bounded to `MAX_MARK_DEVIATION_BPS` from the previous mark, so a compromised
    * keeper cannot reprice the book in a single transaction and liquidate it
-   * (audit H-04). The bound is skipped only for the first mark, and once the feed
-   * is stale past `MARK_EXIT_AGE` — by then positions can already exit at entry,
-   * so a fresh start is not a lever over anyone.
+   * (audit H-04). The bound is skipped only for the very first mark (mark == 0
+   * and mark_block == 0). After initialization, the bound always applies — even
+   * after prolonged staleness — because a returning keeper could otherwise jump
+   * the mark arbitrarily, distorting funding, liquidation prices, and PnL for
+   * positions that have not yet exited at entry.
   */
   public setMark(market_id: number | string | bigint, price: number | string | bigint): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
     if (!this._program.programId) throw new Error('Program ID is not set');
@@ -1048,6 +1305,25 @@ export class PerpsV1 {
       'SetMarketCap',
       [market_id, max_oi],
       '(u64, u128)',
+      'Result<Null, PerpsError>',
+      this._program.programId,
+    );
+  }
+
+  /**
+   * Permissionless tick: accrue funding for all active markets up to current block.
+   * Anyone can call this to keep funding indices fresh between keeper updates.
+  */
+  public tick(): TransactionBuilder<{ ok: null } | { err: PerpsError }> {
+    if (!this._program.programId) throw new Error('Program ID is not set');
+    return new TransactionBuilder<{ ok: null } | { err: PerpsError }>(
+      this._program.api,
+      this._program.registry,
+      'send_message',
+      'PerpsV1',
+      'Tick',
+      null,
+      null,
       'Result<Null, PerpsError>',
       this._program.programId,
     );
@@ -1110,6 +1386,71 @@ export class PerpsV1 {
     );
   }
 
+  /**
+   * Returns LP deposit details for a specific deposit.
+  */
+  public getLpDeposit(deposit_id: number | string | bigint): QueryBuilder<LpDeposit | null> {
+    return new QueryBuilder<LpDeposit | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetLpDeposit',
+      deposit_id,
+      'u64',
+      'Option<LpDeposit>',
+    );
+  }
+
+  /**
+   * Returns all LP deposits for a specific LP.
+  */
+  public getLpDepositsFor(lp: ActorId): QueryBuilder<Array<LpDeposit>> {
+    return new QueryBuilder<Array<LpDeposit>>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetLpDepositsFor',
+      lp,
+      '[u8;32]',
+      'Vec<LpDeposit>',
+    );
+  }
+
+  /**
+   * Returns LP vault state.
+  */
+  public getLpVault(): QueryBuilder<LpVaultState> {
+    return new QueryBuilder<LpVaultState>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetLpVault',
+      null,
+      null,
+      'LpVaultState',
+    );
+  }
+
+  /**
+   * Returns comprehensive mainnet metrics for transparency (committee request).
+   * Includes 30/60-day volume, unique wallets, TVL, active markets, pool health.
+  */
+  public getMainnetMetrics(): QueryBuilder<MainnetMetrics> {
+    return new QueryBuilder<MainnetMetrics>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetMainnetMetrics',
+      null,
+      null,
+      'MainnetMetrics',
+    );
+  }
+
   public getMarkets(): QueryBuilder<Array<PerpMarket>> {
     return new QueryBuilder<Array<PerpMarket>>(
       this._program.api,
@@ -1168,6 +1509,22 @@ export class PerpsV1 {
       null,
       null,
       '(u128, u128, u128)',
+    );
+  }
+
+  /**
+   * Returns current skew at mark prices for a market.
+  */
+  public getSkewAtMark(market_id: number | string | bigint): QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint] | null> {
+    return new QueryBuilder<[number | string | bigint, number | string | bigint, number | string | bigint] | null>(
+      this._program.api,
+      this._program.registry,
+      this._program.programId,
+      'PerpsV1',
+      'GetSkewAtMark',
+      market_id,
+      'u64',
+      'Option<(u128, u128, u128)>',
     );
   }
 
@@ -1297,6 +1654,58 @@ export class PerpsV1 {
       const payload = message.payload.toHex();
       if (getServiceNamePrefix(payload) === 'PerpsV1' && getFnNamePrefix(payload) === 'CollateralSet') {
         callback(this._program.registry.createType('(String, String, {"token":"[u8;32]"})', message.payload)[2].toJSON() as unknown as { token: ActorId });
+      }
+    });
+  }
+
+  public subscribeToLpDepositedEvent(callback: (data: { lp: ActorId; amount: number | string | bigint; shares: number | string | bigint; unlock_block: number }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'PerpsV1' && getFnNamePrefix(payload) === 'LpDeposited') {
+        callback(this._program.registry.createType('(String, String, {"lp":"[u8;32]","amount":"u128","shares":"u128","unlock_block":"u32"})', message.payload)[2].toJSON() as unknown as { lp: ActorId; amount: number | string | bigint; shares: number | string | bigint; unlock_block: number });
+      }
+    });
+  }
+
+  public subscribeToLpRedeemedEvent(callback: (data: { lp: ActorId; amount: number | string | bigint; shares: number | string | bigint }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'PerpsV1' && getFnNamePrefix(payload) === 'LpRedeemed') {
+        callback(this._program.registry.createType('(String, String, {"lp":"[u8;32]","amount":"u128","shares":"u128"})', message.payload)[2].toJSON() as unknown as { lp: ActorId; amount: number | string | bigint; shares: number | string | bigint });
+      }
+    });
+  }
+
+  public subscribeToLpCloseOnlyTriggeredEvent(callback: (data: { trigger_lp: ActorId; supporting_shares: number | string | bigint; total_shares: number | string | bigint }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'PerpsV1' && getFnNamePrefix(payload) === 'LpCloseOnlyTriggered') {
+        callback(this._program.registry.createType('(String, String, {"trigger_lp":"[u8;32]","supporting_shares":"u128","total_shares":"u128"})', message.payload)[2].toJSON() as unknown as { trigger_lp: ActorId; supporting_shares: number | string | bigint; total_shares: number | string | bigint });
+      }
+    });
+  }
+
+  public subscribeToLpCloseOnlyRevertedEvent(callback: (data: { trigger_lp: ActorId }) => void | Promise<void>): Promise<() => void> {
+    return this._program.api.gearEvents.subscribeToGearEvent('UserMessageSent', ({ data: { message } }) => {;
+      if (!message.source.eq(this._program.programId) || !message.destination.eq(ZERO_ADDRESS)) {
+        return;
+      }
+
+      const payload = message.payload.toHex();
+      if (getServiceNamePrefix(payload) === 'PerpsV1' && getFnNamePrefix(payload) === 'LpCloseOnlyReverted') {
+        callback(this._program.registry.createType('(String, String, {"trigger_lp":"[u8;32]"})', message.payload)[2].toJSON() as unknown as { trigger_lp: ActorId });
       }
     });
   }

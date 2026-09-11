@@ -10,10 +10,12 @@ only as intentions.
 
 ## Live program
 
-**Current:** `0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3`
-(deployed 28 August 2026, the remediated build)
+**Current:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+(deployed September 2026, funding rate + holding fee, reserve gate, skew cap, LP vault, VARA-perp excluded)
 
-**Retired:** `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484`
+**Prior retired deployments:**
+- `0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3` (28 August 2026)
+- `0x7c5dbc8a85a8526c3a0c4fe98f0fb286782849c4d130ff28d6b7b30d157c2484` (legacy)
 — carried C-01 `CallAgentService` (an unauthenticated drain path) and a latent C-02.
 It held zero in all four tokens for its whole life, so nothing was ever at risk and
 nothing needed migrating. **Do not point anything at it again.**
@@ -26,11 +28,9 @@ Verified on the current program with `frontend/scripts/audit-probe.mjs` (read-on
 | Markets listed | 4 |
 | Paused | no |
 | Custodied value | 0 in all four tokens |
-| Perps | **closed** — no marks published, reserve 0 |
+| Perps | **closed** — reserve 0, audit gate enforced |
 
-**Perps are not open.** Both markets have `mark: 0`, so `fresh_mark` fails and no
-position can be opened. They open when the keeper starts publishing marks — which
-must not happen until the reserve is funded and the coverage-floor fix is deployed.
+**Perps are not open.** Reserve = 0 on mainnet ensures no position can be opened (`InsufficientCoverage`), protecting funds until an independent audit is completed.
 Spot has no oracle dependency and trades normally with the keeper stopped.
 
 Re-check at any time:
@@ -38,7 +38,7 @@ Re-check at any time:
 ```sh
 cd frontend
 NODE_ADDRESS=wss://rpc.vara.network \
-PROGRAM_ID=0xe7540b7c404234b4345720a43138f58ba4af7de9367ff8fd2b4428586daf66a3 \
+PROGRAM_ID=0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f \
 node scripts/audit-probe.mjs
 ```
 
