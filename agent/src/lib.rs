@@ -97,9 +97,9 @@ struct AgentState {
     last_note: String,
 }
 
-/// Build the SCALE route payload for a call to thebook's `Orderbook` service.
-fn ob_route(method: &str, args: Vec<u8>) -> Vec<u8> {
-    let mut payload = "Orderbook".encode();
+/// Build the SCALE route payload for a call to thebook's `Spot` service.
+fn spot_route(method: &str, args: Vec<u8>) -> Vec<u8> {
+    let mut payload = "Spot".encode();
     payload.extend(method.encode());
     payload.extend(args);
     payload
@@ -111,15 +111,10 @@ pub struct Program {
 
 #[sails_rs::program]
 impl Program {
-    /// Deploy + register. The deployer becomes owner and initial keeper. We fire
-    /// a `Join` at thebook (fire-and-forget: registration doesn't need the reply)
-    /// so the agent has an identity on the DEX from birth.
+    /// Deploy agent. The deployer becomes owner and initial keeper.
     #[allow(clippy::new_without_default)]
     pub fn new(thebook: ActorId, name: String, strategy: AgentStrategy) -> Self {
         let owner = msg::source();
-        let payload = ob_route("Join", (name.clone(), strategy).encode());
-        // Best-effort A2A registration; ignore send errors so init never traps.
-        let _ = msg::send(thebook, RawPayload(payload), 0);
         Self {
             state: RefCell::new(AgentState {
                 owner,
@@ -169,12 +164,14 @@ impl<'a> AgentService<'a> {
             return "paused".into();
         }
 
-        // Read the BTC book from thebook (A2A query → reply).
+        // Read the BTC book from thebook (pair 0, depth 20).
         let gas = exec::gas_available() / 3;
-        let read = ob_route("GetOrderbook", (Asset::BTC).encode());
+        let pair_id = 0u64;
+        let depth = 20u32;
+        let read = spot_route("GetOrderbook", (pair_id, depth).encode());
         let book = msg::send_for_reply_as::<
             RawPayload,
-            SailsReply<(Vec<(u64, u64)>, Vec<(u64, u64)>)>,
+            SailsReply<(Vec<(u128, u128)>, Vec<(u128, u128)>)>,
         >(thebook, RawPayload(read), gas as u128, 0);
         let (bids, asks) = match book {
             Ok(fut) => match fut.await {
@@ -193,7 +190,10 @@ impl<'a> AgentService<'a> {
             // Take liquidity when the book offers it.
             AgentStrategy::Momentum | AgentStrategy::ArbitrageHunter => {
                 if best_ask > 0 {
-                    let pay = ob_route("MarketBuy", (Asset::BTC, TRADE_QTY).encode());
+                    let qty = TRADE_QTY as u128;
+                    let max_quote = u128::MAX / 2;
+                    let min_base_out = 1u128;
+                    let pay = spot_route("MarketBuy", (pair_id, qty, max_quote, min_base_out).encode());
                     let _ = msg::send(thebook, RawPayload(pay), 0);
                     "market-bought BTC into the offer"
                 } else {
@@ -203,10 +203,10 @@ impl<'a> AgentService<'a> {
             // Provide liquidity: rest a bid just under the best bid (or a floor).
             AgentStrategy::MarketMaker => {
                 let tick = if best_bid > 1 { best_bid - 1 } else { 1 };
-                let _ = best_ask; // (a fuller MM would also post an ask)
-                let pay = ob_route(
+                let qty = TRADE_QTY as u128;
+                let pay = spot_route(
                     "PlaceLimit",
-                    (Side::Buy, Asset::BTC, tick, TRADE_QTY).encode(),
+                    (pair_id, Side::Buy, tick, qty).encode(),
                 );
                 let _ = msg::send(thebook, RawPayload(pay), 0);
                 "posted a bid to earn the spread"

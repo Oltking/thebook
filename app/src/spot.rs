@@ -793,7 +793,15 @@ impl<'a> SpotService<'a> {
     pub fn get_solvency(&self, token: ActorId) -> (u128, u128, u128) {
         let st = self.state.borrow();
         let perp = if st.perp_collateral == token {
+            let perp_margin: u128 = st
+                .perp_positions
+                .iter()
+                .map(|p| p.margin)
+                .fold(0u128, |a, b| a.saturating_add(b));
+            let lp_vault = st.lp_vault.total_collateral;
             st.perp_reserve
+                .saturating_add(perp_margin)
+                .saturating_add(lp_vault)
         } else {
             0
         };
@@ -868,7 +876,12 @@ impl<'a> SpotService<'a> {
             }
             let amt = match side {
                 Side::Buy => notional(price, qty, pair.base_dec)?,
-                Side::Sell => qty,
+                Side::Sell => {
+                    // Pre-validate notional for sell orders too, so poison orders
+                    // with price * qty overflowing u128 are rejected before escrow.
+                    notional(price, qty, pair.base_dec)?;
+                    qty
+                }
             };
             let tok = match side {
                 Side::Buy => pair.quote,
@@ -913,8 +926,10 @@ impl<'a> SpotService<'a> {
             };
             let mut rem = qty;
 
+            let mut matches_count = 0usize;
+            const MAX_MATCHES_PER_ORDER: usize = 50;
             for mid in crossing_ids(&st, pair_id, side, Some(price), caller) {
-                if rem == 0 {
+                if rem == 0 || matches_count >= MAX_MATCHES_PER_ORDER {
                     break;
                 }
                 let (o_price, o_avail, o_trader) = match st.orders.get(&mid) {
@@ -926,7 +941,15 @@ impl<'a> SpotService<'a> {
                     continue;
                 }
                 let p_match = o_price;
-                let proceeds = notional(p_match, fill, base_dec)?;
+                let proceeds = match notional(p_match, fill, base_dec) {
+                    Ok(p) => p,
+                    Err(_) => break, // Stop matching gracefully; never trap post-escrow!
+                };
+                // Disallow zero-proceeds trade when fill > 0 (prevents zero-cost asset drainage)
+                if proceeds == 0 {
+                    continue;
+                }
+                matches_count += 1;
                 let (buyer, seller) = if side == Side::Buy {
                     (caller, o_trader)
                 } else {
@@ -937,9 +960,13 @@ impl<'a> SpotService<'a> {
                 st.credit(seller, quote, proceeds);
                 // A taker buyer escrowed at their (higher) limit; refund the difference.
                 let refund = if side == Side::Buy && price > p_match {
-                    let r = notional(price - p_match, fill, base_dec)?;
-                    st.credit(buyer, quote, r);
-                    r
+                    match notional(price - p_match, fill, base_dec) {
+                        Ok(r) => {
+                            st.credit(buyer, quote, r);
+                            r
+                        }
+                        Err(_) => 0,
+                    }
                 } else {
                     0
                 };
@@ -1037,16 +1064,17 @@ impl<'a> SpotService<'a> {
             if order.trader != caller {
                 return Err(SpotError::NotOwner);
             }
-            let unfilled = order.qty - order.filled;
             let pair = st
                 .pairs
                 .iter()
                 .find(|p| p.id == order.pair_id)
                 .ok_or(SpotError::NoPair)?;
-            let (refund_token, refund_amt) = match order.side {
-                Side::Buy => (pair.quote, notional(order.price, unfilled, pair.base_dec)?),
-                Side::Sell => (pair.base, unfilled),
+            let refund_token = match order.side {
+                Side::Buy => pair.quote,
+                Side::Sell => pair.base,
             };
+            // Refund the exact remaining unreleased escrow
+            let refund_amt = order.escrowed.saturating_sub(order.released);
             if let Some(o) = st.orders.get_mut(&order_id) {
                 o.released += refund_amt;
             }
@@ -1164,16 +1192,30 @@ impl<'a> SpotService<'a> {
                     None => continue,
                 };
                 let mut fill = rem.min(o_avail);
-                let mut cost = notional(o_price, fill, base_dec)?;
+                let mut cost = match notional(o_price, fill, base_dec) {
+                    Ok(c) => c,
+                    Err(_) => break, // Stop sweep safely; never trap post-escrow!
+                };
+                if cost == 0 {
+                    continue;
+                }
                 if spent + cost > max_quote {
                     let budget = max_quote - spent;
-                    let affordable =
-                        budget.checked_mul(scale).ok_or(SpotError::Overflow)? / o_price;
+                    let affordable = match budget.checked_mul(scale) {
+                        Some(v) => v / o_price,
+                        None => break,
+                    };
                     fill = fill.min(affordable);
                     if fill == 0 {
                         break;
                     }
-                    cost = notional(o_price, fill, base_dec)?;
+                    cost = match notional(o_price, fill, base_dec) {
+                        Ok(c) => c,
+                        Err(_) => break,
+                    };
+                    if cost == 0 {
+                        break;
+                    }
                 }
                 plan.push((mid, fill, cost, o_price));
                 spent += cost;
@@ -1285,7 +1327,13 @@ impl<'a> SpotService<'a> {
                 if fill == 0 {
                     continue;
                 }
-                let proceeds = notional(o_price, fill, base_dec)?;
+                let proceeds = match notional(o_price, fill, base_dec) {
+                    Ok(p) => p,
+                    Err(_) => break, // Stop sweep safely; never trap post-escrow!
+                };
+                if proceeds == 0 {
+                    continue;
+                }
                 plan.push((mid, fill, proceeds));
                 proceeds_total += proceeds;
                 rem -= fill;

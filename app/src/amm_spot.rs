@@ -406,7 +406,7 @@ impl<'a> AmmService<'a> {
             return Err(AmmError::TransferFailed(e));
         }
 
-        let minted = {
+        let (minted, used_a, used_b) = {
             let mut st = self.state.borrow_mut();
             let p = match st.amm_pools.iter_mut().find(|p| p.id == pool_id) {
                 Some(p) => p,
@@ -434,22 +434,54 @@ impl<'a> AmmService<'a> {
                     return Err(AmmError::SlippageExceeded);
                 }
             };
+            let (used_a, used_b) = if p.total_shares == 0 {
+                (amount_a, amount_b)
+            } else {
+                let req_a = match shares.checked_mul(p.reserve_a) {
+                    Some(v) => v.div_ceil(p.total_shares),
+                    None => {
+                        let (ta, tb) = (p.token_a, p.token_b);
+                        st.credit(caller, ta, amount_a);
+                        st.credit(caller, tb, amount_b);
+                        return Err(AmmError::Overflow);
+                    }
+                };
+                let req_b = match shares.checked_mul(p.reserve_b) {
+                    Some(v) => v.div_ceil(p.total_shares),
+                    None => {
+                        let (ta, tb) = (p.token_a, p.token_b);
+                        st.credit(caller, ta, amount_a);
+                        st.credit(caller, tb, amount_b);
+                        return Err(AmmError::Overflow);
+                    }
+                };
+                (req_a.min(amount_a), req_b.min(amount_b))
+            };
             if p.total_shares == 0 {
                 // Lock the minimum permanently by issuing it to nobody.
                 p.total_shares = shares + MINIMUM_LIQUIDITY;
             } else {
                 p.total_shares += shares;
             }
-            p.reserve_a += amount_a;
-            p.reserve_b += amount_b;
+            p.reserve_a += used_a;
+            p.reserve_b += used_b;
+            let (ta, tb) = (p.token_a, p.token_b);
+            let refund_a = amount_a.saturating_sub(used_a);
+            let refund_b = amount_b.saturating_sub(used_b);
+            if refund_a > 0 {
+                st.credit(caller, ta, refund_a);
+            }
+            if refund_b > 0 {
+                st.credit(caller, tb, refund_b);
+            }
             *st.lp_shares.entry((caller, pool_id)).or_insert(0) += shares;
-            shares
+            (shares, used_a, used_b)
         };
         let _ = self.emit_event(AmmEvent::LiquidityAdded {
             pool_id,
             provider: caller,
-            amount_a,
-            amount_b,
+            amount_a: used_a,
+            amount_b: used_b,
             shares: minted,
         });
         Ok(minted)

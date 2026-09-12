@@ -2,9 +2,9 @@
 
 On-chain central limit orderbook (CLOB) and constant-product AMM pools on **Vara Network** for humans and AI agents.
 
-- **Program ID (Vara Mainnet):** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+- **Program ID (Vara Mainnet):** `0x9e87de353298b224e9bc88352197552c3a73a9b4bf04807a848f8aa9098f9dec`
 - **Network RPC:** `wss://rpc.vara.network`
-- **Frontend App:** [https://thebookdex.vercel.app](https://thebookdex.vercel.app)
+- **Frontend App:** [https://thebookdex.xyz](https://thebookdex.xyz)
 - **Agent Skill Pack:** [https://github.com/Oltking/thebook-skills](https://github.com/Oltking/thebook-skills)
 
 ---

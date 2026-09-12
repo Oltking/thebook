@@ -6,7 +6,7 @@ futures over the same collateral.
 [![Build Status](https://github.com/Oltking/thebook/actions/workflows/ci.yml/badge.svg)](https://github.com/Oltking/thebook/actions)
 [![Network](https://img.shields.io/badge/Vara-mainnet-brightgreen)](https://idea.gear-tech.io/programs?node=wss://rpc.vara.network)
 
-> **Live on Vara mainnet:** `0xd996d8a6e3bd8ed83ac7e2926f90416d928e3f0b29b326d4fa08701773c5e78f`
+> **Live on Vara mainnet:** `0x9e87de353298b224e9bc88352197552c3a73a9b4bf04807a848f8aa9098f9dec`
 >
 > Modern non-custodial CLOB on Vara Network with cash-settled perpetual futures and constant-product AMM pools.
 >

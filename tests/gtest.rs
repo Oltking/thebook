@@ -1692,3 +1692,182 @@ async fn perps_lp_vault_deposit_and_redeem() {
     assert_eq!(vault.total_shares, 15_000);
     assert_eq!(vault.deposit_count, 2);
 }
+
+/// Audit H-01 regression: placing an order whose price * qty calculation overflows
+/// u128 must fail pre-escrow and never lock tokens.
+#[tokio::test]
+async fn spot_poison_order_overflow_pre_escrow_rejection() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let pair = list_eth_usd(&e).await;
+
+    // Bob tries to place a limit sell with massive price that would overflow notional
+    claim_and_approve(&e.env, e.eth, dex, BOB, 100_000).await;
+    let bob_balance_before = balance_of(&e.env, e.eth, BOB).await;
+
+    let res = as_dex(&e.env, dex, BOB)
+        .spot()
+        .pending_call::<spot_io::PlaceLimit>((pair, Side::Sell, u128::MAX, 100_000u128))
+        .await
+        .unwrap();
+
+    assert!(res.is_err(), "overflowing order must be rejected");
+    let bob_balance_after = balance_of(&e.env, e.eth, BOB).await;
+    assert_eq!(bob_balance_before, bob_balance_after, "no tokens deducted on rejected poison order");
+    assert_eq!(claim_of(&e.env, dex, BOB, e.eth).await, 0, "no escrow trapped");
+    assert_solvent(&e, e.eth).await;
+}
+
+/// Audit H-03 regression: asymmetric deposits into an AMM pool must refund
+/// the unspent excess tokens to the user's claims balance rather than confiscating them.
+#[tokio::test]
+async fn amm_unbalanced_deposit_refunds_excess() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let pool = setup_pool(&e, 50_000, 50_000).await;
+
+    // Bob deposits 10_000 ETH and 20_000 USD into a 1:1 pool
+    claim_and_approve(&e.env, e.eth, dex, BOB, 10_000).await;
+    claim_and_approve(&e.env, e.usd, dex, BOB, 20_000).await;
+
+    let shares: u128 = as_dex(&e.env, dex, BOB)
+        .amm()
+        .pending_call::<amm_io::AddLiquidity>((pool, 10_000u128, 20_000u128, 0u128))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(shares, 10_000);
+    // Bob should get the 10_000 surplus USD credited to his claim balance
+    let bob_usd_claim = claim_of(&e.env, dex, BOB, e.usd).await;
+    assert_eq!(bob_usd_claim, 10_000, "excess deposit must be refunded to claims");
+    let bob_eth_claim = claim_of(&e.env, dex, BOB, e.eth).await;
+    assert_eq!(bob_eth_claim, 0, "exact deposit used should have 0 refund");
+
+    assert_solvent(&e, e.usd).await;
+    assert_solvent(&e, e.eth).await;
+}
+
+/// Audit H-04 regression: LP close-only trigger requires multi-sig quorum (>50% shares and >=2 signatories).
+#[tokio::test]
+async fn perps_lp_close_only_requires_multi_sig_quorum() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let _market = setup_perps_empty(&e, u128::MAX / 2).await;
+
+    // Alice deposits 10_000 USDT (gets 9_000 shares, total 10_000)
+    claim_and_approve(&e.env, e.usd, dex, ALICE, 10_000).await;
+    let _: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((10_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Bob deposits 5_000 USDT (gets 5_000 shares, total 15_000)
+    claim_and_approve(&e.env, e.usd, dex, BOB, 5_000).await;
+    let _: u128 = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((5_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Carol deposits 5_000 USDT (gets 5_000 shares, total 20_000)
+    claim_and_approve(&e.env, e.usd, dex, CAROL, 5_000).await;
+    let _: u128 = as_dex(&e.env, dex, CAROL)
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((5_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Alice has 9_000 shares (45% < 50%), votes alone -> fails quorum
+    let single_vote = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::LpTriggerCloseOnly>(())
+        .await
+        .unwrap();
+    assert!(single_vote.is_err(), "single LP cannot trigger close-only without quorum");
+
+    // Bob (5_000 shares) also votes: Alice (9_000) + Bob (5_000) = 14_000 / 20_000 (70% > 50%), 2 signatories
+    let quorum_vote = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::LpTriggerCloseOnly>(())
+        .await
+        .unwrap();
+    assert!(quorum_vote.is_ok(), "multi-sig quorum must trigger close-only");
+
+    let vault: ClientLpVaultState = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetLpVault>(())
+        .await
+        .unwrap();
+    assert!(vault.close_only, "vault should now be close_only");
+
+    // Admin reverts close-only
+    let revert = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::LpRevertCloseOnly>(())
+        .await
+        .unwrap();
+    assert!(revert.is_ok(), "admin can revert close-only");
+
+    let vault_reverted: ClientLpVaultState = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::GetLpVault>(())
+        .await
+        .unwrap();
+    assert!(!vault_reverted.close_only, "vault should not be close_only after revert");
+}
+
+/// Audit H-02 regression: GetSolvency must include active perp positions margin and LP vault collateral.
+#[tokio::test]
+async fn solvency_includes_perp_margin_and_lp_vault() {
+    let e = deploy().await;
+    let dex = e.program.id();
+    let market = setup_perps(&e, u128::MAX / 2).await;
+
+    // Alice deposits 10_000 USDT into LP vault (Alice already claimed faucet in setup_perps)
+    let _: bool = as_tok(&e.env, e.usd, ALICE)
+        .vft()
+        .pending_call::<tok_vft_io::Approve>((dex, U256::from(10_000u128)))
+        .await
+        .unwrap();
+    let _: u128 = e
+        .program
+        .perps_v_1()
+        .pending_call::<perp1_io::LpDeposit>((10_000u128,))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Bob opens a position with 1_000 USDT margin
+    claim_and_approve(&e.env, e.usd, dex, BOB, 1_000).await;
+    let _: u64 = as_dex(&e.env, dex, BOB)
+        .perps_v_1()
+        .pending_call::<perp1_io::OpenPosition>((market, true, 1_000u128, 5u32))
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Check solvency query reports at least 61_000 in obligations (50_000 perp reserve + 10_000 LP + 1_000 margin)
+    let (_escrow, _dust, reserve): (u128, u128, u128) = e
+        .program
+        .spot()
+        .pending_call::<spot_io::GetSolvency>((e.usd,))
+        .await
+        .unwrap();
+    assert!(
+        reserve >= 61_000,
+        "reserve obligation must include perp margin and lp vault collateral, got {reserve}"
+    );
+
+    assert_solvent(&e, e.usd).await;
+}
+

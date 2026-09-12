@@ -285,6 +285,8 @@ pub struct LpVault {
     pub next_deposit_id: u64,
     /// Whether the perps market is in close-only mode (triggered by LP majority).
     pub close_only: bool,
+    /// Addresses of distinct LPs actively signaling to trigger close-only mode.
+    pub close_only_signatories: Vec<ActorId>,
 }
 
 /// Individual LP deposit with lock tracking.
@@ -842,43 +844,55 @@ impl<'a> PerpsService<'a> {
     #[export]
     pub fn lp_trigger_close_only(&mut self) -> Result<(), PerpsError> {
         let caller = msg::source();
-        let supporting_shares = {
+        let (supporting_shares, total_shares) = {
             let mut st = self.state.borrow_mut();
-            let vault = &mut st.lp_vault;
-            if vault.close_only {
-                return Err(PerpsError::LpCloseOnlyAlreadyActive);
-            }
-            // Calculate total shares held by each LP
-            let mut lp_shares: BTreeMap<ActorId, u128> = BTreeMap::new();
-            for d in &vault.lp_deposits {
-                *lp_shares.entry(d.lp).or_insert(0) += d.shares;
-            }
-            let caller_shares = *lp_shares.get(&caller).unwrap_or(&0);
-            if caller_shares == 0 {
-                return Err(PerpsError::LpInsufficientShares);
-            }
-            // Require >50% of total shares (50.01%)
-            let threshold = vault
-                .total_shares
-                .saturating_mul(LP_CLOSE_ONLY_THRESHOLD_BPS)
-                / 10_000;
-            if caller_shares < threshold {
-                return Err(PerpsError::LpInsufficientShares);
-            }
-            // Require at least 2 distinct LPs supporting (quorum)
-            if lp_shares.len() < 2 {
-                return Err(PerpsError::LpInsufficientShares);
-            }
-            vault.close_only = true;
+            let (total_signatory_shares, total_shares) = {
+                let vault = &mut st.lp_vault;
+                if vault.close_only {
+                    return Err(PerpsError::LpCloseOnlyAlreadyActive);
+                }
+                // Calculate total shares held by each LP
+                let mut lp_shares: BTreeMap<ActorId, u128> = BTreeMap::new();
+                for d in &vault.lp_deposits {
+                    *lp_shares.entry(d.lp).or_insert(0) += d.shares;
+                }
+                let caller_shares = *lp_shares.get(&caller).unwrap_or(&0);
+                if caller_shares == 0 {
+                    return Err(PerpsError::LpInsufficientShares);
+                }
+                // Add caller to active signatories if not already recorded
+                if !vault.close_only_signatories.contains(&caller) {
+                    vault.close_only_signatories.push(caller);
+                }
+                // Retain only signatories that currently hold positive active shares
+                vault
+                    .close_only_signatories
+                    .retain(|sig| *lp_shares.get(sig).unwrap_or(&0) > 0);
+                // Sum shares held by all active signatories
+                let total_signatory_shares: u128 = vault
+                    .close_only_signatories
+                    .iter()
+                    .map(|sig| *lp_shares.get(sig).unwrap_or(&0))
+                    .sum();
+                let threshold = vault
+                    .total_shares
+                    .saturating_mul(LP_CLOSE_ONLY_THRESHOLD_BPS)
+                    / 10_000;
+                // Require >50% of total shares AND at least 2 distinct active LP signatories
+                if total_signatory_shares < threshold || vault.close_only_signatories.len() < 2 {
+                    return Err(PerpsError::LpInsufficientShares);
+                }
+                vault.close_only = true;
+                (total_signatory_shares, vault.total_shares)
+            };
             // Also set all markets to close_only
             for m in st.perp_markets.iter_mut() {
                 if m.active {
                     m.close_only = true;
                 }
             }
-            caller_shares
+            (total_signatory_shares, total_shares)
         };
-        let total_shares = self.state.borrow().lp_vault.total_shares;
         let _ = self.emit_event(PerpsEvent::LpCloseOnlyTriggered {
             trigger_lp: caller,
             supporting_shares,
@@ -893,6 +907,7 @@ impl<'a> PerpsService<'a> {
         let caller = msg::source();
         {
             let mut st = self.state.borrow_mut();
+            let is_admin = caller == st.admin;
             let vault = &mut st.lp_vault;
             if !vault.close_only {
                 return Err(PerpsError::BadParams); // Not in close-only
@@ -907,10 +922,11 @@ impl<'a> PerpsService<'a> {
                 .total_shares
                 .saturating_mul(LP_CLOSE_ONLY_THRESHOLD_BPS)
                 / 10_000;
-            if caller_shares < threshold {
+            if !is_admin && caller_shares < threshold {
                 return Err(PerpsError::LpInsufficientShares);
             }
             vault.close_only = false;
+            vault.close_only_signatories.clear();
             // Revert markets to their admin-set close_only state (would need tracking original state)
             // For simplicity, we just set close_only = false on all markets
             for m in st.perp_markets.iter_mut() {
@@ -1288,7 +1304,7 @@ impl<'a> PerpsService<'a> {
                 return Err(PerpsError::NotLiquidatable);
             }
             let eq_pos = equity.max(0) as u128;
-            let target_fee = pos.margin * LIQUIDATION_FEE_BPS / 10_000;
+            let target_fee = (pos.margin * LIQUIDATION_FEE_BPS / 10_000).max(1);
             let from_equity = eq_pos.min(target_fee);
             // Top up from the reserve so the incentive survives a gap move.
             let shortfall = target_fee - from_equity;
@@ -1597,6 +1613,7 @@ mod tests {
             long_oi,
             short_oi,
             close_only: false,
+            excluded: false,
             max_oi: u128::MAX,
             cum_funding: 0,
             cum_holding: 0,
